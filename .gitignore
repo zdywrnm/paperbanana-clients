@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+out/
+coverage/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# macOS
+.DS_Store
+
+# Editors and IDEs
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+.project
+.classpath
+.settings/
+
+# Web and Electron caches
+.vite/
+.turbo/
+.cache/
+
+# Android and Gradle
+.gradle/
+local.properties
+captures/
+
+# iOS/macOS project metadata if generated later
+DerivedData/
+xcuserdata/
+*.xcuserstate

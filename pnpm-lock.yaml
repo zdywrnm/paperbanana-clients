@@ -1,0 +1,25 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .: {}
+
+  apps/android: {}
+
+  apps/desktop: {}
+
+  apps/web: {}
+
+  packages/api: {}
+
+  packages/business: {}
+
+  packages/design-tokens: {}
+
+  packages/types: {}
+
+  packages/ui-core: {}

@@ -1,0 +1,13 @@
+{
+  "name": "paperbanana-clients",
+  "private": true,
+  "version": "0.0.0",
+  "description": "PaperBanana multi-platform client apps",
+  "packageManager": "pnpm@10.28.2",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "clean": "pnpm -r exec rm -rf node_modules dist build"
+  }
+}
