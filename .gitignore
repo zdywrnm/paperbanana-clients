@@ -38,6 +38,9 @@ pnpm-debug.log*
 .turbo/
 .cache/
 
+# WeChat Developer Tools local overrides
+apps/miniprogram/project.private.config.json
+
 # Android and Gradle
 .gradle/
 local.properties

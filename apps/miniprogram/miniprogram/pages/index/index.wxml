@@ -1,0 +1,277 @@
+<scroll-view class="page" scroll-y type="list">
+  <view class="paper-header">
+    <view class="brand">
+      <image class="brand-logo" src="{{logoSrc}}" mode="aspectFill" />
+      <view class="brand-copy">
+        <view class="brand-title">PaperBanana 工作台</view>
+        <view class="brand-tags">
+          <text>多智能体</text>
+          <text>学术图示生成</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="auth-chip logged" wx:if="{{isLoggedIn}}">
+      <text class="auth-dot"></text>
+      <text class="auth-email">{{currentUserEmail}}</text>
+      <button class="chip-button" size="mini" bindtap="signOut">退出</button>
+    </view>
+    <button class="auth-chip" wx:else bindtap="openAuthPanel">登录 / 注册</button>
+  </view>
+
+  <view class="paper-tabs">
+    <button class="{{isGenerateTab ? 'active' : ''}}" data-tab="generate" bindtap="switchTab">生成候选图</button>
+    <button class="{{isRecordsTab ? 'active' : ''}}" data-tab="records" bindtap="switchTab">任务记录</button>
+  </view>
+
+  <view class="status-row">
+    <view class="status-pill {{healthOk ? 'ok' : 'warn'}}">{{healthText}}</view>
+    <view class="status-pill">普通模式</view>
+    <view class="status-pill" wx:if="{{isLoggedIn}}">账号记录已启用</view>
+    <view class="status-pill" wx:else>不登录也可生成</view>
+  </view>
+
+  <view class="auth-panel section" wx:if="{{showAuthPanel}}">
+    <view class="section-head">
+      <view>
+        <view class="section-title">{{authTitle}}</view>
+        <view class="section-note">登录后可以在任务记录里查看自己提交过的结果。</view>
+      </view>
+      <button class="ghost-button" size="mini" bindtap="closeAuthPanel">关闭</button>
+    </view>
+
+    <view class="field" wx:if="{{authIsSignUp}}">
+      <view class="field-label">昵称</view>
+      <input class="input" value="{{authName}}" placeholder="可选" bindinput="onAuthNameInput" />
+    </view>
+    <view class="field">
+      <view class="field-label">邮箱</view>
+      <input class="input" type="text" value="{{authEmail}}" placeholder="you@example.com" bindinput="onAuthEmailInput" />
+    </view>
+    <view class="field">
+      <view class="field-label">密码</view>
+      <input class="input" password value="{{authPassword}}" placeholder="至少 8 位" bindinput="onAuthPasswordInput" />
+    </view>
+    <button class="primary-button" loading="{{authSubmitting}}" disabled="{{!authCanSubmit}}" bindtap="submitAuth">
+      {{authSubmitText}}
+    </button>
+    <button class="text-button" bindtap="toggleAuthMode">{{authToggleText}}</button>
+    <view wx:if="{{authError}}" class="error-box">{{authError}}</view>
+  </view>
+
+  <block wx:if="{{isGenerateTab}}">
+    <view class="section example-panel">
+      <view class="example-panel-head">快速上手案例</view>
+      <view class="example-list">
+        <view
+          class="example-card"
+          wx:for="{{quickStartExamples}}"
+          wx:key="id"
+          data-id="{{item.id}}"
+          bindtap="applyExample"
+        >
+          <view class="example-label">{{item.label}}</view>
+          <view class="example-title">{{item.title}}</view>
+          <view class="example-caption">{{item.caption}}</view>
+          <view class="example-hint">{{item.hint}}</view>
+        </view>
+      </view>
+    </view>
+
+    <view class="section">
+      <view class="section-head">
+        <view>
+          <view class="section-title">生成设置</view>
+          <view class="section-note">选择模型平台并粘贴 API Key。密钥只用于本次模型调用，不保存到数据库。</view>
+        </view>
+      </view>
+
+      <view class="field">
+        <view class="field-label">模型平台</view>
+        <picker mode="selector" range="{{providers}}" range-key="label" value="{{providerIndex}}" bindchange="onProviderChange">
+          <view class="picker-value">{{providerLabel}}</view>
+        </picker>
+      </view>
+
+      <view class="default-summary">
+        <text>{{providerMainModel}}</text>
+        <text>{{providerImageModel}}</text>
+        <text>规划器 + 评审器</text>
+        <text>16:9</text>
+      </view>
+
+      <view class="field">
+        <view class="field-label">{{providerLabel}} API 密钥</view>
+        <input class="input" password value="{{apiKey}}" placeholder="{{apiKeyPlaceholder}}" bindinput="onApiKeyInput" />
+      </view>
+
+      <view class="api-key-guide">
+        <view class="guide-title">API Key 申请指南</view>
+        <view class="guide-step" wx:for="{{providerGuideSteps}}" wx:key="*this">{{index + 1}}. {{item}}</view>
+      </view>
+
+      <view class="field">
+        <view class="field-label">信息图类别</view>
+        <picker mode="selector" range="{{categories}}" range-key="label" value="{{categoryIndex}}" bindchange="onCategoryChange">
+          <view class="picker-value">{{categoryLabel}}</view>
+        </picker>
+        <view class="field-tip">{{categoryDescription}}</view>
+      </view>
+    </view>
+
+    <view class="section">
+      <view class="section-head">
+        <view>
+          <view class="section-title">输入内容</view>
+          <view class="section-note">粘贴论文方法部分或业务流程，再填写目标图注。</view>
+        </view>
+      </view>
+
+      <view class="field">
+        <view class="field-label">论文方法内容</view>
+        <textarea
+          class="textarea"
+          auto-height
+          maxlength="3000"
+          value="{{methodContent}}"
+          placeholder="粘贴论文方法部分、项目流程、业务步骤或想表达的图示内容"
+          bindinput="onMethodInput"
+        />
+      </view>
+      <view class="field">
+        <view class="field-label">目标图注</view>
+        <input
+          class="input"
+          maxlength="200"
+          value="{{caption}}"
+          placeholder="例如：图 1：所提出方法框架总览。"
+          bindinput="onCaptionInput"
+        />
+      </view>
+      <button class="primary-button" loading="{{isSubmitting}}" disabled="{{!canSubmit}}" bindtap="submitJob">
+        {{isSubmitting ? '提交中' : '生成候选图'}}
+      </button>
+      <view wx:if="{{!canSubmit}}" class="submit-tip">需要填写 API Key、至少 20 字内容和目标图注。</view>
+      <view wx:if="{{error}}" class="error-box">{{error}}</view>
+    </view>
+
+    <view class="section" wx:if="{{currentJobId}}">
+      <view class="section-head">
+        <view>
+          <view class="section-title">生成结果</view>
+          <view class="section-note">任务 ID：{{currentJobId}}</view>
+        </view>
+        <button class="ghost-button" size="mini" bindtap="copyJobId">复制</button>
+      </view>
+      <view class="job-panel">
+        <view class="status-badge {{job.status || 'queued'}}">{{statusLabel || '排队中'}}</view>
+        <button class="ghost-button" size="mini" bindtap="refreshCurrentJob">刷新</button>
+      </view>
+      <view class="result-grid" wx:if="{{resultImages.length}}">
+        <image
+          wx:for="{{resultImages}}"
+          wx:key="url"
+          class="result-image"
+          src="{{item.url}}"
+          mode="widthFix"
+          data-url="{{item.url}}"
+          bindtap="previewImage"
+        />
+      </view>
+      <view class="empty-state" wx:else>
+        <view>{{statusLabel || '等待结果'}}</view>
+        <text>任务完成后会在这里显示候选图。</text>
+      </view>
+    </view>
+
+    <view class="section" wx:if="{{localJobs.length}}">
+      <view class="section-head">
+        <view>
+          <view class="section-title">本机最近</view>
+          <view class="section-note">保存在当前设备，换设备后不会同步。</view>
+        </view>
+        <button class="ghost-button" size="mini" bindtap="clearLocalJobs">清空</button>
+      </view>
+      <view class="history-item" wx:for="{{localJobs}}" wx:key="id" data-id="{{item.id}}" bindtap="reuseLocalJob">
+        <view class="history-main">
+          <view class="history-title">{{item.caption || item.id}}</view>
+          <view class="history-meta">{{item.infographic_category}} · {{item.provider || '模型服务'}}</view>
+        </view>
+        <view class="history-status {{item.status}}">{{item.status_text}}</view>
+      </view>
+    </view>
+  </block>
+
+  <block wx:if="{{isRecordsTab}}">
+    <view class="section records-panel">
+      <view class="section-head">
+        <view>
+          <view class="section-title">我的任务记录</view>
+          <view class="section-note">任务记录与账号绑定，登录后可以查看自己提交过的任务。</view>
+        </view>
+        <button class="ghost-button" size="mini" wx:if="{{isLoggedIn}}" bindtap="loadAccountJobs">刷新</button>
+      </view>
+
+      <view class="login-required-card" wx:if="{{isAuthChecking}}">
+        <view class="login-card-title">正在检查登录状态</view>
+        <view class="login-card-note">请稍候。</view>
+      </view>
+
+      <view class="login-required-card" wx:elif="{{!isLoggedIn}}">
+        <view class="login-card-title">任务记录需要登录后使用</view>
+        <view class="login-card-note">不登录也可以正常生成候选图；登录后，新提交的任务会保存到你的账号记录里。</view>
+        <button class="login-card-button" bindtap="openAuthPanel">登录 / 注册</button>
+      </view>
+
+      <block wx:else>
+        <view class="account-row">
+          <text>{{currentUserEmail}}</text>
+          <button class="ghost-button" size="mini" bindtap="signOut">退出</button>
+        </view>
+        <view wx:if="{{accountJobsLoading}}" class="empty-state">正在加载任务记录</view>
+        <view wx:if="{{accountJobsError}}" class="error-box">{{accountJobsError}}</view>
+        <view wx:if="{{!accountJobsLoading && !accountJobs.length}}" class="empty-state">
+          <view>暂无任务记录</view>
+          <text>登录后提交的新任务会出现在这里。</text>
+        </view>
+        <view class="job-record-card" wx:for="{{accountJobs}}" wx:key="id">
+          <view class="job-record-topline">
+            <view class="history-status {{item.status}}">{{item.status_text}}</view>
+            <view class="job-record-time">{{item.created_text}}</view>
+          </view>
+          <view class="job-record-title">{{item.caption || '未记录图注'}}</view>
+          <view class="job-record-meta">
+            <text>{{item.infographic_category}}</text>
+            <text>{{item.provider || '模型服务'}}</text>
+            <text>{{item.configuration_mode === 'simple' ? '普通模式' : '专业模式'}}</text>
+          </view>
+          <view class="job-models">
+            <view>
+              <text>主模型</text>
+              <text>{{item.main_model_name || '未记录'}}</text>
+            </view>
+            <view>
+              <text>图像模型</text>
+              <text>{{item.image_gen_model_name || '未记录'}}</text>
+            </view>
+          </view>
+          <view class="job-prompt-preview">{{item.method_preview || '未记录方法内容'}}</view>
+          <view class="record-images" wx:if="{{item.result_images.length}}">
+            <image
+              wx:for="{{item.result_images}}"
+              wx:for-item="image"
+              wx:key="url"
+              src="{{image.url}}"
+              mode="widthFix"
+              data-url="{{image.url}}"
+              bindtap="previewRecordImage"
+            />
+          </view>
+          <button class="secondary-button" data-id="{{item.id}}" bindtap="openAccountJob">查看任务</button>
+        </view>
+      </block>
+    </view>
+  </block>
+
+  <view class="footer-space" />
+</scroll-view>

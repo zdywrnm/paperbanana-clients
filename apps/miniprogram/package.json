@@ -1,0 +1,21 @@
+{
+  "name": "@paperbanana/miniprogram",
+  "version": "0.1.0",
+  "description": "PaperBanana WeChat Mini Program client.",
+  "private": true,
+  "scripts": {
+    "check": "tsc --noEmit",
+    "build": "tsc"
+  },
+  "keywords": [
+    "paperbanana",
+    "wechat-miniprogram"
+  ],
+  "author": "PaperBanana",
+  "license": "UNLICENSED",
+  "dependencies": {},
+  "devDependencies": {
+    "miniprogram-api-typings": "^2.8.3-1",
+    "typescript": "^5.9.3"
+  }
+}
