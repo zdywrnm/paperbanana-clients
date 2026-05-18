@@ -60,6 +60,16 @@ docker build -f apps/auth-gateway/Dockerfile -t paperbanana-auth-gateway .
 
 For Sealos, keep the same environment variables as `.env.example` and expose port `3005`.
 
+## GitHub Actions Image
+
+The workflow `.github/workflows/build-auth-gateway.yml` builds and pushes this app to GitHub Container Registry:
+
+```text
+ghcr.io/zdywrnm/paperbanana-auth-gateway:latest
+```
+
+After the first successful workflow run, make the GHCR package public or configure Sealos with registry credentials. Then update the existing Sealos app image to the GHCR image above and redeploy.
+
 ## Notes
 
 - This app does not store model API keys. User-provided model keys are forwarded only as part of the job request.

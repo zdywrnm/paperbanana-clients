@@ -23,6 +23,22 @@
 5. 配置 `.env.example` 中列出的环境变量。
 6. 发布函数。
 
+## Deploy From GitHub Actions
+
+仓库提供了手动触发的 workflow:
+
+```text
+.github/workflows/deploy-laf-functions.yml
+```
+
+需要先在 GitHub 仓库配置 Secrets:
+
+- `LAF_APPID`: Laf 应用 ID。
+- `LAF_PAT`: Laf 个人访问凭证。
+- `LAF_SERVER`: Laf API 服务地址，可选；不配置时默认 `https://api.laf.run`。
+
+第一次不要改成 push 自动部署。先在 GitHub Actions 页面手动运行 `Deploy Laf Functions`，确认 `paperbanana-api` 能正常发布并通过 health 检查后，再考虑自动化。
+
 ## Release Checklist
 
 - `ADMIN_TOKEN` 已配置。
