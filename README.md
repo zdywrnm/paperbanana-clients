@@ -1,13 +1,15 @@
 # PaperBanana Clients
 
-PaperBanana Clients 是 PaperBanana 的多端客户端 monorepo。这个仓库用于统一管理 Web、桌面端、移动端以及未来可复用的客户端共享代码。
+PaperBanana Clients 是 PaperBanana 的多端 monorepo。这个仓库用于统一管理 Web、桌面端、移动端、后端网关以及未来可复用的共享代码。
 
-当前 Web 端已经从 `PaperBanana-web/web-client` 迁移到 `apps/web`。生产站点 `paperbanana.asia` 暂时仍由原 `PaperBanana-web` 仓库的 GitHub Actions 发布。
+当前 Web 端已经从 `PaperBanana-web/web-client` 迁移到 `apps/web`，生产站点 `paperbanana.asia` 由本仓库的 GitHub Actions 发布。
 
 ## Apps
 
 - `apps/web/`：PaperBanana Web 工作台，基于 React + Vite，已完成迁移。
-- `apps/desktop/`：桌面端占位目录，后续用于承接 Electron / Tauri 客户端。
+- `apps/desktop/`：Electron 桌面壳，加载线上 PaperBanana Web。
+- `apps/auth-gateway/`：Sealos 上运行的 Better Auth 登录网关和 Laf 代理。
+- `apps/laf-functions/`：Laf 云函数源码归档。
 - `apps/android/`：Android 端占位目录，后续用于承接移动端客户端。
 
 ## Packages
