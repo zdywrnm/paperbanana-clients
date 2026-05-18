@@ -1,5 +1,51 @@
 {
   "name": "@paperbanana/desktop",
+  "version": "0.1.1",
   "private": true,
-  "version": "0.0.0"
+  "description": "PaperBanana Windows desktop client.",
+  "author": "PaperBanana",
+  "main": "src/main.cjs",
+  "homepage": "https://paperbanana.asia",
+  "scripts": {
+    "dev": "electron .",
+    "start": "electron .",
+    "build:win": "electron-builder --win nsis --x64 --publish never",
+    "build:win:portable": "electron-builder --win portable --x64 --publish never"
+  },
+  "build": {
+    "appId": "asia.paperbanana.desktop",
+    "productName": "PaperBanana",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "src/**/*",
+      "build/icon.png",
+      "package.json"
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "PaperBanana-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "PaperBanana"
+    }
+  },
+  "devDependencies": {
+    "electron": "^42.1.0",
+    "electron-builder": "^26.0.0"
+  }
 }
