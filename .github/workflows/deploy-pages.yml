@@ -44,7 +44,7 @@ jobs:
           VITE_API_BASE: https://yifbnnzrwmxn.sealoshzh.site
           VITE_AUTH_ENABLED: true
           VITE_AUTH_BASE: https://yifbnnzrwmxn.sealoshzh.site
-          VITE_BASE_PATH: /
+          VITE_BASE_PATH: /PaperBanana-clients/
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
