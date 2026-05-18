@@ -34,8 +34,13 @@ export async function fetchBackendHealth(apiBase: string): Promise<HealthInfo> {
   const lafUrl = lafEndpoint(base);
   const candidates: Array<{ mode: BackendMode | 'laf-or-gateway'; url: string; method: 'GET' | 'POST'; body?: Record<string, unknown> }> =
     lafUrl === base
-      ? [{ mode: 'laf-or-gateway', url: base, method: 'POST', body: { action: 'health' } }]
+      ? [
+          { mode: 'laf-or-gateway', url: base, method: 'GET' },
+          { mode: 'laf-or-gateway', url: base, method: 'POST', body: { action: 'health' } },
+        ]
       : [
+          { mode: 'gateway', url: `${base}/health`, method: 'GET' },
+          { mode: 'laf-or-gateway', url: lafUrl, method: 'GET' },
           { mode: 'laf-or-gateway', url: lafUrl, method: 'POST', body: { action: 'health' } },
           { mode: 'fastapi', url: `${base}/api/health`, method: 'GET' },
         ];
@@ -205,6 +210,7 @@ export function formatErrorMessage(error: unknown) {
   if (message.includes('Please log in') || message.includes('请先登录') || message.includes('Unauthorized')) return '请先登录后再使用任务记录。';
   if (message.includes('Forbidden')) return '当前账号没有权限查看这个任务。';
   if (message.includes('timeout') || message.includes('AbortError')) return '请求超时，请稍后重试。';
+  if (message.includes('Network request failed')) return '无法连接后端，请确认网络可访问 Sealos 后端地址。';
   if (message.includes('password')) return '密码至少需要 8 位。';
   if (message.includes('ADMIN_TOKEN is not configured')) return '管理接口未启用：还没有配置 ADMIN_TOKEN。';
   if (message.includes('Admin API disabled')) return '管理接口未启用。';
@@ -266,6 +272,12 @@ async function fetchJson<T>(url: string, options: JsonRequestOptions = {}): Prom
       credentials: 'include',
       signal: controller.signal,
     });
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw error;
+    }
+    const message = error instanceof Error ? error.message : String(error || '请求失败');
+    throw new Error(`Network request failed: ${url} (${message})`);
   } finally {
     clearTimeout(timeout);
   }
@@ -323,23 +335,25 @@ function collectSetCookieHeaders(headers: Headers) {
     map?: () => Record<string, string | string[]>;
     raw?: () => Record<string, string[]>;
   };
-  const fromGetSetCookie = extended.getSetCookie?.();
+  const fromGetSetCookie = typeof extended.getSetCookie === 'function' ? extended.getSetCookie() : undefined;
   if (Array.isArray(fromGetSetCookie)) values.push(...fromGetSetCookie);
 
-  const raw = extended.raw?.();
+  const raw = typeof extended.raw === 'function' ? extended.raw() : undefined;
   if (raw?.['set-cookie']) values.push(...raw['set-cookie']);
 
-  const mapped = extended.map?.();
+  const mapped = typeof extended.map === 'function' ? extended.map() : undefined;
   const mappedCookie = mapped?.['set-cookie'] || mapped?.['Set-Cookie'];
   if (Array.isArray(mappedCookie)) values.push(...mappedCookie);
   if (typeof mappedCookie === 'string') values.push(mappedCookie);
 
-  const direct = headers.get('set-cookie') || headers.get('Set-Cookie');
+  const direct = typeof headers.get === 'function' ? headers.get('set-cookie') || headers.get('Set-Cookie') : null;
   if (direct) values.push(...splitSetCookieHeader(direct));
 
-  headers.forEach((value, key) => {
-    if (key.toLowerCase() === 'set-cookie') values.push(...splitSetCookieHeader(value));
-  });
+  if (typeof headers.forEach === 'function') {
+    headers.forEach((value, key) => {
+      if (key.toLowerCase() === 'set-cookie') values.push(...splitSetCookieHeader(value));
+    });
+  }
 
   return Array.from(new Set(values.filter(Boolean)));
 }

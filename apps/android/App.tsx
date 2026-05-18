@@ -18,7 +18,6 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import {
   AlertTriangle,
-  Eye,
   FileText,
   Image as ImageIcon,
   KeyRound,
@@ -34,7 +33,6 @@ import {
 } from 'lucide-react-native';
 
 import {
-  adminJobsRequest,
   createJobRequest,
   fetchBackendHealth,
   formatDate,
@@ -71,7 +69,7 @@ const EMPTY_KEYS: Record<ProviderId, string> = {
 const DEFAULT_CATEGORY = INFOGRAPHIC_CATEGORIES[0]!;
 const DEFAULT_PROVIDER = PROVIDERS.bailian;
 
-type TabId = 'generate' | 'records' | 'admin';
+type TabId = 'generate' | 'records';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>('generate');
@@ -113,10 +111,6 @@ export default function App() {
   const [userJobsLoading, setUserJobsLoading] = useState(false);
   const [userJobsError, setUserJobsError] = useState('');
 
-  const [adminToken, setAdminToken] = useState('');
-  const [adminJobs, setAdminJobs] = useState<Job[]>([]);
-  const [adminLoading, setAdminLoading] = useState(false);
-  const [adminError, setAdminError] = useState('');
   const [previewUrl, setPreviewUrl] = useState('');
 
   const apiBaseNormalized = normalizeApiBase(apiBase);
@@ -304,19 +298,6 @@ export default function App() {
     }
   }
 
-  async function loadAdminJobs() {
-    setAdminLoading(true);
-    setAdminError('');
-    try {
-      const data = await adminJobsRequest(apiBaseNormalized, health, adminToken.trim());
-      setAdminJobs(data.jobs || []);
-    } catch (error) {
-      setAdminError(formatErrorMessage(error));
-    } finally {
-      setAdminLoading(false);
-    }
-  }
-
   function applyQuickStartExample(example: QuickStartExample) {
     setMethodContent(example.methodContent);
     setCaption(example.caption);
@@ -353,13 +334,11 @@ export default function App() {
         <View style={styles.tabs}>
           <TabButton label="生成" active={activeTab === 'generate'} onPress={() => setActiveTab('generate')} />
           <TabButton label="记录" active={activeTab === 'records'} onPress={() => setActiveTab('records')} />
-          <TabButton label="管理" active={activeTab === 'admin'} onPress={() => setActiveTab('admin')} />
         </View>
 
         <ScrollView style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           {activeTab === 'generate' ? renderGenerate() : null}
           {activeTab === 'records' ? renderRecords() : null}
-          {activeTab === 'admin' ? renderAdmin() : null}
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -426,11 +405,9 @@ export default function App() {
           <Pressable onPress={() => Linking.openURL(providerConfig.guideUrl)} style={styles.guideLink}>
             <Text style={styles.guideLinkText}>打开申请页面</Text>
           </Pressable>
-          {providerConfig.guideSteps.map((step, index) => (
-            <Text key={step} style={styles.guideStep}>
-              {index + 1}. {step}
-            </Text>
-          ))}
+          <Text style={styles.guideStep} numberOfLines={2}>
+            {providerConfig.guideSteps[0]} 密钥只保存在本机，用于向 Sealos 后端提交本次生成任务。
+          </Text>
         </View>
 
         {!isAdvancedMode ? (
@@ -524,20 +501,6 @@ export default function App() {
     );
   }
 
-  function renderAdmin() {
-    return (
-      <>
-        <SectionHeader icon={<Eye size={19} color="#20766e" />} title="站长观察面板" note="输入 ADMIN_TOKEN 查看最近任务、模型选择和失败原因。" />
-        <LabeledInput label="ADMIN_TOKEN" value={adminToken} secureTextEntry onChangeText={setAdminToken} autoCapitalize="none" />
-        <Pressable style={styles.secondaryButton} onPress={loadAdminJobs}>
-          {adminLoading ? <ActivityIndicator color="#20766e" /> : <RefreshCw size={17} color="#20766e" />}
-          <Text style={styles.secondaryButtonText}>刷新最近任务</Text>
-        </Pressable>
-        {adminError ? <ErrorLine text={adminError} /> : null}
-        <JobList jobs={adminJobs} apiBase={apiBaseNormalized} showUser emptyText="暂无任务记录" onPreview={setPreviewUrl} />
-      </>
-    );
-  }
 }
 
 function TabButton({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
@@ -552,7 +515,7 @@ function ModeButton({ active, title, subtitle, icon, onPress }: { active: boolea
   return (
     <Pressable style={[styles.modeButton, active && styles.modeButtonActive]} onPress={onPress}>
       {icon}
-      <View>
+      <View style={styles.modeCopy}>
         <Text style={[styles.modeTitle, active && styles.modeTitleActive]}>{title}</Text>
         <Text style={[styles.modeSubtitle, active && styles.modeSubtitleActive]}>{subtitle}</Text>
       </View>
@@ -582,11 +545,21 @@ function SectionHeader({ icon, title, note }: { icon: React.ReactNode; title: st
 
 function HealthBanner({ loading, health, error, onRefresh }: { loading: boolean; health: HealthInfo | null; error: string; onRefresh: () => void }) {
   const ok = Boolean(health);
+  const checking = loading && !health;
+  const failed = Boolean(error && !health);
   return (
-    <View style={[styles.healthBanner, ok ? styles.healthOk : styles.healthWarn]}>
+    <View style={[styles.healthBanner, ok || checking ? styles.healthOk : styles.healthWarn]}>
       <View style={styles.healthTextBlock}>
-        <Text style={styles.healthTitle}>{ok ? `后端可用 · ${health?.backendMode || 'auto'}` : '后端未确认'}</Text>
-        <Text style={styles.healthNote}>{ok ? '生成、登录和任务记录会使用当前后端地址。' : error || '正在检测后端连接。'}</Text>
+        <Text style={styles.healthTitle}>{ok ? `后端可用 · ${health?.backendMode || 'auto'}` : checking ? '正在连接后端' : '后端连接失败'}</Text>
+        <Text style={styles.healthNote}>
+          {ok
+            ? 'Sealos gateway / Laf 云函数已确认，生成和任务记录会走当前地址。'
+            : checking
+              ? '正在检测 Sealos gateway 和 Laf 云函数。'
+              : failed
+                ? error
+                : '还没有拿到后端确认结果。'}
+        </Text>
       </View>
       <Pressable style={styles.refreshIconButton} onPress={onRefresh}>
         {loading ? <ActivityIndicator color="#20766e" /> : <RefreshCw size={18} color="#20766e" />}
@@ -856,15 +829,15 @@ function statusStyle(status: string) {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#f5f2e9',
+    backgroundColor: '#f6f4ee',
   },
   flex: {
     flex: 1,
   },
   header: {
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 12,
+    paddingHorizontal: 14,
+    paddingTop: Platform.OS === 'android' ? 24 : 10,
+    paddingBottom: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -880,21 +853,23 @@ const styles = StyleSheet.create({
     paddingRight: 10,
   },
   logo: {
-    width: 42,
-    height: 42,
+    width: 44,
+    height: 44,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ead9b5',
   },
   brandText: {
     flex: 1,
   },
   title: {
     color: '#1b1a16',
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '800',
   },
   subtitle: {
     color: '#6f6658',
-    fontSize: 12,
+    fontSize: 11,
     marginTop: 2,
   },
   loginPill: {
@@ -914,7 +889,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   accountPill: {
-    maxWidth: 150,
+    maxWidth: 126,
     minHeight: 36,
     paddingHorizontal: 10,
     borderRadius: 8,
@@ -934,7 +909,9 @@ const styles = StyleSheet.create({
   tabs: {
     flexDirection: 'row',
     gap: 8,
-    padding: 12,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 8,
     backgroundColor: '#fffaf0',
   },
   tabButton: {
@@ -953,6 +930,7 @@ const styles = StyleSheet.create({
   },
   tabText: {
     color: '#5f574c',
+    fontSize: 13,
     fontWeight: '700',
   },
   tabTextActive: {
@@ -962,13 +940,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    padding: 16,
+    padding: 14,
     paddingBottom: 32,
-    gap: 14,
+    gap: 12,
   },
   healthBanner: {
     borderRadius: 8,
-    padding: 12,
+    padding: 10,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -997,15 +975,15 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   refreshIconButton: {
-    width: 38,
-    height: 38,
+    width: 36,
+    height: 36,
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#fffdfa',
   },
   sectionHeader: {
-    marginTop: 2,
+    marginTop: 4,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -1015,13 +993,13 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: '#1b1a16',
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '800',
   },
   sectionNote: {
     color: '#6f6658',
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: 11,
+    lineHeight: 16,
     marginTop: 2,
   },
   modeSwitch: {
@@ -1030,12 +1008,12 @@ const styles = StyleSheet.create({
   },
   modeButton: {
     flex: 1,
-    minHeight: 62,
+    minHeight: 54,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#d6caba',
     backgroundColor: '#fffdfa',
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     alignItems: 'center',
     flexDirection: 'row',
     gap: 10,
@@ -1043,6 +1021,9 @@ const styles = StyleSheet.create({
   modeButtonActive: {
     backgroundColor: '#20766e',
     borderColor: '#20766e',
+  },
+  modeCopy: {
+    flex: 1,
   },
   modeTitle: {
     color: '#1b1a16',
@@ -1065,8 +1046,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   chip: {
-    minHeight: 34,
-    paddingHorizontal: 12,
+    minHeight: 36,
+    paddingHorizontal: 11,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 8,
@@ -1091,7 +1072,7 @@ const styles = StyleSheet.create({
     borderColor: '#ded8cc',
     backgroundColor: '#fffdfa',
     borderRadius: 8,
-    padding: 12,
+    padding: 11,
     gap: 8,
   },
   panelTitleRow: {
@@ -1128,7 +1109,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   input: {
-    minHeight: 44,
+    minHeight: 42,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#d6caba',
@@ -1195,13 +1176,13 @@ const styles = StyleSheet.create({
     paddingRight: 4,
   },
   exampleCard: {
-    width: 230,
-    minHeight: 126,
+    width: 208,
+    minHeight: 116,
     borderWidth: 1,
     borderColor: '#ded8cc',
     backgroundColor: '#fffdfa',
     borderRadius: 8,
-    padding: 12,
+    padding: 11,
     gap: 5,
   },
   exampleLabel: {
@@ -1231,7 +1212,7 @@ const styles = StyleSheet.create({
     marginTop: -6,
   },
   primaryButton: {
-    minHeight: 48,
+    minHeight: 50,
     borderRadius: 8,
     backgroundColor: '#20766e',
     alignItems: 'center',
@@ -1398,7 +1379,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   resultImageFrame: {
-    width: '48%',
+    width: '100%',
     borderRadius: 8,
     overflow: 'hidden',
     borderWidth: 1,
