@@ -14,6 +14,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@paperbanana/api':
+        specifier: workspace:*
+        version: link:../../packages/api
       better-auth:
         specifier: ^1.6.11
         version: 1.6.11(react-dom@19.2.6(react@19.2.6))(react@19.2.6)

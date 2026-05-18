@@ -19,7 +19,7 @@ import {
   fetchBackendHealth,
   getJobRequest,
   userJobsRequest,
-} from './api';
+} from '@paperbanana/api';
 import {
   API_BASE_DEFAULT,
   AUTH_ENABLED,

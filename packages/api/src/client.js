@@ -1,4 +1,5 @@
-import { AUTH_ENABLED } from '../config';
+const AUTH_REQUIRED = import.meta.env.VITE_AUTH_REQUIRED === 'true';
+const AUTH_ENABLED = AUTH_REQUIRED || import.meta.env.VITE_AUTH_ENABLED === 'true' || Boolean(import.meta.env.VITE_AUTH_BASE);
 
 export async function fetchJson(url, options = {}) {
   const fetchOptions = AUTH_ENABLED ? { credentials: 'include', ...options } : options;

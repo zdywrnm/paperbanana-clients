@@ -9,6 +9,7 @@
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
+    "@paperbanana/api": "workspace:*",
     "better-auth": "^1.6.11",
     "lucide-react": "^0.475.0",
     "react": "^19.0.0",

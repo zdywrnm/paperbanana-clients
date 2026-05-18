@@ -1,6 +1,6 @@
-import { BACKEND_MODE } from '../config';
-import { lafEndpoint, normalizeJob, shouldUseLaf, toLafPipeline } from '../utils';
 import { fetchJson } from './client';
+
+const BACKEND_MODE = import.meta.env.VITE_BACKEND_MODE || '';
 
 export async function fetchBackendHealth(apiBase) {
   const candidates = BACKEND_MODE === 'gateway'
@@ -130,4 +130,57 @@ export async function hydrateRecordImages(apiBase, health, jobs) {
       return job;
     }
   }));
+}
+
+function shouldUseLaf(apiBase, health) {
+  if (BACKEND_MODE === 'fastapi') return false;
+  if (BACKEND_MODE === 'gateway') return true;
+  if (BACKEND_MODE === 'laf') return true;
+  if (health?.backendMode) return health.backendMode === 'laf';
+  return apiBase.includes('paperbanana-api') || apiBase === '';
+}
+
+function lafEndpoint(apiBase) {
+  if (apiBase.endsWith('/paperbanana-api')) return apiBase;
+  return `${apiBase}/paperbanana-api`;
+}
+
+function toLafPipeline(mode) {
+  if (mode === 'demo_full') return 'full';
+  if (mode === 'vanilla') return 'vanilla';
+  return 'planner_critic';
+}
+
+function normalizeJob(job = {}) {
+  return {
+    id: job.id || job._id,
+    status: job.status,
+    provider: job.provider,
+    user_id: job.user_id || job.userId || '',
+    user_email: job.user_email || job.userEmail || '',
+    configuration_mode: job.configuration_mode || job.configurationMode || 'advanced',
+    method_content: job.method_content || job.methodContent || '',
+    caption: job.caption || '',
+    infographic_category: job.infographic_category || job.infographicCategory || '方法框架图',
+    main_model_name: job.main_model_name || job.mainModelName || '',
+    image_gen_model_name: job.image_gen_model_name || job.imageModelName || '',
+    pipeline_mode: job.pipeline_mode || job.pipelineMode || '',
+    aspect_ratio: job.aspect_ratio || job.aspectRatio || '',
+    num_candidates: job.num_candidates || job.numCandidates || 0,
+    max_critic_rounds: job.max_critic_rounds || job.maxCriticRounds || 0,
+    prompt_char_count: job.prompt_char_count || job.promptCharCount || 0,
+    result_image_count: job.result_image_count || job.resultImageCount || 0,
+    result_images: (job.result_images || job.resultImages || []).map((image, index) => ({
+      filename: image.filename || image.url || `${index}`,
+      url: image.url,
+      candidate_id: image.candidate_id ?? image.candidateId ?? index,
+      mime_type: image.mime_type || image.mimeType || '',
+    })),
+    logs_tail: job.logs_tail || (Array.isArray(job.logs) ? job.logs.slice(-10).join('\n') : ''),
+    error: job.error || '',
+    created_at: job.created_at || job.createdAt,
+    updated_at: job.updated_at || job.updatedAt,
+    started_at: job.started_at || job.startedAt,
+    completed_at: job.completed_at || job.completedAt,
+  };
 }
