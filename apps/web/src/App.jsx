@@ -234,7 +234,7 @@ export default function App() {
           <a href="https://github.com/dwzhu-pku/PaperBanana" target="_blank" rel="noreferrer">
             <Sparkles size={16} /> GitHub
           </a>
-          <a href="https://github.com/zdywrnm/PaperBanana-web/releases/latest" target="_blank" rel="noreferrer">
+          <a href="https://github.com/zdywrnm/PaperBanana-clients/releases/latest" target="_blank" rel="noreferrer">
             <Download size={16} /> Windows 版
           </a>
           {AUTH_UI_ENABLED ? (

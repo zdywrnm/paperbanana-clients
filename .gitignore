@@ -6,6 +6,7 @@ dist/
 build/
 !apps/desktop/build/
 out/
+release/
 coverage/
 
 # Environment files

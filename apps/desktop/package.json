@@ -1,20 +1,23 @@
 {
   "name": "@paperbanana/desktop",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "PaperBanana Windows desktop client.",
   "author": "PaperBanana",
   "main": "src/main.cjs",
   "homepage": "https://paperbanana.asia",
   "scripts": {
+    "check": "node --check src/main.cjs",
     "dev": "electron .",
     "start": "electron .",
     "build:win": "electron-builder --win nsis --x64 --publish never",
-    "build:win:portable": "electron-builder --win portable --x64 --publish never"
+    "build:win:portable": "electron-builder --win portable --x64 --publish never",
+    "build:win:release": "pnpm run build:win && pnpm run build:win:portable"
   },
   "build": {
     "appId": "asia.paperbanana.desktop",
     "productName": "PaperBanana",
+    "asar": true,
     "directories": {
       "output": "release"
     },
@@ -34,6 +37,9 @@
         }
       ],
       "artifactName": "PaperBanana-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "PaperBanana-Portable-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
