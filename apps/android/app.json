@@ -2,7 +2,7 @@
   "expo": {
     "name": "PaperBanana",
     "slug": "paperbanana-android",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "paperbanana",
@@ -15,7 +15,8 @@
     },
     "android": {
       "package": "asia.paperbanana.android",
-      "versionCode": 2,
+      "versionCode": 3,
+      "softwareKeyboardLayoutMode": "resize",
       "permissions": [
         "INTERNET"
       ],
@@ -23,8 +24,13 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#f5f2e9"
       },
-      "edgeToEdgeEnabled": true,
+      "edgeToEdgeEnabled": false,
       "predictiveBackGestureEnabled": false
+    },
+    "androidStatusBar": {
+      "backgroundColor": "#fffaf0",
+      "barStyle": "dark-content",
+      "translucent": false
     }
   }
 }

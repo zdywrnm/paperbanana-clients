@@ -13,6 +13,7 @@ import {
   Switch,
   Text,
   TextInput,
+  StatusBar as NativeStatusBar,
   View,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -68,6 +69,11 @@ const EMPTY_KEYS: Record<ProviderId, string> = {
 
 const DEFAULT_CATEGORY = INFOGRAPHIC_CATEGORIES[0]!;
 const DEFAULT_PROVIDER = PROVIDERS.bailian;
+const WARM_PRIMARY = '#6f4b3d';
+const WARM_PRIMARY_DARK = '#51382f';
+const WARM_PRIMARY_SOFT = '#f3ebe3';
+const WARM_PRIMARY_BORDER = '#d9c7b7';
+const WARM_ACCENT = '#c66b4f';
 
 type TabId = 'generate' | 'records';
 
@@ -306,11 +312,11 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar style="dark" />
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <StatusBar style="dark" backgroundColor="#fffaf0" translucent={false} />
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}>
         <View style={styles.header}>
           <View style={styles.brandRow}>
-            <Image source={require('./assets/icon.png')} style={styles.logo} />
+            <Image source={require('./assets/icon.png')} resizeMode="contain" style={styles.logo} />
             <View style={styles.brandText}>
               <Text style={styles.title}>PaperBanana 工作台</Text>
               <Text style={styles.subtitle}>多智能体学术图示生成</Text>
@@ -318,7 +324,7 @@ export default function App() {
           </View>
           {currentUser ? (
             <Pressable style={styles.accountPill} onPress={handleSignOut}>
-              <ShieldCheck size={15} color="#20766e" />
+              <ShieldCheck size={15} color={WARM_PRIMARY} />
               <Text style={styles.accountText} numberOfLines={1}>
                 {currentUser.email}
               </Text>
@@ -336,7 +342,7 @@ export default function App() {
           <TabButton label="记录" active={activeTab === 'records'} onPress={() => setActiveTab('records')} />
         </View>
 
-        <ScrollView style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <ScrollView style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
           {activeTab === 'generate' ? renderGenerate() : null}
           {activeTab === 'records' ? renderRecords() : null}
         </ScrollView>
@@ -374,11 +380,11 @@ export default function App() {
       <>
         <HealthBanner loading={healthLoading} health={health} error={healthError} onRefresh={refreshHealth} />
 
-        <SectionHeader icon={<Settings2 size={19} color="#20766e" />} title="生成设置" note={isAdvancedMode ? '模型、流程和渲染参数全部开放。' : '选择模型平台并填写当前平台 API Key。'} />
+        <SectionHeader icon={<Settings2 size={19} color={WARM_PRIMARY} />} title="生成设置" note={isAdvancedMode ? '模型、流程和渲染参数全部开放。' : '选择模型平台并填写当前平台 API Key。'} />
 
         <View style={styles.modeSwitch}>
-          <ModeButton active={!isAdvancedMode} title="普通模式" subtitle="平台 + Key" icon={<Sparkles size={16} color={!isAdvancedMode ? '#fff' : '#20766e'} />} onPress={() => setConfigurationMode('simple')} />
-          <ModeButton active={isAdvancedMode} title="专业模式" subtitle="模型与流程" icon={<Settings2 size={16} color={isAdvancedMode ? '#fff' : '#20766e'} />} onPress={() => setConfigurationMode('advanced')} />
+          <ModeButton active={!isAdvancedMode} title="普通模式" subtitle="平台 + Key" icon={<Sparkles size={16} color={!isAdvancedMode ? '#fff' : WARM_PRIMARY} />} onPress={() => setConfigurationMode('simple')} />
+          <ModeButton active={isAdvancedMode} title="专业模式" subtitle="模型与流程" icon={<Settings2 size={16} color={isAdvancedMode ? '#fff' : WARM_PRIMARY} />} onPress={() => setConfigurationMode('advanced')} />
         </View>
 
         <Text style={styles.fieldLabel}>模型平台</Text>
@@ -390,7 +396,7 @@ export default function App() {
 
         <View style={styles.panel}>
           <View style={styles.panelTitleRow}>
-            <KeyRound size={17} color="#20766e" />
+            <KeyRound size={17} color={WARM_PRIMARY} />
             <Text style={styles.panelTitle}>{providerConfig.label} API 密钥</Text>
           </View>
           <TextInput
@@ -398,6 +404,7 @@ export default function App() {
             value={selectedKey}
             secureTextEntry
             autoCapitalize="none"
+            autoCorrect={false}
             placeholder={providerConfig.keyPlaceholder}
             placeholderTextColor="#9b9488"
             onChangeText={(value) => setApiKeys((prev) => ({ ...prev, [providerConfig.keyName]: value }))}
@@ -432,13 +439,13 @@ export default function App() {
             {mockEnabled ? (
               <View style={styles.switchRow}>
                 <Text style={styles.switchText}>模拟模式</Text>
-                <Switch value={mock} onValueChange={setMock} thumbColor={mock ? '#20766e' : '#f4f0e8'} trackColor={{ false: '#d7d1c5', true: '#9fc8bd' }} />
+                <Switch value={mock} onValueChange={setMock} thumbColor={mock ? WARM_PRIMARY : '#f4f0e8'} trackColor={{ false: '#d7d1c5', true: '#d8b39f' }} />
               </View>
             ) : null}
           </View>
         )}
 
-        <SectionHeader icon={<FileText size={19} color="#20766e" />} title="输入内容" note="选择信息图类别，再粘贴论文方法部分和目标图注。" />
+        <SectionHeader icon={<FileText size={19} color={WARM_PRIMARY} />} title="输入内容" note="选择信息图类别，再粘贴论文方法部分和目标图注。" />
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.exampleRow}>
           {QUICK_START_EXAMPLES.map((example) => (
@@ -467,7 +474,7 @@ export default function App() {
         </Pressable>
         {submitError ? <ErrorLine text={submitError} /> : null}
 
-        <SectionHeader icon={<ImageIcon size={19} color="#20766e" />} title="生成结果" note={currentJobId ? `任务编号 ${currentJobId}` : '提交任务后显示生成结果。'} />
+        <SectionHeader icon={<ImageIcon size={19} color={WARM_PRIMARY} />} title="生成结果" note={currentJobId ? `任务编号 ${currentJobId}` : '提交任务后显示生成结果。'} />
         <JobDetail job={job} apiBase={apiBaseNormalized} onPreview={setPreviewUrl} />
       </>
     );
@@ -475,12 +482,12 @@ export default function App() {
 
   function renderRecords() {
     if (sessionPending) {
-      return <StatePanel icon={<Loader2 size={20} color="#20766e" />} title="正在检查登录状态" note="请稍候。" />;
+      return <StatePanel icon={<Loader2 size={20} color={WARM_PRIMARY} />} title="正在检查登录状态" note="请稍候。" />;
     }
     if (!currentUser) {
       return (
         <StatePanel
-          icon={<UserRound size={20} color="#20766e" />}
+          icon={<UserRound size={20} color={WARM_PRIMARY} />}
           title="任务记录需要登录后使用"
           note="不登录也可以正常生成候选图；登录后，新提交的任务会保存到账号记录。"
           actionLabel="登录 / 注册"
@@ -490,9 +497,9 @@ export default function App() {
     }
     return (
       <>
-        <SectionHeader icon={<FileText size={19} color="#20766e" />} title="我的任务记录" note={currentUser.email} />
+        <SectionHeader icon={<FileText size={19} color={WARM_PRIMARY} />} title="我的任务记录" note={currentUser.email} />
         <Pressable style={styles.secondaryButton} onPress={() => loadUserJobs(false)}>
-          {userJobsLoading ? <ActivityIndicator color="#20766e" /> : <RefreshCw size={17} color="#20766e" />}
+          {userJobsLoading ? <ActivityIndicator color={WARM_PRIMARY} /> : <RefreshCw size={17} color={WARM_PRIMARY} />}
           <Text style={styles.secondaryButtonText}>刷新任务记录</Text>
         </Pressable>
         {userJobsError ? <ErrorLine text={userJobsError} /> : null}
@@ -562,7 +569,7 @@ function HealthBanner({ loading, health, error, onRefresh }: { loading: boolean;
         </Text>
       </View>
       <Pressable style={styles.refreshIconButton} onPress={onRefresh}>
-        {loading ? <ActivityIndicator color="#20766e" /> : <RefreshCw size={18} color="#20766e" />}
+        {loading ? <ActivityIndicator color={WARM_PRIMARY} /> : <RefreshCw size={18} color={WARM_PRIMARY} />}
       </Pressable>
     </View>
   );
@@ -602,6 +609,7 @@ function LabeledInput({
         autoCapitalize={autoCapitalize}
         keyboardType={keyboardType}
         placeholderTextColor="#9b9488"
+        autoCorrect={false}
       />
     </View>
   );
@@ -781,30 +789,32 @@ function AuthModal({
   const canSubmit = Boolean(email.trim() && password.length >= 8 && !submitting);
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.modalBackdrop}>
-        <View style={styles.authSheet}>
-          <View style={styles.sheetTopline}>
-            <View>
-              <Text style={styles.sheetTitle}>{isSignUp ? '注册账号' : '登录账号'}</Text>
-              <Text style={styles.sheetNote}>登录后可以同步查看自己的任务记录。</Text>
+      <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}>
+        <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+          <View style={styles.authSheet}>
+            <View style={styles.sheetTopline}>
+              <View style={styles.sheetCopy}>
+                <Text style={styles.sheetTitle}>{isSignUp ? '注册账号' : '登录账号'}</Text>
+                <Text style={styles.sheetNote}>登录后可以同步查看自己的任务记录。</Text>
+              </View>
+              <Pressable style={styles.closeButton} onPress={onClose}>
+                <X size={20} color="#1b1a16" />
+              </Pressable>
             </View>
-            <Pressable style={styles.closeButton} onPress={onClose}>
-              <X size={20} color="#1b1a16" />
+            {isSignUp ? <LabeledInput label="昵称" value={name} onChangeText={onNameChange} /> : null}
+            <LabeledInput label="邮箱" value={email} onChangeText={onEmailChange} autoCapitalize="none" />
+            <LabeledInput label="密码" value={password} onChangeText={onPasswordChange} secureTextEntry />
+            <Pressable style={[styles.primaryButton, !canSubmit && styles.disabledButton]} disabled={!canSubmit} onPress={onSubmit}>
+              {submitting ? <ActivityIndicator color="#fff" /> : <ShieldCheck size={18} color="#fff" />}
+              <Text style={styles.primaryButtonText}>{isSignUp ? '注册并登录' : '登录'}</Text>
             </Pressable>
+            <Pressable style={styles.textButton} onPress={() => onModeChange(isSignUp ? 'sign-in' : 'sign-up')}>
+              <Text style={styles.textButtonText}>{isSignUp ? '已有账号，去登录' : '没有账号，去注册'}</Text>
+            </Pressable>
+            {error ? <ErrorLine text={error} /> : null}
           </View>
-          {isSignUp ? <LabeledInput label="昵称" value={name} onChangeText={onNameChange} /> : null}
-          <LabeledInput label="邮箱" value={email} onChangeText={onEmailChange} autoCapitalize="none" />
-          <LabeledInput label="密码" value={password} onChangeText={onPasswordChange} secureTextEntry />
-          <Pressable style={[styles.primaryButton, !canSubmit && styles.disabledButton]} disabled={!canSubmit} onPress={onSubmit}>
-            {submitting ? <ActivityIndicator color="#fff" /> : <ShieldCheck size={18} color="#fff" />}
-            <Text style={styles.primaryButtonText}>{isSignUp ? '注册并登录' : '登录'}</Text>
-          </Pressable>
-          <Pressable style={styles.textButton} onPress={() => onModeChange(isSignUp ? 'sign-in' : 'sign-up')}>
-            <Text style={styles.textButtonText}>{isSignUp ? '已有账号，去登录' : '没有账号，去注册'}</Text>
-          </Pressable>
-          {error ? <ErrorLine text={error} /> : null}
-        </View>
-      </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -836,7 +846,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 14,
-    paddingTop: Platform.OS === 'android' ? 24 : 10,
+    paddingTop: Platform.OS === 'android' ? (NativeStatusBar.currentHeight ?? 24) + 10 : 10,
     paddingBottom: 10,
     flexDirection: 'row',
     alignItems: 'center',
@@ -894,15 +904,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#a8cfc4',
+    borderColor: WARM_PRIMARY_BORDER,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#eff8f4',
+    backgroundColor: WARM_PRIMARY_SOFT,
   },
   accountText: {
     flex: 1,
-    color: '#1f5c55',
+    color: WARM_PRIMARY_DARK,
     fontSize: 12,
     fontWeight: '700',
   },
@@ -925,8 +935,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#fffdfa',
   },
   tabButtonActive: {
-    backgroundColor: '#20766e',
-    borderColor: '#20766e',
+    backgroundColor: WARM_PRIMARY,
+    borderColor: WARM_PRIMARY,
   },
   tabText: {
     color: '#5f574c',
@@ -953,8 +963,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   healthOk: {
-    backgroundColor: '#edf8f3',
-    borderColor: '#add4c9',
+    backgroundColor: '#f2eee8',
+    borderColor: WARM_PRIMARY_BORDER,
   },
   healthWarn: {
     backgroundColor: '#fff4e6',
@@ -1019,8 +1029,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   modeButtonActive: {
-    backgroundColor: '#20766e',
-    borderColor: '#20766e',
+    backgroundColor: WARM_PRIMARY,
+    borderColor: WARM_PRIMARY,
   },
   modeCopy: {
     flex: 1,
@@ -1038,7 +1048,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   modeSubtitleActive: {
-    color: '#d9f4ec',
+    color: '#f6e7dc',
   },
   providerGrid: {
     flexDirection: 'row',
@@ -1056,8 +1066,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#fffdfa',
   },
   chipActive: {
-    backgroundColor: '#20766e',
-    borderColor: '#20766e',
+    backgroundColor: WARM_PRIMARY,
+    borderColor: WARM_PRIMARY,
   },
   chipText: {
     color: '#50483d',
@@ -1089,7 +1099,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   guideLinkText: {
-    color: '#20766e',
+    color: WARM_ACCENT,
     fontWeight: '800',
   },
   guideStep: {
@@ -1214,7 +1224,7 @@ const styles = StyleSheet.create({
   primaryButton: {
     minHeight: 50,
     borderRadius: 8,
-    backgroundColor: '#20766e',
+    backgroundColor: WARM_PRIMARY,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
@@ -1233,8 +1243,8 @@ const styles = StyleSheet.create({
     minHeight: 44,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#9fc8bd',
-    backgroundColor: '#edf8f3',
+    borderColor: WARM_PRIMARY_BORDER,
+    backgroundColor: WARM_PRIMARY_SOFT,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
@@ -1242,7 +1252,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   secondaryButtonText: {
-    color: '#20766e',
+    color: WARM_PRIMARY,
     fontWeight: '800',
   },
   textButton: {
@@ -1251,7 +1261,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   textButtonText: {
-    color: '#20766e',
+    color: WARM_PRIMARY,
     fontWeight: '800',
   },
   errorLine: {
@@ -1357,7 +1367,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   userEmail: {
-    color: '#20766e',
+    color: WARM_PRIMARY,
     fontSize: 12,
     fontWeight: '800',
   },
@@ -1424,19 +1434,30 @@ const styles = StyleSheet.create({
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(17, 24, 39, 0.38)',
+  },
+  modalScroll: {
+    flex: 1,
+  },
+  modalScrollContent: {
+    flexGrow: 1,
     justifyContent: 'flex-end',
+    paddingTop: 72,
   },
   authSheet: {
     backgroundColor: '#fffdfa',
     borderTopLeftRadius: 8,
     borderTopRightRadius: 8,
     padding: 16,
+    paddingBottom: Platform.OS === 'android' ? 24 : 28,
     gap: 12,
   },
   sheetTopline: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 12,
+  },
+  sheetCopy: {
+    flex: 1,
   },
   sheetTitle: {
     color: '#1b1a16',
