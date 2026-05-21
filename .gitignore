@@ -39,6 +39,10 @@ pnpm-debug.log*
 .turbo/
 .cache/
 
+# SwiftPM and local macOS app builds
+.build/
+.swiftpm/
+
 # WeChat Developer Tools local overrides
 apps/miniprogram/project.private.config.json
 
