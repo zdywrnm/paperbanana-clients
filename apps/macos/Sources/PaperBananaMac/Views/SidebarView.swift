@@ -16,8 +16,22 @@ struct SidebarView: View {
 
   var body: some View {
     VStack(spacing: 0) {
+      VStack(alignment: .leading, spacing: 10) {
+        AppIconMark(size: 54)
+        VStack(alignment: .leading, spacing: 3) {
+          Text("PaperBanana")
+            .font(.title3)
+            .fontWeight(.semibold)
+          Text("学术图示生成工作台")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(14)
+
       List(selection: selection) {
-        Section("Workspace") {
+        Section("工作台") {
           ForEach(WorkbenchSection.allCases) { section in
             Label(section.title, systemImage: section.systemImage)
               .tag(section)
@@ -36,7 +50,7 @@ struct SidebarView: View {
             Text(model.health?.runtime.capitalized ?? "Backend")
               .font(.caption)
               .fontWeight(.semibold)
-            Text(model.health?.detail ?? model.healthError.ifEmpty("Checking Sealos gateway"))
+            Text(model.health?.detail ?? model.healthError.ifEmpty("正在连接 Sealos 网关"))
               .font(.caption2)
               .foregroundStyle(.secondary)
               .lineLimit(2)
@@ -49,13 +63,15 @@ struct SidebarView: View {
             .foregroundStyle(.secondary)
             .lineLimit(1)
         } else {
-          Button("Sign In / Register") {
+          Button("登录 / 注册") {
             model.isAuthSheetPresented = true
           }
           .buttonStyle(.borderless)
         }
       }
       .padding(12)
+      .paperGlass(cornerRadius: 14)
+      .padding(10)
     }
   }
 }

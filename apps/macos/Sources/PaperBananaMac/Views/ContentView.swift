@@ -26,18 +26,19 @@ struct ContentView: View {
       }
     }
     .navigationTitle("PaperBanana")
+    .tint(PaperBananaTheme.accent)
     .toolbar {
       ToolbarItemGroup {
         Button {
           Task { await model.refreshActiveSection() }
         } label: {
-          Label("Refresh", systemImage: "arrow.clockwise")
+          Label("刷新", systemImage: "arrow.clockwise")
         }
 
         Button {
           Task { await model.submitJob() }
         } label: {
-          Label("Generate", systemImage: "wand.and.stars")
+          Label("生成", systemImage: "wand.and.stars")
         }
         .disabled(!model.canSubmit)
       }
@@ -45,7 +46,7 @@ struct ContentView: View {
       ToolbarItem(placement: .automatic) {
         if let user = model.currentUser {
           Menu {
-            Button("Sign Out") {
+            Button("退出登录") {
               Task { await model.signOut() }
             }
           } label: {
@@ -55,7 +56,7 @@ struct ContentView: View {
           Button {
             model.isAuthSheetPresented = true
           } label: {
-            Label("Sign In", systemImage: "person.crop.circle")
+            Label("登录", systemImage: "person.crop.circle")
           }
         }
       }
@@ -64,7 +65,7 @@ struct ContentView: View {
       AuthSheetView(model: model)
     }
     .alert("PaperBanana", isPresented: $model.isAlertPresented) {
-      Button("OK") {}
+      Button("好") {}
     } message: {
       Text(model.alertMessage)
     }

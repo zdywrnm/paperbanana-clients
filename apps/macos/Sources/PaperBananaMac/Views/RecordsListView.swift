@@ -7,17 +7,17 @@ struct RecordsListView: View {
     VStack(spacing: 0) {
       HStack {
         VStack(alignment: .leading, spacing: 4) {
-          Text("Task Records")
+          Text("任务记录")
             .font(.title2)
             .fontWeight(.semibold)
-          Text(model.currentUser == nil ? "Sign in to load account records from Sealos." : "Recent jobs associated with the current account.")
+          Text(model.currentUser == nil ? "登录后从 Sealos 读取账号任务记录。" : "当前账号最近提交的生成任务。")
             .foregroundStyle(.secondary)
         }
         Spacer()
         Button {
           Task { await model.loadUserJobs(silent: false) }
         } label: {
-          Label("Refresh", systemImage: "arrow.clockwise")
+          Label("刷新", systemImage: "arrow.clockwise")
         }
         .disabled(model.currentUser == nil || model.recordsLoading)
       }
@@ -27,21 +27,21 @@ struct RecordsListView: View {
 
       if model.currentUser == nil {
         ContentUnavailableView {
-          Label("Sign in required", systemImage: "person.crop.circle.badge.exclamationmark")
+          Label("需要登录", systemImage: "person.crop.circle.badge.exclamationmark")
         } description: {
           Text("任务记录由 Sealos auth-gateway 保护，需要登录后读取。")
         } actions: {
-          Button("Sign In / Register") {
+          Button("登录 / 注册") {
             model.isAuthSheetPresented = true
           }
         }
       } else if model.recordsLoading {
-        ProgressView("Loading Records")
+        ProgressView("正在加载任务记录")
           .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else if !model.recordsError.isEmpty {
-        ContentUnavailableView("Unable to load records", systemImage: "exclamationmark.triangle", description: Text(model.recordsError))
+        ContentUnavailableView("无法加载记录", systemImage: "exclamationmark.triangle", description: Text(model.recordsError))
       } else if model.userJobs.isEmpty {
-        ContentUnavailableView("No Records", systemImage: "tray", description: Text("This account does not have generation records yet."))
+        ContentUnavailableView("暂无记录", systemImage: "tray", description: Text("这个账号还没有提交过生成任务。"))
       } else {
         List(selection: $model.selectedRecordID) {
           ForEach(model.userJobs) { job in
@@ -52,6 +52,7 @@ struct RecordsListView: View {
         .listStyle(.inset)
       }
     }
+    .background(PaperWorkspaceBackground().ignoresSafeArea())
     .task {
       if model.currentUser != nil, model.userJobs.isEmpty {
         await model.loadUserJobs(silent: true)
@@ -73,8 +74,8 @@ struct JobRecordRow: View {
         Text(job.title)
           .lineLimit(1)
         HStack(spacing: 8) {
-          Text(job.provider.ifEmpty("unknown"))
-          Text(job.aspectRatio.ifEmpty("ratio"))
+          Text(job.provider.ifEmpty("未知平台"))
+          Text(job.aspectRatio.ifEmpty("比例未知"))
           Text(job.createdAt)
         }
         .font(.caption)

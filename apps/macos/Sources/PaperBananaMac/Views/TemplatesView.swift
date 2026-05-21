@@ -5,7 +5,7 @@ struct TemplatesView: View {
 
   var body: some View {
     List {
-      Section("Quick Start") {
+      Section("快速开始") {
         ForEach(PaperBananaSamples.quickStartExamples) { example in
           VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -17,7 +17,7 @@ struct TemplatesView: View {
                   .lineLimit(2)
               }
               Spacer()
-              Button("Apply") {
+              Button("套用") {
                 model.applyExample(example)
               }
             }
@@ -31,6 +31,8 @@ struct TemplatesView: View {
         }
       }
     }
-    .navigationTitle("Templates")
+    .navigationTitle("示例模板")
+    .scrollContentBackground(.hidden)
+    .background(PaperWorkspaceBackground().ignoresSafeArea())
   }
 }

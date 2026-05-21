@@ -17,24 +17,24 @@ struct PaperBananaMacApp: App {
     .defaultSize(width: 1320, height: 860)
     .commands {
       CommandGroup(after: .newItem) {
-        Button("Generate Candidate") {
+        Button("生成候选图") {
           Task { await model.submitJob() }
         }
         .keyboardShortcut(.return, modifiers: [.command])
         .disabled(!model.canSubmit)
 
-        Button("Refresh") {
+        Button("刷新") {
           Task { await model.refreshActiveSection() }
         }
         .keyboardShortcut("r", modifiers: [.command])
       }
 
       CommandMenu("PaperBanana") {
-        Button("Open Web Workbench") {
+        Button("打开网页版工作台") {
           NSWorkspace.shared.open(URL(string: "https://paperbanana.asia/")!)
         }
 
-        Button("Open Paper") {
+        Button("打开论文") {
           NSWorkspace.shared.open(URL(string: "https://huggingface.co/papers/2601.23265")!)
         }
       }

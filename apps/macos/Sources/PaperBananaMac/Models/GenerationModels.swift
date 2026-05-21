@@ -9,9 +9,9 @@ enum WorkbenchSection: String, CaseIterable, Identifiable {
 
   var title: String {
     switch self {
-    case .generate: "Generate"
-    case .records: "Records"
-    case .templates: "Templates"
+    case .generate: "生成"
+    case .records: "任务记录"
+    case .templates: "示例模板"
     }
   }
 

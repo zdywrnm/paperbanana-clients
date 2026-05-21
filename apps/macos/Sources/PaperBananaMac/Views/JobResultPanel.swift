@@ -12,7 +12,7 @@ struct JobResultPanel: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       HStack {
-        Text("Result")
+        Text("生成结果")
           .font(.headline)
         Spacer()
         if let job {
@@ -22,7 +22,7 @@ struct JobResultPanel: View {
 
       if let job {
         if !job.id.isEmpty {
-          Text("Job \(job.id)")
+          Text("任务编号 \(job.id)")
             .font(.caption)
             .foregroundStyle(.secondary)
             .textSelection(.enabled)
@@ -51,13 +51,13 @@ struct JobResultPanel: View {
           }
         }
       } else {
-        Text("Submit a generation job to preview candidate images here.")
+        Text("提交生成任务后，候选图会显示在这里。")
           .foregroundStyle(.secondary)
           .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
       }
     }
     .padding(14)
-    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+    .paperGlass(cornerRadius: 18)
   }
 }
 
@@ -95,25 +95,27 @@ struct ResultImageCard: View {
       }
 
       HStack {
-        Text("Candidate \(image.candidateID + 1)")
+        Text("候选图 \(image.candidateID + 1)")
           .font(.caption)
           .foregroundStyle(.secondary)
         Spacer()
         Button {
           Task { await model.copyImage(image) }
         } label: {
-          Label("Copy", systemImage: "doc.on.doc")
+          Label("复制", systemImage: "doc.on.doc")
         }
         .labelStyle(.iconOnly)
 
         Button {
           Task { await model.saveImage(image) }
         } label: {
-          Label("Save", systemImage: "square.and.arrow.down")
+          Label("保存", systemImage: "square.and.arrow.down")
         }
         .labelStyle(.iconOnly)
       }
     }
+    .padding(10)
+    .paperGlass(cornerRadius: 14)
     .task(id: image.url) {
       await loadImage()
     }

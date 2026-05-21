@@ -15,8 +15,10 @@ RELEASE_DIR="$DIST_DIR/release"
 APP_BUNDLE="$RELEASE_DIR/$DISPLAY_NAME.app"
 APP_CONTENTS="$APP_BUNDLE/Contents"
 APP_MACOS="$APP_CONTENTS/MacOS"
+APP_RESOURCES="$APP_CONTENTS/Resources"
 APP_BINARY="$APP_MACOS/$APP_NAME"
 INFO_PLIST="$APP_CONTENTS/Info.plist"
+ICON_SOURCE="$ROOT_DIR/Assets/AppIcon.icns"
 STAGE_DIR="$DIST_DIR/dmg-stage"
 DMG_NAME="$DISPLAY_NAME-$VERSION-macOS.dmg"
 DMG_PATH="$DIST_DIR/$DMG_NAME"
@@ -25,12 +27,13 @@ CHECKSUM_PATH="$DMG_PATH.sha256"
 cd "$ROOT_DIR"
 
 rm -rf "$RELEASE_DIR" "$STAGE_DIR" "$DMG_PATH" "$CHECKSUM_PATH"
-mkdir -p "$APP_MACOS" "$STAGE_DIR"
+mkdir -p "$APP_MACOS" "$APP_RESOURCES" "$STAGE_DIR"
 
 swift build -c release
 BUILD_BINARY="$(swift build -c release --show-bin-path)/$APP_NAME"
 cp "$BUILD_BINARY" "$APP_BINARY"
 chmod +x "$APP_BINARY"
+cp "$ICON_SOURCE" "$APP_RESOURCES/AppIcon.icns"
 
 cat >"$INFO_PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -45,6 +48,8 @@ cat >"$INFO_PLIST" <<PLIST
   <string>$DISPLAY_NAME</string>
   <key>CFBundleDisplayName</key>
   <string>$DISPLAY_NAME</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
   <key>CFBundleShortVersionString</key>
   <string>$VERSION</string>
   <key>CFBundleVersion</key>

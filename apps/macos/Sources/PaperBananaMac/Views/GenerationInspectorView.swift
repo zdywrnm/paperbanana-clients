@@ -20,9 +20,9 @@ struct GenerationInspectorView: View {
 
   var body: some View {
     Form {
-      Section("Backend") {
-        LabeledContent("Mode") {
-          Text(model.health?.backendMode.rawValue.capitalized ?? "Unknown")
+      Section("后端") {
+        LabeledContent("模式") {
+          Text(model.health?.backendMode.rawValue.capitalized ?? "未知")
         }
         LabeledContent("URL") {
           Text(model.apiBase)
@@ -35,15 +35,15 @@ struct GenerationInspectorView: View {
         }
       }
 
-      Section("Model") {
-        Picker("Mode", selection: $model.draft.configurationMode) {
+      Section("模型") {
+        Picker("使用模式", selection: $model.draft.configurationMode) {
           ForEach(ConfigurationMode.allCases) { mode in
             Text(mode.title).tag(mode)
           }
         }
         .pickerStyle(.segmented)
 
-        Picker("Provider", selection: providerBinding) {
+        Picker("模型平台", selection: providerBinding) {
           ForEach(ProviderCatalog.order) { provider in
             Text(ProviderCatalog.config(for: provider).label).tag(provider)
           }
@@ -52,48 +52,48 @@ struct GenerationInspectorView: View {
         SecureField(model.selectedProviderConfig.keyPlaceholder, text: apiKeyBinding)
           .textFieldStyle(.roundedBorder)
 
-        Button("Open API Key Page") {
+        Button("打开 API Key 页面") {
           NSWorkspace.shared.open(model.selectedProviderConfig.guideURL)
         }
       }
 
-      Section("Defaults") {
-        LabeledContent("Main Model", value: model.selectedProviderConfig.mainModel)
-        LabeledContent("Image Model", value: model.selectedProviderConfig.imageModel)
-        LabeledContent("Pipeline", value: "规划器 + 评审器")
-        LabeledContent("Aspect Ratio", value: "16:9")
+      Section("默认配置") {
+        LabeledContent("主模型", value: model.selectedProviderConfig.mainModel)
+        LabeledContent("图像模型", value: model.selectedProviderConfig.imageModel)
+        LabeledContent("生成流程", value: "规划器 + 评审器")
+        LabeledContent("画面比例", value: "16:9")
       }
 
       if model.draft.configurationMode == .advanced {
-        Section("Advanced") {
-          Picker("Pipeline", selection: $model.draft.pipelineMode) {
+        Section("专业参数") {
+          Picker("生成流程", selection: $model.draft.pipelineMode) {
             Text("规划器 + 评审器").tag("demo_planner_critic")
             Text("完整流程").tag("demo_full")
             Text("基础生成").tag("vanilla")
           }
 
-          Picker("Retrieval", selection: $model.draft.retrievalSetting) {
+          Picker("检索设置", selection: $model.draft.retrievalSetting) {
             Text("不使用检索").tag("none")
             Text("自动检索").tag("auto")
             Text("随机参考").tag("random")
             Text("手动参考").tag("manual")
           }
 
-          Picker("Aspect Ratio", selection: $model.draft.aspectRatio) {
+          Picker("画面比例", selection: $model.draft.aspectRatio) {
             Text("16:9").tag("16:9")
             Text("21:9").tag("21:9")
             Text("3:2").tag("3:2")
             Text("1:1").tag("1:1")
           }
 
-          Stepper("Candidates: \(model.draft.numCandidates)", value: $model.draft.numCandidates, in: 1...4)
-          Stepper("Critic Rounds: \(model.draft.maxCriticRounds)", value: $model.draft.maxCriticRounds, in: 0...3)
+          Stepper("候选图数量：\(model.draft.numCandidates)", value: $model.draft.numCandidates, in: 1...4)
+          Stepper("评审轮数：\(model.draft.maxCriticRounds)", value: $model.draft.maxCriticRounds, in: 0...3)
 
-          TextField("Main Model", text: $model.draft.mainModelName)
-          TextField("Image Model", text: $model.draft.imageModelName)
+          TextField("主模型名称", text: $model.draft.mainModelName)
+          TextField("图像模型名称", text: $model.draft.imageModelName)
 
           if model.health?.mockEnabled == true {
-            Toggle("Mock Mode", isOn: $model.draft.mock)
+            Toggle("模拟模式", isOn: $model.draft.mock)
           }
         }
       }
@@ -105,9 +105,10 @@ struct GenerationInspectorView: View {
           if model.isSubmitting {
             ProgressView()
           } else {
-            Label("Generate Candidate", systemImage: "wand.and.stars")
+            Label("生成候选图", systemImage: "wand.and.stars")
           }
         }
+        .buttonStyle(.borderedProminent)
         .disabled(!model.canSubmit)
 
         if !model.submitError.isEmpty {
@@ -118,5 +119,7 @@ struct GenerationInspectorView: View {
     }
     .formStyle(.grouped)
     .padding(.top, 8)
+    .scrollContentBackground(.hidden)
+    .background(PaperWorkspaceBackground().ignoresSafeArea())
   }
 }

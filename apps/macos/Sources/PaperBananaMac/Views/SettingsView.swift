@@ -5,27 +5,27 @@ struct SettingsView: View {
 
   var body: some View {
     Form {
-      Section("Sealos Backend") {
-        TextField("Gateway URL", text: $model.apiBase)
+      Section("Sealos 后端") {
+        TextField("网关地址", text: $model.apiBase)
           .textFieldStyle(.roundedBorder)
-        Text("Default: \(AppDefaults.sealosAPIBase)")
+        Text("默认：\(AppDefaults.sealosAPIBase)")
           .font(.caption)
           .foregroundStyle(.secondary)
 
         HStack {
-          Button("Check Connection") {
+          Button("检查连接") {
             Task { await model.refreshHealth() }
           }
-          Button("Reset to Sealos") {
+          Button("恢复 Sealos 默认地址") {
             model.resetBackendBase()
             Task { await model.refreshHealth() }
           }
         }
 
         if let health = model.health {
-          LabeledContent("Runtime", value: health.runtime)
-          LabeledContent("Mode", value: health.backendMode.rawValue)
-          LabeledContent("Detail", value: health.detail)
+          LabeledContent("运行时", value: health.runtime)
+          LabeledContent("模式", value: health.backendMode.rawValue)
+          LabeledContent("详情", value: health.detail)
         }
 
         if !model.healthError.isEmpty {
@@ -34,12 +34,14 @@ struct SettingsView: View {
         }
       }
 
-      Section("Security") {
-        Text("Model API keys are stored in macOS Keychain per provider and are only sent with job creation requests.")
+      Section("安全") {
+        Text("模型 API Key 会按平台存入 macOS Keychain，只会在创建生成任务时发送给 Sealos 后端。")
           .foregroundStyle(.secondary)
       }
     }
     .formStyle(.grouped)
     .padding()
+    .scrollContentBackground(.hidden)
+    .background(PaperWorkspaceBackground().ignoresSafeArea())
   }
 }

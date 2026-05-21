@@ -26,17 +26,17 @@ struct AuthSheetView: View {
         .buttonStyle(.borderless)
       }
 
-      Picker("Mode", selection: modeBinding) {
+      Picker("模式", selection: modeBinding) {
         Text("登录").tag(AuthMode.signIn.id)
         Text("注册").tag(AuthMode.signUp.id)
       }
       .pickerStyle(.segmented)
 
       Form {
-        TextField("Email", text: $model.authEmail)
-        SecureField("Password", text: $model.authPassword)
+        TextField("邮箱", text: $model.authEmail)
+        SecureField("密码", text: $model.authPassword)
         if model.authMode == .signUp {
-          TextField("Name", text: $model.authName)
+          TextField("昵称", text: $model.authName)
         }
       }
       .formStyle(.grouped)
@@ -47,14 +47,14 @@ struct AuthSheetView: View {
       }
 
       HStack {
-        Text("Auth requests go through the Sealos gateway.")
+        Text("登录请求会通过 Sealos 网关处理。")
           .font(.caption)
           .foregroundStyle(.secondary)
         Spacer()
-        Button("Cancel") {
+        Button("取消") {
           dismiss()
         }
-        Button(model.authMode == .signUp ? "Register" : "Sign In") {
+        Button(model.authMode == .signUp ? "注册" : "登录") {
           Task { await model.signInOrSignUp() }
         }
         .keyboardShortcut(.defaultAction)
