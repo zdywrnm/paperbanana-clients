@@ -50,6 +50,8 @@ import {
 import {
   API_BASE_DEFAULT,
   ASPECT_RATIO_OPTIONS,
+  CANDIDATE_OPTIONS,
+  CRITIC_ROUND_OPTIONS,
   INFOGRAPHIC_CATEGORIES,
   PIPELINE_OPTIONS,
   PROVIDER_ORDER,
@@ -58,7 +60,7 @@ import {
   RETRIEVAL_OPTIONS,
   STATUS_LABELS,
 } from './src/constants';
-import type { AuthMode, ConfigurationMode, CurrentUser, HealthInfo, Job, ProviderId, QuickStartExample } from './src/types';
+import type { AuthMode, ConfigurationMode, CurrentUser, HealthInfo, Job, ModelOption, ProviderId, QuickStartExample } from './src/types';
 
 const EMPTY_KEYS: Record<ProviderId, string> = {
   bailian: '',
@@ -125,6 +127,8 @@ export default function App() {
   const selectedCategory = INFOGRAPHIC_CATEGORIES.find((item) => item[0] === infographicCategory) || DEFAULT_CATEGORY;
   const isAdvancedMode = configurationMode === 'advanced';
   const mockEnabled = Boolean(health?.mock_enabled || health?.laf?.mock_enabled);
+  const defaultMainModelLabel = findModelLabel(providerConfig.mainModels, providerConfig.mainModel);
+  const defaultImageModelLabel = findModelLabel(providerConfig.imageModels, providerConfig.imageModel);
 
   const canSubmit = useMemo(() => {
     const canMock = isAdvancedMode && mock && mockEnabled;
@@ -205,7 +209,8 @@ export default function App() {
     setAuthError('');
     try {
       if (authMode === 'sign-up') {
-        await signUpEmail(apiBaseNormalized, authEmail.trim(), authPassword, authName.trim() || authEmail.trim().split('@')[0] || 'PaperBanana 用户');
+        const displayName = (authName.trim() || authEmail.trim().split('@')[0] || 'PaperBanana 用户').slice(0, 24);
+        await signUpEmail(apiBaseNormalized, authEmail.trim(), authPassword, displayName);
       } else {
         await signInEmail(apiBaseNormalized, authEmail.trim(), authPassword);
       }
@@ -419,8 +424,8 @@ export default function App() {
 
         {!isAdvancedMode ? (
           <View style={styles.summaryRow}>
-            <SummaryPill label={providerConfig.mainModel} />
-            <SummaryPill label={providerConfig.imageModel} />
+            <SummaryPill label={defaultMainModelLabel} />
+            <SummaryPill label={defaultImageModelLabel} />
             <SummaryPill label="规划器 + 评审器" />
             <SummaryPill label="16:9" />
           </View>
@@ -430,12 +435,10 @@ export default function App() {
             <OptionGroup title="生成流程" value={pipelineMode} options={PIPELINE_OPTIONS} onChange={setPipelineMode} />
             <OptionGroup title="检索设置" value={retrievalSetting} options={RETRIEVAL_OPTIONS} onChange={setRetrievalSetting} />
             <OptionGroup title="画面比例" value={aspectRatio} options={ASPECT_RATIO_OPTIONS} onChange={setAspectRatio} />
-            <View style={styles.inlineInputs}>
-              <LabeledInput label="候选图数量" value={numCandidates} onChangeText={setNumCandidates} keyboardType="number-pad" compact />
-              <LabeledInput label="评审轮数" value={maxCriticRounds} onChangeText={setMaxCriticRounds} keyboardType="number-pad" compact />
-            </View>
-            <LabeledInput label="主模型名称" value={mainModelName} onChangeText={setMainModelName} autoCapitalize="none" />
-            <LabeledInput label="图像生成模型" value={imageGenModelName} onChangeText={setImageGenModelName} autoCapitalize="none" />
+            <OptionGroup title="候选图数量" value={numCandidates} options={CANDIDATE_OPTIONS} onChange={setNumCandidates} />
+            <OptionGroup title="评审轮数" value={maxCriticRounds} options={CRITIC_ROUND_OPTIONS} onChange={setMaxCriticRounds} />
+            <ModelSelector title="主模型" value={mainModelName} options={providerConfig.mainModels} onChange={setMainModelName} />
+            <ModelSelector title="图像生成模型" value={imageGenModelName} options={providerConfig.imageModels} onChange={setImageGenModelName} />
             {mockEnabled ? (
               <View style={styles.switchRow}>
                 <Text style={styles.switchText}>模拟模式</Text>
@@ -465,7 +468,7 @@ export default function App() {
         <OptionGroup title="信息图类别" value={infographicCategory} options={INFOGRAPHIC_CATEGORIES.map((item) => [item[0], item[1]] as const)} onChange={setInfographicCategory} />
         <Text style={styles.categoryNote}>{selectedCategory[2]}</Text>
 
-        <LabeledInput label="论文方法内容" value={methodContent} onChangeText={setMethodContent} multiline minHeight={168} />
+        <LabeledInput label="论文方法内容" value={methodContent} onChangeText={setMethodContent} multiline minHeight={142} />
         <LabeledInput label="目标图注" value={caption} onChangeText={setCaption} multiline minHeight={92} />
 
         <Pressable style={[styles.primaryButton, !canSubmit && styles.disabledButton]} disabled={!canSubmit} onPress={submitJob}>
@@ -585,6 +588,7 @@ function LabeledInput({
   secureTextEntry,
   autoCapitalize,
   keyboardType,
+  maxLength,
 }: {
   label: string;
   value: string;
@@ -595,6 +599,7 @@ function LabeledInput({
   secureTextEntry?: boolean;
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
   keyboardType?: 'default' | 'number-pad';
+  maxLength?: number;
 }) {
   return (
     <View style={[styles.field, compact && styles.compactField]}>
@@ -608,6 +613,7 @@ function LabeledInput({
         secureTextEntry={secureTextEntry}
         autoCapitalize={autoCapitalize}
         keyboardType={keyboardType}
+        maxLength={maxLength}
         placeholderTextColor="#9b9488"
         autoCorrect={false}
       />
@@ -638,6 +644,39 @@ function OptionGroup<T extends string>({
   );
 }
 
+function ModelSelector({
+  title,
+  value,
+  options,
+  onChange,
+}: {
+  title: string;
+  value: string;
+  options: readonly ModelOption[];
+  onChange: (value: string) => void;
+}) {
+  const groups = groupModelOptions(options);
+  return (
+    <View style={styles.modelSelector}>
+      <Text style={styles.fieldLabel}>{title}</Text>
+      {groups.map((group) => (
+        <View style={styles.modelGroup} key={`${title}-${group.name}`}>
+          <Text style={styles.modelGroupTitle}>{group.name}</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.modelOptionRow}>
+            {group.items.map(([id, label]) => (
+              <Pressable key={id} style={[styles.modelOption, value === id && styles.modelOptionActive]} onPress={() => onChange(id)}>
+                <Text style={[styles.modelOptionText, value === id && styles.modelOptionTextActive]} numberOfLines={1}>
+                  {label}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 function SummaryPill({ label }: { label: string }) {
   return (
     <View style={styles.summaryPill}>
@@ -646,6 +685,24 @@ function SummaryPill({ label }: { label: string }) {
       </Text>
     </View>
   );
+}
+
+function findModelLabel(options: readonly ModelOption[], value: string) {
+  return options.find(([id]) => id === value)?.[1] || value;
+}
+
+function groupModelOptions(options: readonly ModelOption[]) {
+  const groups: Array<{ name: string; items: ModelOption[] }> = [];
+  options.forEach((option) => {
+    const name = option[2] || '其他';
+    const group = groups.find((item) => item.name === name);
+    if (group) {
+      group.items.push(option);
+    } else {
+      groups.push({ name, items: [option] });
+    }
+  });
+  return groups;
 }
 
 function ErrorLine({ text }: { text: string }) {
@@ -723,6 +780,7 @@ function JobList({ jobs, apiBase, showUser, emptyText, onPreview }: { jobs: Job[
               <Text style={styles.modelText}>主模型：{item.main_model_name || '未记录'}</Text>
               <Text style={styles.modelText}>图像模型：{item.image_gen_model_name || '未记录'}</Text>
             </View>
+            {item.status === 'failed' ? <ErrorLine text={formatErrorMessage(item.error || item.logs_tail || '生成失败')} /> : null}
             {item.method_content ? <Text style={styles.methodPreview} numberOfLines={3}>{item.method_content}</Text> : null}
             {images.length ? <ImageGrid images={images} apiBase={apiBase} onPreview={onPreview} /> : null}
           </View>
@@ -801,7 +859,7 @@ function AuthModal({
                 <X size={20} color="#1b1a16" />
               </Pressable>
             </View>
-            {isSignUp ? <LabeledInput label="昵称" value={name} onChangeText={onNameChange} /> : null}
+            {isSignUp ? <LabeledInput label="昵称" value={name} onChangeText={onNameChange} maxLength={24} /> : null}
             <LabeledInput label="邮箱" value={email} onChangeText={onEmailChange} autoCapitalize="none" />
             <LabeledInput label="密码" value={password} onChangeText={onPasswordChange} secureTextEntry />
             <Pressable style={[styles.primaryButton, !canSubmit && styles.disabledButton]} disabled={!canSubmit} onPress={onSubmit}>
@@ -1128,6 +1186,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 9,
     fontSize: 14,
+    lineHeight: 20,
+    includeFontPadding: false,
   },
   textarea: {
     lineHeight: 20,
@@ -1161,6 +1221,48 @@ const styles = StyleSheet.create({
   optionRow: {
     gap: 8,
     paddingRight: 4,
+  },
+  modelSelector: {
+    borderWidth: 1,
+    borderColor: '#ded8cc',
+    backgroundColor: '#fffdfa',
+    borderRadius: 8,
+    padding: 10,
+    gap: 10,
+  },
+  modelGroup: {
+    gap: 7,
+  },
+  modelGroupTitle: {
+    color: '#7a6e60',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  modelOptionRow: {
+    gap: 8,
+    paddingRight: 4,
+  },
+  modelOption: {
+    maxWidth: 236,
+    minHeight: 36,
+    paddingHorizontal: 11,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d6caba',
+    backgroundColor: '#fffaf0',
+    justifyContent: 'center',
+  },
+  modelOptionActive: {
+    backgroundColor: WARM_PRIMARY,
+    borderColor: WARM_PRIMARY,
+  },
+  modelOptionText: {
+    color: '#50483d',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  modelOptionTextActive: {
+    color: '#fff',
   },
   inlineInputs: {
     flexDirection: 'row',

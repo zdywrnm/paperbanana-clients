@@ -3,6 +3,7 @@ export type BackendMode = 'gateway' | 'laf' | 'fastapi';
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | string;
 export type ConfigurationMode = 'simple' | 'advanced';
 export type AuthMode = 'sign-in' | 'sign-up';
+export type ModelOption = readonly [id: string, label: string, group?: string];
 
 export interface ProviderConfig {
   id: ProviderId;
@@ -11,6 +12,8 @@ export interface ProviderConfig {
   keyPlaceholder: string;
   mainModel: string;
   imageModel: string;
+  mainModels: readonly ModelOption[];
+  imageModels: readonly ModelOption[];
   guideUrl: string;
   guideSteps: string[];
 }

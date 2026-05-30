@@ -84,7 +84,7 @@ Android 客户端工程位于：
 apps/android/
 ```
 
-当前 Android 端对齐 Web 工作台的核心能力：四个模型平台、普通模式、专业模式、登录注册、任务记录、任务提交、状态轮询和结果图预览。
+当前 Android 端对齐 Web 工作台的核心能力：四个模型平台、普通模式、专业模式、固定模型选择器、登录注册、任务记录、任务提交、状态轮询和结果图预览。
 
 开发服务：
 
@@ -103,7 +103,7 @@ pnpm --filter @paperbanana/android typecheck
 - 32 位：`armeabi-v7a`
 - 64 位：`arm64-v8a`
 
-当前发布包可在 GitHub Releases 的 [`android-preview-0.1.2`](https://github.com/zdywrnm/PaperBanana-clients/releases/tag/android-preview-0.1.2) 中获取。
+当前发布包可在 GitHub Releases 的 [`android-preview-0.1.3`](https://github.com/zdywrnm/PaperBanana-clients/releases/tag/android-preview-0.1.3) 中获取。
 
 ## macOS Native Client
 
