@@ -47,7 +47,7 @@ export default function AuthPanel({ onAuthenticated, onCancel }) {
         {isSignUp ? (
           <label className="field">
             <span>昵称</span>
-            <input value={name} onChange={(event) => setName(event.target.value)} placeholder="可选" autoComplete="name" />
+            <input className="auth-name-input" value={name} onChange={(event) => setName(event.target.value)} placeholder="可选" autoComplete="name" maxLength={24} />
           </label>
         ) : null}
         <label className="field">

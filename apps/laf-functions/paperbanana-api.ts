@@ -83,9 +83,14 @@ function setCorsHeaders(ctx: FunctionContext) {
 
 async function createJob(body: CreateJobBody, ctx: FunctionContext) {
   validateCreateBody(body)
-  const apiKey = selectApiKey(body.provider, body.apiKeys)
+  const normalizedBody = {
+    ...body,
+    mainModelName: normalizeModelName(body.provider, body.mainModelName),
+    imageModelName: normalizeModelName(body.provider, body.imageModelName),
+  }
+  const apiKey = selectApiKey(normalizedBody.provider, normalizedBody.apiKeys)
   if (!apiKey) {
-    return fail(`Missing API key for provider ${body.provider}`, 400)
+    return fail(`Missing API key for provider ${normalizedBody.provider}`, 400)
   }
 
   const now = new Date()
@@ -96,16 +101,16 @@ async function createJob(body: CreateJobBody, ctx: FunctionContext) {
   const record = {
     _id: jobId,
     status: 'queued' as JobStatus,
-    provider: body.provider,
-    methodContent: body.methodContent,
-    caption: body.caption,
-    mainModelName: body.mainModelName,
-    imageModelName: body.imageModelName,
-    pipelineMode: body.pipelineMode || 'planner_critic',
-    aspectRatio: body.aspectRatio || '16:9',
+    provider: normalizedBody.provider,
+    methodContent: normalizedBody.methodContent,
+    caption: normalizedBody.caption,
+    mainModelName: normalizedBody.mainModelName,
+    imageModelName: normalizedBody.imageModelName,
+    pipelineMode: normalizedBody.pipelineMode || 'planner_critic',
+    aspectRatio: normalizedBody.aspectRatio || '16:9',
     numCandidates: safeNumCandidates,
     maxCriticRounds: safeCriticRounds,
-    promptCharCount: body.methodContent.length + body.caption.length,
+    promptCharCount: normalizedBody.methodContent.length + normalizedBody.caption.length,
     resultImages: [],
     logs: [],
     error: '',
@@ -121,7 +126,7 @@ async function createJob(body: CreateJobBody, ctx: FunctionContext) {
 
   // Laf 云函数是常驻 Node.js Runtime。API key 只保留在本次闭包中，
   // 不写入数据库，不进入日志。
-  void runJob(jobId, body, apiKey, safeNumCandidates, safeCriticRounds).catch(async (error) => {
+  void runJob(jobId, normalizedBody, apiKey, safeNumCandidates, safeCriticRounds).catch(async (error) => {
     await markFailed(jobId, error?.message || String(error))
   })
 
@@ -330,7 +335,8 @@ async function callGeminiText(model: string, apiKey: string, system: string, use
 }
 
 async function callGeminiImage(model: string, apiKey: string, prompt: string, aspectRatio: string): Promise<string> {
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+  const actualModel = normalizeModelName('gemini', model)
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/${actualModel}:generateContent?key=${apiKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -590,10 +596,15 @@ function getClientIp(ctx: FunctionContext) {
 }
 
 function toOpenRouterModel(model: string) {
-  const raw = model.replace(/^openrouter\//, '')
+  const raw = normalizeModelName('openrouter', model).replace(/^openrouter\//, '')
   if (raw.includes('/')) return raw
   if (raw.startsWith('gemini')) return `google/${raw}`
   return raw
+}
+
+function normalizeModelName(provider: string, model: string) {
+  if (provider === 'gemini' && model === 'gemini-3.1-flash-image-preview') return 'gemini-3.1-flash-image'
+  return model
 }
 
 function clamp(value: number, min: number, max: number) {

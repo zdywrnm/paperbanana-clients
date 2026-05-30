@@ -26,7 +26,7 @@
 
   <view class="status-row">
     <view class="status-pill {{healthOk ? 'ok' : 'warn'}}">{{healthText}}</view>
-    <view class="status-pill">普通模式</view>
+    <view class="status-pill">{{modeLabel}}</view>
     <view class="status-pill" wx:if="{{isLoggedIn}}">账号记录已启用</view>
     <view class="status-pill" wx:else>不登录也可生成</view>
   </view>
@@ -42,7 +42,14 @@
 
     <view class="field" wx:if="{{authIsSignUp}}">
       <view class="field-label">昵称</view>
-      <input class="input" value="{{authName}}" placeholder="可选" bindinput="onAuthNameInput" />
+      <input
+        class="input auth-name-input"
+        type="nickname"
+        maxlength="24"
+        value="{{authName}}"
+        placeholder="可选"
+        bindinput="onAuthNameInput"
+      />
     </view>
     <view class="field">
       <view class="field-label">邮箱</view>
@@ -82,18 +89,32 @@
       <view class="section-head">
         <view>
           <view class="section-title">生成设置</view>
-          <view class="section-note">选择模型平台并粘贴 API Key。密钥只用于本次模型调用，不保存到数据库。</view>
+          <view class="section-note">普通模式使用平台默认配置；专业模式可调整流程、比例和模型名称。</view>
+        </view>
+      </view>
+
+      <view class="field mode-field">
+        <view class="field-label">使用模式</view>
+        <view class="mode-switch">
+          <button class="{{!isAdvancedMode ? 'active' : ''}}" data-mode="simple" bindtap="switchConfigurationMode">
+            <view>普通模式</view>
+            <text>默认流程</text>
+          </button>
+          <button class="{{isAdvancedMode ? 'active' : ''}}" data-mode="advanced" bindtap="switchConfigurationMode">
+            <view>专业模式</view>
+            <text>自定义参数</text>
+          </button>
         </view>
       </view>
 
       <view class="field">
-        <view class="field-label">模型平台</view>
+        <view class="field-label">{{isAdvancedMode ? '模型接口' : '模型平台'}}</view>
         <picker mode="selector" range="{{providers}}" range-key="label" value="{{providerIndex}}" bindchange="onProviderChange">
           <view class="picker-value">{{providerLabel}}</view>
         </picker>
       </view>
 
-      <view class="default-summary">
+      <view class="default-summary" wx:if="{{!isAdvancedMode}}">
         <text>{{providerMainModel}}</text>
         <text>{{providerImageModel}}</text>
         <text>规划器 + 评审器</text>
@@ -108,6 +129,50 @@
       <view class="api-key-guide">
         <view class="guide-title">API Key 申请指南</view>
         <view class="guide-step" wx:for="{{providerGuideSteps}}" wx:key="*this">{{index + 1}}. {{item}}</view>
+      </view>
+
+      <view class="advanced-panel" wx:if="{{isAdvancedMode}}">
+        <view class="advanced-title">专业配置</view>
+        <view class="advanced-grid">
+          <view class="field compact-field">
+            <view class="field-label">生成流程</view>
+            <picker mode="selector" range="{{pipelineOptions}}" range-key="label" value="{{pipelineIndex}}" bindchange="onPipelineChange">
+              <view class="picker-value compact-picker">{{pipelineLabel}}</view>
+            </picker>
+          </view>
+          <view class="field compact-field">
+            <view class="field-label">画面比例</view>
+            <picker mode="selector" range="{{aspectRatioOptions}}" range-key="label" value="{{aspectRatioIndex}}" bindchange="onAspectRatioChange">
+              <view class="picker-value compact-picker">{{aspectRatioLabel}}</view>
+            </picker>
+          </view>
+          <view class="field compact-field">
+            <view class="field-label">候选数量</view>
+            <picker mode="selector" range="{{candidateOptions}}" range-key="label" value="{{candidateIndex}}" bindchange="onCandidateChange">
+              <view class="picker-value compact-picker">{{candidateLabel}}</view>
+            </picker>
+          </view>
+          <view class="field compact-field">
+            <view class="field-label">评审轮数</view>
+            <picker mode="selector" range="{{criticRoundOptions}}" range-key="label" value="{{criticRoundIndex}}" bindchange="onCriticRoundChange">
+              <view class="picker-value compact-picker">{{criticRoundLabel}}</view>
+            </picker>
+          </view>
+        </view>
+        <view class="model-grid">
+          <view class="field compact-field">
+            <view class="field-label">主模型</view>
+            <picker mode="selector" range="{{mainModelOptions}}" range-key="label" value="{{mainModelIndex}}" bindchange="onMainModelChange">
+              <view class="picker-value compact-picker model-picker">{{mainModelLabel}}</view>
+            </picker>
+          </view>
+          <view class="field compact-field">
+            <view class="field-label">图像模型</view>
+            <picker mode="selector" range="{{imageModelOptions}}" range-key="label" value="{{imageModelIndex}}" bindchange="onImageModelChange">
+              <view class="picker-value compact-picker model-picker">{{imageModelLabel}}</view>
+            </picker>
+          </view>
+        </view>
       </view>
 
       <view class="field">
@@ -130,9 +195,10 @@
       <view class="field">
         <view class="field-label">论文方法内容</view>
         <textarea
-          class="textarea"
-          auto-height
+          class="textarea method-textarea"
           maxlength="3000"
+          show-confirm-bar="{{false}}"
+          cursor-spacing="20"
           value="{{methodContent}}"
           placeholder="粘贴论文方法部分、项目流程、业务步骤或想表达的图示内容"
           bindinput="onMethodInput"
@@ -151,7 +217,9 @@
       <button class="primary-button" loading="{{isSubmitting}}" disabled="{{!canSubmit}}" bindtap="submitJob">
         {{isSubmitting ? '提交中' : '生成候选图'}}
       </button>
-      <view wx:if="{{!canSubmit}}" class="submit-tip">需要填写 API Key、至少 20 字内容和目标图注。</view>
+      <view wx:if="{{!canSubmit}}" class="submit-tip">
+        {{isAdvancedMode ? '需要填写 API Key、模型名称、至少 20 字内容和目标图注。' : '需要填写 API Key、至少 20 字内容和目标图注。'}}
+      </view>
       <view wx:if="{{error}}" class="error-box">{{error}}</view>
     </view>
 

@@ -81,9 +81,10 @@ app.post('/paperbanana-api', async (req, res) => {
 
     if (action === 'createJob') {
       const session = await optionalSession(req);
+      const jobBody = normalizeCreateJobBody(req.body);
       const data = await callLaf(
         withGatewayToken({
-          ...req.body,
+          ...jobBody,
           userId: session?.user?.id || '',
           userEmail: session?.user?.email || '',
         }),
@@ -182,4 +183,19 @@ function withGatewayToken(body) {
     ...body,
     gatewayToken,
   };
+}
+
+function normalizeCreateJobBody(body) {
+  return {
+    ...body,
+    mainModelName: normalizeModelName(body?.provider, body?.mainModelName),
+    imageModelName: normalizeModelName(body?.provider, body?.imageModelName),
+  };
+}
+
+function normalizeModelName(provider, model) {
+  if (provider === 'gemini' && model === 'gemini-3.1-flash-image-preview') {
+    return 'gemini-3.1-flash-image';
+  }
+  return model;
 }

@@ -10,34 +10,181 @@ const PROVIDERS = [
         id: 'bailian',
         label: '阿里百炼',
         keyPlaceholder: 'sk-...',
-        mainModel: 'qwen-plus',
-        imageModel: 'wan2.7-image',
+        mainModel: 'qwen3.7-max',
+        imageModel: 'wan2.7-image-pro',
+        mainModels: [
+            { label: '通义千问 / Qwen3.7 Max', value: 'qwen3.7-max' },
+            { label: '通义千问 / Qwen3.7 Max 2026-05-20', value: 'qwen3.7-max-2026-05-20' },
+            { label: '通义千问 / Qwen3.6 Plus', value: 'qwen3.6-plus' },
+            { label: '通义千问 / Qwen3.6 Flash', value: 'qwen3.6-flash' },
+            { label: '通义千问 / Qwen Plus Latest', value: 'qwen-plus-latest' },
+            { label: '通义千问 / Qwen Max Latest', value: 'qwen-max-latest' },
+            { label: '通义千问 / Qwen Flash', value: 'qwen-flash' },
+            { label: '百炼第三方 / DeepSeek V4 Pro', value: 'deepseek-v4-pro' },
+            { label: '百炼第三方 / DeepSeek V4 Flash', value: 'deepseek-v4-flash' },
+            { label: '百炼第三方 / Kimi K2.6', value: 'kimi-k2.6' },
+            { label: '百炼第三方 / GLM 5.1', value: 'glm-5.1' },
+            { label: '百炼第三方 / MiniMax M2.7', value: 'MiniMax-M2.7' },
+            { label: '百炼第三方 / MiMo V2.5 Pro', value: 'mimo-v2.5-pro' },
+        ],
+        imageModels: [
+            { label: '通义万相 / Wan 2.7 Image Pro', value: 'wan2.7-image-pro' },
+            { label: '通义万相 / Wan 2.7 Image', value: 'wan2.7-image' },
+            { label: '通义万相 / Wan 2.6 Image', value: 'wan2.6-image' },
+            { label: '通义万相 / Wan 2.6 T2I', value: 'wan2.6-t2i' },
+            { label: '通义万相 / Wan 2.5 T2I Preview', value: 'wan2.5-t2i-preview' },
+            { label: '通义万相 / Wan 2.2 T2I Plus', value: 'wan2.2-t2i-plus' },
+            { label: '通义万相 / Wan 2.2 T2I Flash', value: 'wan2.2-t2i-flash' },
+            { label: '通义千问 Image / Qwen Image 2.0 Pro', value: 'qwen-image-2.0-pro' },
+            { label: '通义千问 Image / Qwen Image 2.0', value: 'qwen-image-2.0' },
+            { label: '通义千问 Image / Qwen Image Max', value: 'qwen-image-max' },
+            { label: '通义千问 Image / Qwen Image Plus', value: 'qwen-image-plus' },
+            { label: '通义千问 Image / Qwen Image', value: 'qwen-image' },
+            { label: 'Z-Image / Z-Image Turbo', value: 'z-image-turbo' },
+        ],
         guideSteps: ['打开阿里云百炼控制台', '进入 API Key 页面创建密钥', '复制 sk- 开头密钥到小程序'],
     },
     {
         id: 'openrouter',
         label: 'OpenRouter',
         keyPlaceholder: 'sk-or-v1-...',
-        mainModel: 'openrouter/google/gemini-3.1-pro-preview',
-        imageModel: 'openrouter/google/gemini-3.1-flash-image-preview',
+        mainModel: 'openrouter/openai/gpt-5.5',
+        imageModel: 'openrouter/openai/gpt-5.4-image-2',
+        mainModels: [
+            { label: 'OpenAI / GPT-5.5', value: 'openrouter/openai/gpt-5.5' },
+            { label: 'OpenAI / GPT-5.5 Pro', value: 'openrouter/openai/gpt-5.5-pro' },
+            { label: 'OpenAI / GPT-5.4', value: 'openrouter/openai/gpt-5.4' },
+            { label: 'OpenAI / GPT-5.4 Pro', value: 'openrouter/openai/gpt-5.4-pro' },
+            { label: 'OpenAI / GPT-5.4 Mini', value: 'openrouter/openai/gpt-5.4-mini' },
+            { label: 'OpenAI / GPT-5.4 Nano', value: 'openrouter/openai/gpt-5.4-nano' },
+            { label: 'OpenAI / GPT Chat Latest', value: 'openrouter/openai/gpt-chat-latest' },
+            { label: 'OpenAI / GPT-5.3 Chat', value: 'openrouter/openai/gpt-5.3-chat' },
+            { label: 'OpenAI / GPT Latest', value: 'openrouter/~openai/gpt-latest' },
+            { label: 'OpenAI / GPT Mini Latest', value: 'openrouter/~openai/gpt-mini-latest' },
+            { label: 'Anthropic / Claude Opus 4.8', value: 'openrouter/anthropic/claude-opus-4.8' },
+            { label: 'Anthropic / Claude Opus 4.8 Fast', value: 'openrouter/anthropic/claude-opus-4.8-fast' },
+            { label: 'Anthropic / Claude Opus 4.7', value: 'openrouter/anthropic/claude-opus-4.7' },
+            { label: 'Anthropic / Claude Opus 4.7 Fast', value: 'openrouter/anthropic/claude-opus-4.7-fast' },
+            { label: 'Anthropic / Claude Opus Latest', value: 'openrouter/~anthropic/claude-opus-latest' },
+            { label: 'Anthropic / Claude Sonnet Latest', value: 'openrouter/~anthropic/claude-sonnet-latest' },
+            { label: 'Google / Gemini 3.1 Pro Preview', value: 'openrouter/google/gemini-3.1-pro-preview' },
+            { label: 'Google / Gemini 3.5 Flash', value: 'openrouter/google/gemini-3.5-flash' },
+            { label: 'Google / Gemini 3.1 Flash Lite', value: 'openrouter/google/gemini-3.1-flash-lite' },
+            { label: 'Google / Gemini 3.1 Flash Lite Preview', value: 'openrouter/google/gemini-3.1-flash-lite-preview' },
+            { label: 'Google / Gemini Pro Latest', value: 'openrouter/~google/gemini-pro-latest' },
+            { label: 'Google / Gemini Flash Latest', value: 'openrouter/~google/gemini-flash-latest' },
+            { label: 'Qwen / Qwen3.7 Max', value: 'openrouter/qwen/qwen3.7-max' },
+            { label: 'Qwen / Qwen3.6 Plus', value: 'openrouter/qwen/qwen3.6-plus' },
+            { label: 'Qwen / Qwen3.6 Flash', value: 'openrouter/qwen/qwen3.6-flash' },
+            { label: 'Qwen / Qwen3.6 Max Preview', value: 'openrouter/qwen/qwen3.6-max-preview' },
+            { label: 'Qwen / Qwen3.5 Plus 2026-04-20', value: 'openrouter/qwen/qwen3.5-plus-20260420' },
+            { label: 'DeepSeek / DeepSeek V4 Pro', value: 'openrouter/deepseek/deepseek-v4-pro' },
+            { label: 'DeepSeek / DeepSeek V4 Flash', value: 'openrouter/deepseek/deepseek-v4-flash' },
+            { label: 'xAI / Grok 4.3', value: 'openrouter/x-ai/grok-4.3' },
+            { label: 'xAI / Grok 4.20', value: 'openrouter/x-ai/grok-4.20' },
+            { label: 'xAI / Grok 4.20 Multi-Agent', value: 'openrouter/x-ai/grok-4.20-multi-agent' },
+            { label: 'xAI / Grok Build 0.1', value: 'openrouter/x-ai/grok-build-0.1' },
+            { label: 'Moonshot / Kimi K2.6', value: 'openrouter/moonshotai/kimi-k2.6' },
+            { label: 'Z.ai / GLM 5.1', value: 'openrouter/z-ai/glm-5.1' },
+            { label: 'MiniMax / MiniMax M2.7', value: 'openrouter/minimax/minimax-m2.7' },
+            { label: 'StepFun / Step 3.7 Flash', value: 'openrouter/stepfun/step-3.7-flash' },
+        ],
+        imageModels: [
+            { label: 'OpenAI / GPT-5.4 Image 2', value: 'openrouter/openai/gpt-5.4-image-2' },
+            { label: 'OpenAI / GPT-5 Image', value: 'openrouter/openai/gpt-5-image' },
+            { label: 'OpenAI / GPT-5 Image Mini', value: 'openrouter/openai/gpt-5-image-mini' },
+            { label: 'Google / Nano Banana 2', value: 'openrouter/google/gemini-3.1-flash-image-preview' },
+            { label: 'Google / Nano Banana Pro', value: 'openrouter/google/gemini-3-pro-image-preview' },
+            { label: 'Google / Nano Banana', value: 'openrouter/google/gemini-2.5-flash-image' },
+            { label: 'xAI / Grok Imagine Image Quality', value: 'openrouter/x-ai/grok-imagine-image-quality' },
+            { label: 'Recraft / Recraft V4.1 Pro', value: 'openrouter/recraft/recraft-v4.1-pro' },
+            { label: 'Recraft / Recraft V4.1', value: 'openrouter/recraft/recraft-v4.1' },
+            { label: 'Recraft / Recraft V4.1 Pro Vector', value: 'openrouter/recraft/recraft-v4.1-pro-vector' },
+            { label: 'Black Forest Labs / FLUX.2 Pro', value: 'openrouter/black-forest-labs/flux.2-pro' },
+            { label: 'Black Forest Labs / FLUX.2 Flex', value: 'openrouter/black-forest-labs/flux.2-flex' },
+            { label: 'Black Forest Labs / FLUX.2 Max', value: 'openrouter/black-forest-labs/flux.2-max' },
+            { label: 'ByteDance Seed / Seedream 4.5', value: 'openrouter/bytedance-seed/seedream-4.5' },
+            { label: 'Sourceful / Riverflow V2 Pro', value: 'openrouter/sourceful/riverflow-v2-pro' },
+            { label: 'Sourceful / Riverflow V2 Fast', value: 'openrouter/sourceful/riverflow-v2-fast' },
+        ],
         guideSteps: ['登录 OpenRouter', '进入 Keys 页面创建 API Key', '复制 sk-or-v1- 开头密钥'],
     },
     {
         id: 'gemini',
         label: 'Gemini',
         keyPlaceholder: 'AIza...',
-        mainModel: 'gemini-3.1-pro-preview',
-        imageModel: 'gemini-3.1-flash-image-preview',
+        mainModel: 'gemini-3.5-flash',
+        imageModel: 'gemini-3.1-flash-image',
+        mainModels: [
+            { label: 'Gemini 3.5 / Flash', value: 'gemini-3.5-flash' },
+            { label: 'Gemini 3.1 / Pro Preview', value: 'gemini-3.1-pro-preview' },
+            { label: 'Gemini 3.1 / Pro', value: 'gemini-3.1-pro' },
+            { label: 'Gemini 3.1 / Flash Lite', value: 'gemini-3.1-flash-lite' },
+            { label: 'Gemini 3.1 / Flash Lite Preview', value: 'gemini-3.1-flash-lite-preview' },
+            { label: 'Gemini 3 / Flash', value: 'gemini-3-flash' },
+            { label: 'Gemini 3 / Flash Preview', value: 'gemini-3-flash-preview' },
+            { label: 'Gemini 3 / Pro Preview', value: 'gemini-3-pro-preview' },
+            { label: 'Gemini 2.5 / Pro', value: 'gemini-2.5-pro' },
+            { label: 'Gemini 2.5 / Flash', value: 'gemini-2.5-flash' },
+            { label: 'Gemini 2.5 / Flash-Lite', value: 'gemini-2.5-flash-lite' },
+        ],
+        imageModels: [
+            { label: 'Nano Banana 2 / Gemini 3.1 Flash Image', value: 'gemini-3.1-flash-image' },
+            { label: 'Nano Banana Pro / Gemini 3 Pro Image', value: 'gemini-3-pro-image' },
+            { label: 'Nano Banana / Gemini 2.5 Flash Image', value: 'gemini-2.5-flash-image' },
+        ],
         guideSteps: ['登录 Google AI Studio', '创建 API key', '复制 AIza 开头密钥'],
     },
     {
         id: 'openai',
         label: 'OpenAI',
         keyPlaceholder: 'sk-...',
-        mainModel: 'gpt-4o',
-        imageModel: 'gpt-image-1',
+        mainModel: 'gpt-5.5',
+        imageModel: 'gpt-image-2',
+        mainModels: [
+            { label: 'GPT-5.5 / GPT-5.5', value: 'gpt-5.5' },
+            { label: 'GPT-5.5 / GPT-5.5 Pro', value: 'gpt-5.5-pro' },
+            { label: 'GPT-5.4 / GPT-5.4', value: 'gpt-5.4' },
+            { label: 'GPT-5.4 / GPT-5.4 Pro', value: 'gpt-5.4-pro' },
+            { label: 'GPT-5.4 / GPT-5.4 Mini', value: 'gpt-5.4-mini' },
+            { label: 'GPT-5.4 / GPT-5.4 Nano', value: 'gpt-5.4-nano' },
+            { label: 'GPT-5 / GPT-5.2', value: 'gpt-5.2' },
+            { label: 'GPT-5 / GPT-5.1', value: 'gpt-5.1' },
+            { label: 'GPT-5 / GPT-5 Mini', value: 'gpt-5-mini' },
+            { label: 'GPT-4.1 / GPT-4.1', value: 'gpt-4.1' },
+            { label: 'GPT-4.1 / GPT-4.1 Mini', value: 'gpt-4.1-mini' },
+            { label: 'GPT-4o / GPT-4o', value: 'gpt-4o' },
+            { label: 'GPT-4o / GPT-4o Mini', value: 'gpt-4o-mini' },
+        ],
+        imageModels: [
+            { label: 'GPT Image / GPT Image 2', value: 'gpt-image-2' },
+            { label: 'GPT Image / GPT Image 1.5', value: 'gpt-image-1.5' },
+            { label: 'GPT Image / GPT Image 1', value: 'gpt-image-1' },
+            { label: 'GPT Image / GPT Image 1 Mini', value: 'gpt-image-1-mini' },
+        ],
         guideSteps: ['登录 OpenAI Platform', '创建 secret key', '复制 sk- 开头密钥'],
     },
+];
+const PIPELINE_OPTIONS = [
+    { label: '规划器 + 评审器', value: 'planner_critic' },
+    { label: '完整流程', value: 'full' },
+    { label: '基础生成', value: 'vanilla' },
+];
+const ASPECT_RATIO_OPTIONS = [
+    { label: '16:9', value: '16:9' },
+    { label: '21:9', value: '21:9' },
+    { label: '3:2', value: '3:2' },
+    { label: '1:1', value: '1:1' },
+];
+const CANDIDATE_OPTIONS = [
+    { label: '1 张', value: 1 },
+    { label: '2 张', value: 2 },
+    { label: '3 张', value: 3 },
+];
+const CRITIC_ROUND_OPTIONS = [
+    { label: '0 轮', value: 0 },
+    { label: '1 轮', value: 1 },
+    { label: '2 轮', value: 2 },
 ];
 const INFOGRAPHIC_CATEGORIES = [
     { id: 'method_framework', label: '方法框架图', description: '突出模块、智能体、输入输出和整体系统结构。' },
@@ -85,6 +232,29 @@ Component({
         providerMainModel: PROVIDERS[0].mainModel,
         providerImageModel: PROVIDERS[0].imageModel,
         providerGuideSteps: PROVIDERS[0].guideSteps,
+        mainModelOptions: PROVIDERS[0].mainModels,
+        mainModelIndex: getModelIndex(PROVIDERS[0].mainModels, PROVIDERS[0].mainModel),
+        mainModelLabel: getModelLabel(PROVIDERS[0].mainModels, PROVIDERS[0].mainModel),
+        imageModelOptions: PROVIDERS[0].imageModels,
+        imageModelIndex: getModelIndex(PROVIDERS[0].imageModels, PROVIDERS[0].imageModel),
+        imageModelLabel: getModelLabel(PROVIDERS[0].imageModels, PROVIDERS[0].imageModel),
+        configurationMode: 'simple',
+        isAdvancedMode: false,
+        modeLabel: '普通模式',
+        pipelineOptions: PIPELINE_OPTIONS,
+        pipelineIndex: 0,
+        pipelineLabel: String(PIPELINE_OPTIONS[0].label),
+        aspectRatioOptions: ASPECT_RATIO_OPTIONS,
+        aspectRatioIndex: 0,
+        aspectRatioLabel: String(ASPECT_RATIO_OPTIONS[0].label),
+        candidateOptions: CANDIDATE_OPTIONS,
+        candidateIndex: 0,
+        candidateLabel: String(CANDIDATE_OPTIONS[0].label),
+        criticRoundOptions: CRITIC_ROUND_OPTIONS,
+        criticRoundIndex: 1,
+        criticRoundLabel: String(CRITIC_ROUND_OPTIONS[1].label),
+        mainModelName: PROVIDERS[0].mainModel,
+        imageModelName: PROVIDERS[0].imageModel,
         apiKey: '',
         apiKeyPlaceholder: PROVIDERS[0].keyPlaceholder,
         categories: INFOGRAPHIC_CATEGORIES,
@@ -152,7 +322,7 @@ Component({
             }
         },
         onProviderChange(event) {
-            const providerIndex = Number(event.detail.value || 0);
+            const providerIndex = readPickerIndex(event.detail.value, PROVIDERS.length);
             const provider = PROVIDERS[providerIndex] || PROVIDERS[0];
             this.setData({
                 providerIndex,
@@ -160,7 +330,80 @@ Component({
                 providerMainModel: provider.mainModel,
                 providerImageModel: provider.imageModel,
                 providerGuideSteps: provider.guideSteps,
+                mainModelOptions: provider.mainModels,
+                mainModelIndex: getModelIndex(provider.mainModels, provider.mainModel),
+                mainModelLabel: getModelLabel(provider.mainModels, provider.mainModel),
+                imageModelOptions: provider.imageModels,
+                imageModelIndex: getModelIndex(provider.imageModels, provider.imageModel),
+                imageModelLabel: getModelLabel(provider.imageModels, provider.imageModel),
+                mainModelName: provider.mainModel,
+                imageModelName: provider.imageModel,
                 apiKeyPlaceholder: provider.keyPlaceholder,
+            });
+            this.refreshCanSubmit();
+        },
+        switchConfigurationMode(event) {
+            const requestedMode = String(event.currentTarget.dataset.mode || 'simple');
+            const configurationMode = requestedMode === 'advanced' ? 'advanced' : 'simple';
+            const isAdvancedMode = configurationMode === 'advanced';
+            this.setData({
+                configurationMode,
+                isAdvancedMode,
+                modeLabel: isAdvancedMode ? '专业模式' : '普通模式',
+            });
+            this.refreshCanSubmit();
+        },
+        onPipelineChange(event) {
+            const pipelineIndex = readPickerIndex(event.detail.value, PIPELINE_OPTIONS.length);
+            const option = PIPELINE_OPTIONS[pipelineIndex];
+            this.setData({
+                pipelineIndex,
+                pipelineLabel: option.label,
+            });
+        },
+        onAspectRatioChange(event) {
+            const aspectRatioIndex = readPickerIndex(event.detail.value, ASPECT_RATIO_OPTIONS.length);
+            const option = ASPECT_RATIO_OPTIONS[aspectRatioIndex];
+            this.setData({
+                aspectRatioIndex,
+                aspectRatioLabel: option.label,
+            });
+        },
+        onCandidateChange(event) {
+            const candidateIndex = readPickerIndex(event.detail.value, CANDIDATE_OPTIONS.length);
+            const option = CANDIDATE_OPTIONS[candidateIndex];
+            this.setData({
+                candidateIndex,
+                candidateLabel: option.label,
+            });
+        },
+        onCriticRoundChange(event) {
+            const criticRoundIndex = readPickerIndex(event.detail.value, CRITIC_ROUND_OPTIONS.length);
+            const option = CRITIC_ROUND_OPTIONS[criticRoundIndex];
+            this.setData({
+                criticRoundIndex,
+                criticRoundLabel: option.label,
+            });
+        },
+        onMainModelChange(event) {
+            const provider = PROVIDERS[this.data.providerIndex] || PROVIDERS[0];
+            const mainModelIndex = readPickerIndex(event.detail.value, provider.mainModels.length);
+            const option = provider.mainModels[mainModelIndex] || provider.mainModels[0];
+            this.setData({
+                mainModelIndex,
+                mainModelLabel: option.label,
+                mainModelName: option.value,
+            });
+            this.refreshCanSubmit();
+        },
+        onImageModelChange(event) {
+            const provider = PROVIDERS[this.data.providerIndex] || PROVIDERS[0];
+            const imageModelIndex = readPickerIndex(event.detail.value, provider.imageModels.length);
+            const option = provider.imageModels[imageModelIndex] || provider.imageModels[0];
+            this.setData({
+                imageModelIndex,
+                imageModelLabel: option.label,
+                imageModelName: option.value,
             });
             this.refreshCanSubmit();
         },
@@ -208,7 +451,8 @@ Component({
                 const data = await requestJson({
                     action: 'health',
                 });
-                const ok = Boolean(data.ok || data.laf?.ok || data.code === 0);
+                const laf = data.laf || {};
+                const ok = Boolean(data.ok || laf.ok || data.code === 0);
                 this.setData({
                     healthOk: ok,
                     healthText: ok ? '后端可用' : '后端异常',
@@ -226,6 +470,13 @@ Component({
                 return;
             const provider = PROVIDERS[this.data.providerIndex] || PROVIDERS[0];
             const category = INFOGRAPHIC_CATEGORIES[this.data.categoryIndex] || INFOGRAPHIC_CATEGORIES[0];
+            const isAdvancedMode = this.data.configurationMode === 'advanced';
+            const pipeline = PIPELINE_OPTIONS[this.data.pipelineIndex] || PIPELINE_OPTIONS[0];
+            const aspectRatio = ASPECT_RATIO_OPTIONS[this.data.aspectRatioIndex] || ASPECT_RATIO_OPTIONS[0];
+            const candidateCount = CANDIDATE_OPTIONS[this.data.candidateIndex] || CANDIDATE_OPTIONS[0];
+            const criticRounds = CRITIC_ROUND_OPTIONS[this.data.criticRoundIndex] || CRITIC_ROUND_OPTIONS[1];
+            const mainModelName = isAdvancedMode ? this.data.mainModelName.trim() || provider.mainModel : provider.mainModel;
+            const imageModelName = isAdvancedMode ? this.data.imageModelName.trim() || provider.imageModel : provider.imageModel;
             this.setData({
                 isSubmitting: true,
                 error: '',
@@ -244,18 +495,18 @@ Component({
                 };
                 const data = await requestJson({
                     action: 'createJob',
-                    configurationMode: 'simple',
+                    configurationMode: this.data.configurationMode,
                     provider: provider.id,
                     apiKeys,
                     methodContent: this.data.methodContent.trim(),
                     caption: this.data.caption.trim(),
                     infographicCategory: category.label,
-                    mainModelName: provider.mainModel,
-                    imageModelName: provider.imageModel,
-                    pipelineMode: 'planner_critic',
-                    aspectRatio: '16:9',
-                    numCandidates: 1,
-                    maxCriticRounds: 1,
+                    mainModelName,
+                    imageModelName,
+                    pipelineMode: isAdvancedMode ? pipeline.value : 'planner_critic',
+                    aspectRatio: isAdvancedMode ? aspectRatio.value : '16:9',
+                    numCandidates: isAdvancedMode ? candidateCount.value : 1,
+                    maxCriticRounds: isAdvancedMode ? criticRounds.value : 1,
                 });
                 const jobId = data.jobId || data.id || '';
                 if (!jobId)
@@ -377,9 +628,11 @@ Component({
             this.setData({ localJobs: nextJobs });
         },
         refreshCanSubmit() {
+            const hasRequiredModels = !this.data.isAdvancedMode || Boolean(this.data.mainModelName.trim() && this.data.imageModelName.trim());
             const canSubmit = Boolean(this.data.apiKey.trim() &&
                 this.data.methodContent.trim().length >= 20 &&
                 this.data.caption.trim().length >= 3 &&
+                hasRequiredModels &&
                 !this.data.isSubmitting);
             this.setData({ canSubmit });
         },
@@ -478,8 +731,8 @@ Component({
             this.setData({ isAuthChecking: true });
             try {
                 const session = await authRequest('/get-session', 'GET');
-                const user = session?.user;
-                if (user?.id) {
+                const user = session && session.user;
+                if (user && user.id) {
                     this.setData({
                         currentUser: {
                             id: String(user.id),
@@ -528,7 +781,7 @@ Component({
         async loadAccountJobs(options) {
             if (!this.data.isLoggedIn)
                 return;
-            if (!options?.silent) {
+            if (!options || !options.silent) {
                 this.setData({ accountJobsLoading: true, accountJobsError: '' });
             }
             try {
@@ -549,6 +802,13 @@ Component({
         },
     },
 });
+function readPickerIndex(value, optionCount) {
+    const rawValue = Array.isArray(value) ? value[0] : value;
+    const index = Number(rawValue || 0);
+    if (!Number.isFinite(index) || index < 0 || index >= optionCount)
+        return 0;
+    return index;
+}
 function requestJson(body, options = {}) {
     return postJson(API_ENDPOINT, body, options);
 }
@@ -685,7 +945,7 @@ function normalizeJob(input) {
     const resultImages = (job.result_images || job.resultImages || []).map((image, index) => ({
         filename: String(image.filename || `candidate-${index + 1}`),
         url: resolveImageUrl(String(image.url || ''), jobId, index),
-        candidate_id: Number(image.candidate_id ?? image.candidateId ?? index),
+        candidate_id: Number(image.candidate_id != null ? image.candidate_id : image.candidateId != null ? image.candidateId : index),
         mime_type: image.mime_type || image.mimeType || '',
     }));
     const status = String(job.status || 'queued');
@@ -746,6 +1006,14 @@ function imageExtension(mimeType) {
     if (mimeType.includes('webp'))
         return 'webp';
     return 'png';
+}
+function getModelIndex(options, value) {
+    const index = options.findIndex((option) => option.value === value);
+    return index >= 0 ? index : 0;
+}
+function getModelLabel(options, value) {
+    const option = options.find((item) => item.value === value);
+    return option ? option.label : value;
 }
 function readLocalJobs() {
     const jobs = wx.getStorageSync(LOCAL_JOBS_KEY);

@@ -440,6 +440,18 @@ button {
   line-height: 1.4;
 }
 
+.field input {
+  display: block;
+  min-height: 44px;
+  appearance: none;
+}
+
+.field input.auth-name-input {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .field textarea {
   resize: vertical;
 }

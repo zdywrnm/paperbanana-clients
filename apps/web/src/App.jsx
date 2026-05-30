@@ -82,6 +82,8 @@ export default function App() {
   const apiBaseNormalized = apiBase.replace(/\/$/, '');
   const selectedInfographicCategory = INFOGRAPHIC_CATEGORIES.find(([id]) => id === infographicCategory) || INFOGRAPHIC_CATEGORIES[0];
   const isAdvancedMode = configurationMode === 'advanced';
+  const defaultMainModelLabel = findModelLabel(providerConfig.mainModels, providerConfig.mainModel);
+  const defaultImageModelLabel = findModelLabel(providerConfig.imageModels, providerConfig.imageModel);
 
   useEffect(() => {
     let cancelled = false;
@@ -355,8 +357,8 @@ export default function App() {
 
           {!isAdvancedMode ? (
             <div className="default-summary" aria-label="默认生成配置">
-              <span>{providerConfig.mainModel}</span>
-              <span>{providerConfig.imageModel}</span>
+              <span>{defaultMainModelLabel}</span>
+              <span>{defaultImageModelLabel}</span>
               <span>规划器 + 评审器</span>
               <span>16:9</span>
             </div>
@@ -396,14 +398,8 @@ export default function App() {
               </div>
 
               <div className="model-grid">
-                <label className="field">
-                  <span>主模型名称</span>
-                  <input value={mainModelName} onChange={(event) => setMainModelName(event.target.value)} />
-                </label>
-                <label className="field">
-                  <span>图像生成模型</span>
-                  <input value={imageGenModelName} onChange={(event) => setImageGenModelName(event.target.value)} />
-                </label>
+                <Select label="主模型" value={mainModelName} onChange={setMainModelName} options={providerConfig.mainModels} />
+                <Select label="图像生成模型" value={imageGenModelName} onChange={setImageGenModelName} options={providerConfig.imageModels} />
               </div>
 
               {health?.mock_enabled ? (
@@ -498,4 +494,9 @@ export default function App() {
       )}
     </main>
   );
+}
+
+function findModelLabel(options, value) {
+  const option = options.find(([id]) => id === value);
+  return option ? option[1] : value;
 }

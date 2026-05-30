@@ -1,4 +1,5 @@
-import { formatConfigurationMode, formatDate, resolveImageUrl } from '../utils';
+import { AlertTriangle } from 'lucide-react';
+import { formatConfigurationMode, formatDate, formatErrorMessage, resolveImageUrl } from '../utils';
 import StatusBadge from './StatusBadge';
 
 export default function JobTable({ jobs, showUser, apiBase }) {
@@ -55,6 +56,10 @@ export default function JobTable({ jobs, showUser, apiBase }) {
               <p>{item.caption || '未记录'}</p>
             </div>
           </div>
+
+          {item.status === 'failed' && item.error ? (
+            <div className="error-line"><AlertTriangle size={16} /> {formatErrorMessage(item.error)}</div>
+          ) : null}
 
           {item.status === 'succeeded' && (item.result_images || []).some((image) => image.url) ? (
             <div className="job-record-images">
