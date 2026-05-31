@@ -1,16 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
-  Download,
+  Apple,
   Eye,
   FileText,
+  Github,
   Image as ImageIcon,
   KeyRound,
   Loader2,
+  MessageCircle,
+  MonitorDown,
   RefreshCcw,
   Send,
   Settings2,
   ShieldCheck,
+  Smartphone,
   Sparkles,
 } from 'lucide-react';
 import {
@@ -233,11 +237,20 @@ export default function App() {
           <a href="https://huggingface.co/papers/2601.23265" target="_blank" rel="noreferrer">
             <FileText size={16} /> 论文
           </a>
-          <a href="https://github.com/dwzhu-pku/PaperBanana" target="_blank" rel="noreferrer">
-            <Sparkles size={16} /> GitHub
+          <a href="https://github.com/zdywrnm/PaperBanana-clients" target="_blank" rel="noreferrer">
+            <Github size={16} /> GitHub
           </a>
-          <a href="https://github.com/zdywrnm/PaperBanana-clients/releases/latest" target="_blank" rel="noreferrer">
-            <Download size={16} /> Windows 版
+          <a href="https://github.com/zdywrnm/PaperBanana-clients/releases/tag/windows-native-v0.1.2" target="_blank" rel="noreferrer">
+            <MonitorDown size={16} /> Windows 版
+          </a>
+          <a href="https://github.com/zdywrnm/PaperBanana-clients/releases/tag/android-preview-0.1.3" target="_blank" rel="noreferrer">
+            <Smartphone size={16} /> Android 版
+          </a>
+          <a href="https://github.com/zdywrnm/PaperBanana-clients/releases/tag/macos-v0.1.0" target="_blank" rel="noreferrer">
+            <Apple size={16} /> Mac 版
+          </a>
+          <a href="https://github.com/zdywrnm/PaperBanana-clients/tree/main/apps/miniprogram" target="_blank" rel="noreferrer">
+            <MessageCircle size={16} /> 微信小程序
           </a>
           {AUTH_UI_ENABLED ? (
             currentUser ? (
