@@ -37,5 +37,5 @@ B:\tools\dotnet\dotnet.exe run --project apps/windows/PaperBanana.Windows.csproj
 - Fixed model selectors loaded from `Assets/model-catalog.json`.
 - Simple and advanced generation modes.
 - Email login/register with 24-character nickname limit.
-- Job polling, result preview, task records, admin records, and failed-job error display.
+- Job polling, result preview, user task records, and failed-job error display.
 - Default backend: `https://yifbnnzrwmxn.sealoshzh.site`.

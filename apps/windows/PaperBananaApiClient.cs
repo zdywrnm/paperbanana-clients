@@ -138,25 +138,6 @@ public sealed class PaperBananaApiClient
         return ReadJobs(fastRoot);
     }
 
-    public async Task<IReadOnlyList<PaperBananaJob>> AdminJobsAsync(string apiBase, BackendHealth? health, string adminToken, CancellationToken cancellationToken = default)
-    {
-        var baseUrl = NormalizeApiBase(apiBase);
-        if (ShouldUsePaperBananaEndpoint(health))
-        {
-            var root = await SendJsonAsync(
-                LafEndpoint(baseUrl),
-                HttpMethod.Post,
-                new Dictionary<string, object?> { ["action"] = "adminJobs", ["adminToken"] = adminToken, ["limit"] = 50 },
-                cancellationToken);
-            return ReadJobs(root);
-        }
-
-        using var request = new HttpRequestMessage(HttpMethod.Get, JoinUrl(baseUrl, "api/admin/jobs?limit=50"));
-        request.Headers.TryAddWithoutValidation("x-admin-token", adminToken);
-        var rootFast = await SendJsonAsync(request, cancellationToken);
-        return ReadJobs(rootFast);
-    }
-
     public async Task<CurrentUser?> GetSessionAsync(string apiBase, CancellationToken cancellationToken = default)
     {
         try

@@ -4,83 +4,225 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="PaperBanana">
 
-    <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+    <Grid Background="#FFF3F2EE">
+        <Grid.Resources>
+            <SolidColorBrush x:Key="PaperBrush" Color="#FFF3F2EE" />
+            <SolidColorBrush x:Key="SurfaceBrush" Color="#FFFFFFFB" />
+            <SolidColorBrush x:Key="SurfaceMutedBrush" Color="#FFF3F2EC" />
+            <SolidColorBrush x:Key="HairlineBrush" Color="#FFD9D6CC" />
+            <SolidColorBrush x:Key="HairlineStrongBrush" Color="#FFC8C2B6" />
+            <SolidColorBrush x:Key="InkBrush" Color="#FF171513" />
+            <SolidColorBrush x:Key="InkSoftBrush" Color="#FF343230" />
+            <SolidColorBrush x:Key="MutedBrush" Color="#FF68706D" />
+            <SolidColorBrush x:Key="AccentBrush" Color="#FFB98518" />
+            <SolidColorBrush x:Key="AccentWashBrush" Color="#FFFFF3D2" />
+            <SolidColorBrush x:Key="SageWashBrush" Color="#FFEDF5EF" />
+            <SolidColorBrush x:Key="PrimaryButtonBrush" Color="#FF171513" />
+            <SolidColorBrush x:Key="DisabledButtonBrush" Color="#FFC9C0B2" />
+
+            <Style x:Key="SectionTitleStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="20" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Foreground" Value="{StaticResource InkBrush}" />
+            </Style>
+            <Style x:Key="SectionSubtitleStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="13" />
+                <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+            <Style x:Key="FieldLabelStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="13" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Foreground" Value="{StaticResource InkSoftBrush}" />
+            </Style>
+        </Grid.Resources>
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <Border Grid.Row="0" Padding="24,18" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-            <Grid ColumnSpacing="18">
+        <Border Grid.Row="0"
+                Margin="20,20,20,14"
+                Padding="28,20"
+                CornerRadius="16"
+                BorderBrush="{StaticResource HairlineBrush}"
+                BorderThickness="1"
+                Background="{StaticResource SurfaceBrush}">
+            <Grid ColumnSpacing="24">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <StackPanel Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
-                    <Border Width="46" Height="46" CornerRadius="10" Background="#FFF2B84B">
-                        <TextBlock Text="PB" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="18" FontWeight="SemiBold" Foreground="#FF3F2B12" />
+                <StackPanel Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
+                    <Border Width="58"
+                            Height="58"
+                            CornerRadius="16"
+                            Background="{StaticResource SurfaceBrush}"
+                            BorderBrush="{StaticResource HairlineBrush}"
+                            BorderThickness="1">
+                        <Image Source="Assets/icon.png" Stretch="UniformToFill" />
                     </Border>
-                    <StackPanel Spacing="2">
-                        <TextBlock Text="PaperBanana Windows" FontSize="24" FontWeight="SemiBold" />
-                        <TextBlock Text="原生 WinUI 3 工作台" Opacity="0.72" />
+                    <StackPanel Spacing="7" VerticalAlignment="Center">
+                        <TextBlock Text="PaperBanana 工作台"
+                                   FontSize="28"
+                                   FontWeight="Bold"
+                                   Foreground="{StaticResource InkBrush}" />
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <Border Padding="10,3" CornerRadius="999" Background="{StaticResource SageWashBrush}" BorderBrush="#FFC8D8CC" BorderThickness="1">
+                                <TextBlock Text="多智能体" FontSize="11" FontWeight="SemiBold" Foreground="#FF315F51" />
+                            </Border>
+                            <Border Padding="10,3" CornerRadius="999" Background="{StaticResource AccentWashBrush}" BorderBrush="#FFEAD28D" BorderThickness="1">
+                                <TextBlock Text="学术图示生成" FontSize="11" FontWeight="SemiBold" Foreground="#FF6B4807" />
+                            </Border>
+                        </StackPanel>
                     </StackPanel>
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                    <TextBlock x:Name="HealthText" VerticalAlignment="Center" Opacity="0.78" />
-                    <Button x:Name="RefreshButton" Content="刷新" Click="RefreshButton_Click" />
-                    <Button x:Name="AuthButton" Content="登录 / 注册" Click="AuthButton_Click" />
+                    <Border Padding="12,7"
+                            CornerRadius="999"
+                            Background="{StaticResource SurfaceMutedBrush}"
+                            BorderBrush="{StaticResource HairlineBrush}"
+                            BorderThickness="1">
+                        <TextBlock x:Name="HealthText"
+                                   VerticalAlignment="Center"
+                                   FontSize="13"
+                                   Foreground="{StaticResource MutedBrush}" />
+                    </Border>
+                    <Button x:Name="RefreshButton" Click="RefreshButton_Click">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE72C;" FontSize="15" />
+                            <TextBlock Text="刷新" />
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="AuthButton" Click="AuthButton_Click">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE77B;" FontSize="15" />
+                            <TextBlock Text="登录 / 注册" />
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
             </Grid>
         </Border>
 
-        <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="220" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
+        <Border Grid.Row="1"
+                Margin="20,0,20,18"
+                Padding="4"
+                HorizontalAlignment="Left"
+                CornerRadius="12"
+                BorderBrush="{StaticResource HairlineBrush}"
+                BorderThickness="1"
+                Background="#BFFFFFFB">
+            <StackPanel Orientation="Horizontal" Spacing="0">
+                <Button x:Name="GenerateTabButton"
+                        MinWidth="120"
+                        Background="{StaticResource SurfaceBrush}"
+                        BorderThickness="0"
+                        Content="生成候选图"
+                        Click="GenerateTabButton_Click" />
+                <Button x:Name="RecordsTabButton"
+                        MinWidth="108"
+                        BorderThickness="0"
+                        Content="任务记录"
+                        Click="RecordsTabButton_Click" />
+            </StackPanel>
+        </Border>
 
-            <Border Grid.Column="0" Padding="16" BorderThickness="0,0,1,0" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
-                <StackPanel Spacing="10">
-                    <Button x:Name="GenerateTabButton" Content="生成候选图" HorizontalAlignment="Stretch" Click="GenerateTabButton_Click" />
-                    <Button x:Name="RecordsTabButton" Content="任务记录" HorizontalAlignment="Stretch" Click="RecordsTabButton_Click" />
-                    <Button x:Name="AdminTabButton" Content="站长记录" HorizontalAlignment="Stretch" Click="AdminTabButton_Click" />
-                    <Rectangle Height="1" Fill="{ThemeResource CardStrokeColorDefaultBrush}" Margin="0,8" />
-                    <TextBox x:Name="ApiBaseBox" Header="后端地址" Text="https://yifbnnzrwmxn.sealoshzh.site" LostFocus="ApiBaseBox_LostFocus" />
-                    <Button Content="恢复默认后端" HorizontalAlignment="Stretch" Click="ResetApiBaseButton_Click" />
-                </StackPanel>
-            </Border>
+        <ScrollViewer x:Name="GeneratePanel" Grid.Row="2" Padding="20,0,20,24" VerticalScrollBarVisibility="Auto">
+            <Grid ColumnSpacing="18">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="380" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
 
-            <ScrollViewer x:Name="GeneratePanel" Grid.Column="1" Padding="24" VerticalScrollBarVisibility="Auto">
-                <Grid ColumnSpacing="20">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="430" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-
-                    <StackPanel Grid.Column="0" Spacing="16">
-                        <TextBlock Text="生成设置" FontSize="22" FontWeight="SemiBold" />
+                <Border Grid.Column="0"
+                        Padding="22"
+                        CornerRadius="14"
+                        BorderBrush="{StaticResource HairlineBrush}"
+                        BorderThickness="1"
+                        Background="{StaticResource SurfaceBrush}">
+                    <StackPanel Spacing="16">
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <FontIcon Glyph="&#xE713;" FontSize="20" Foreground="{StaticResource AccentBrush}" />
+                            <StackPanel>
+                                <TextBlock Text="生成设置" Style="{StaticResource SectionTitleStyle}" />
+                                <TextBlock Text="选择模型平台并粘贴 API 密钥。" Style="{StaticResource SectionSubtitleStyle}" />
+                            </StackPanel>
+                        </StackPanel>
 
                         <InfoBar x:Name="SubmitInfoBar" IsOpen="False" Severity="Error" />
 
                         <StackPanel Spacing="8">
-                            <TextBlock Text="使用模式" FontWeight="SemiBold" />
-                            <StackPanel Orientation="Horizontal" Spacing="10">
-                                <RadioButton x:Name="SimpleModeRadio" Content="普通模式" GroupName="Mode" IsChecked="True" Checked="ModeRadio_Checked" />
-                                <RadioButton x:Name="AdvancedModeRadio" Content="专业模式" GroupName="Mode" Checked="ModeRadio_Checked" />
+                            <TextBlock Text="使用模式" Style="{StaticResource FieldLabelStyle}" />
+                            <Border Padding="5"
+                                    CornerRadius="12"
+                                    Background="{StaticResource SurfaceMutedBrush}"
+                                    BorderBrush="{StaticResource HairlineBrush}"
+                                    BorderThickness="1">
+                                <Grid ColumnSpacing="6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition />
+                                        <ColumnDefinition />
+                                    </Grid.ColumnDefinitions>
+                                    <Border CornerRadius="9" Background="{StaticResource SurfaceBrush}">
+                                        <RadioButton x:Name="SimpleModeRadio"
+                                                     Content="普通模式&#x0a;平台 + Key"
+                                                     GroupName="Mode"
+                                                     IsChecked="True"
+                                                     HorizontalAlignment="Center"
+                                                     Checked="ModeRadio_Checked" />
+                                    </Border>
+                                    <Border Grid.Column="1" CornerRadius="9">
+                                        <RadioButton x:Name="AdvancedModeRadio"
+                                                     Content="专业模式&#x0a;模型与流程"
+                                                     GroupName="Mode"
+                                                     HorizontalAlignment="Center"
+                                                     Checked="ModeRadio_Checked" />
+                                    </Border>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+
+                        <ComboBox x:Name="ProviderComboBox"
+                                  Header="模型平台"
+                                  DisplayMemberPath="Label"
+                                  HorizontalAlignment="Stretch"
+                                  SelectionChanged="ProviderComboBox_SelectionChanged" />
+
+                        <Border Padding="14"
+                                CornerRadius="12"
+                                Background="#BFFFFFFB"
+                                BorderBrush="{StaticResource HairlineBrush}"
+                                BorderThickness="1">
+                            <StackPanel Spacing="10">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE8D7;" FontSize="16" Foreground="{StaticResource AccentBrush}" />
+                                    <TextBlock Text="API 密钥" FontWeight="SemiBold" Foreground="{StaticResource InkBrush}" />
+                                </StackPanel>
+                                <TextBlock Text="无需填写全部密钥，只填当前选中的模型接口即可。"
+                                           Style="{StaticResource SectionSubtitleStyle}" />
+                                <PasswordBox x:Name="ApiKeyBox"
+                                             Header="当前平台 API Key"
+                                             PasswordChanged="ApiKeyBox_PasswordChanged" />
+                                <TextBlock x:Name="GuideText"
+                                           TextWrapping="Wrap"
+                                           FontSize="12"
+                                           Foreground="{StaticResource MutedBrush}" />
                             </StackPanel>
-                        </StackPanel>
+                        </Border>
 
-                        <ComboBox x:Name="ProviderComboBox" Header="模型平台" DisplayMemberPath="Label" SelectionChanged="ProviderComboBox_SelectionChanged" />
-
-                        <StackPanel Spacing="8">
-                            <PasswordBox x:Name="ApiKeyBox" Header="API Key" PasswordChanged="ApiKeyBox_PasswordChanged" />
-                            <TextBlock x:Name="GuideText" TextWrapping="Wrap" Opacity="0.75" />
-                        </StackPanel>
-
-                        <Border x:Name="SimpleSummaryPanel" Padding="12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
-                            <TextBlock x:Name="SimpleSummaryText" TextWrapping="Wrap" />
+                        <Border x:Name="SimpleSummaryPanel"
+                                Padding="10,7"
+                                CornerRadius="999"
+                                Background="{StaticResource SurfaceMutedBrush}"
+                                BorderBrush="{StaticResource HairlineBrush}"
+                                BorderThickness="1">
+                            <TextBlock x:Name="SimpleSummaryText"
+                                       FontSize="12"
+                                       FontWeight="SemiBold"
+                                       TextWrapping="Wrap" />
                         </Border>
 
                         <StackPanel x:Name="AdvancedPanel" Spacing="12">
@@ -100,69 +242,180 @@
                             <CheckBox x:Name="MockCheckBox" Content="模拟模式" />
                         </StackPanel>
 
-                        <Button x:Name="SubmitButton" Content="生成候选图" HorizontalAlignment="Stretch" Click="SubmitButton_Click" />
-                    </StackPanel>
-
-                    <StackPanel Grid.Column="1" Spacing="16">
-                        <TextBlock Text="输入内容" FontSize="22" FontWeight="SemiBold" />
-                        <ItemsControl x:Name="ExamplesItems">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Button Margin="0,0,8,8" Click="ExampleButton_Click" Tag="{Binding}">
-                                        <StackPanel>
-                                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
-                                            <TextBlock Text="{Binding Hint}" TextWrapping="Wrap" Opacity="0.72" />
-                                        </StackPanel>
-                                    </Button>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-
-                        <ComboBox x:Name="CategoryComboBox" Header="信息图类别" DisplayMemberPath="DisplayName" />
-                        <TextBox x:Name="MethodContentBox" Header="论文方法内容" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="170" />
-                        <TextBox x:Name="CaptionBox" Header="目标图注" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="86" />
-
-                        <Border Padding="16" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
-                            <StackPanel Spacing="12">
-                                <StackPanel>
-                                    <TextBlock Text="生成结果" FontSize="22" FontWeight="SemiBold" />
-                                    <TextBlock x:Name="CurrentJobText" Opacity="0.72" />
-                                </StackPanel>
-                                <InfoBar x:Name="JobErrorInfoBar" IsOpen="False" Severity="Error" />
-                                <ListView x:Name="ResultImagesList" MaxHeight="520">
-                                    <ListView.ItemTemplate>
-                                        <DataTemplate>
-                                            <StackPanel Spacing="8" Padding="0,0,0,16">
-                                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
-                                                <Border Height="240" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" CornerRadius="8">
-                                                    <Image Source="{Binding PreviewSource}" Stretch="Uniform" />
-                                                </Border>
-                                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                                    <Button Content="打开" Click="OpenImageButton_Click" Tag="{Binding}" />
-                                                    <Button Content="保存" Click="SaveImageButton_Click" Tag="{Binding}" />
-                                                </StackPanel>
-                                            </StackPanel>
-                                        </DataTemplate>
-                                    </ListView.ItemTemplate>
-                                </ListView>
+                        <Border Padding="14"
+                                CornerRadius="12"
+                                Background="{StaticResource SurfaceMutedBrush}"
+                                BorderBrush="{StaticResource HairlineBrush}"
+                                BorderThickness="1">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="后端连接" FontWeight="SemiBold" Foreground="{StaticResource InkBrush}" />
+                                <TextBox x:Name="ApiBaseBox"
+                                         Header="后端地址"
+                                         Text="https://yifbnnzrwmxn.sealoshzh.site"
+                                         LostFocus="ApiBaseBox_LostFocus" />
+                                <Button Content="恢复默认后端"
+                                        HorizontalAlignment="Stretch"
+                                        Click="ResetApiBaseButton_Click" />
                             </StackPanel>
                         </Border>
-                    </StackPanel>
-                </Grid>
-            </ScrollViewer>
 
-            <ScrollViewer x:Name="RecordsPanel" Grid.Column="1" Padding="24" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
+                        <Button x:Name="SubmitButton"
+                                Content="生成候选图"
+                                MinHeight="42"
+                                HorizontalAlignment="Stretch"
+                                Background="{StaticResource PrimaryButtonBrush}"
+                                Foreground="White"
+                                Click="SubmitButton_Click" />
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Column="1"
+                        Padding="24"
+                        CornerRadius="14"
+                        BorderBrush="{StaticResource HairlineBrush}"
+                        BorderThickness="1"
+                        Background="{StaticResource SurfaceBrush}">
+                    <Grid ColumnSpacing="18">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="6*" />
+                            <ColumnDefinition Width="5*" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Spacing="16">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <FontIcon Glyph="&#xE8A5;" FontSize="20" Foreground="{StaticResource AccentBrush}" />
+                                <StackPanel>
+                                    <TextBlock Text="输入内容" Style="{StaticResource SectionTitleStyle}" />
+                                    <TextBlock Text="选择信息图类别，再粘贴论文方法部分和目标图注。" Style="{StaticResource SectionSubtitleStyle}" />
+                                </StackPanel>
+                            </StackPanel>
+
+                            <Border Padding="13"
+                                    CornerRadius="12"
+                                    Background="#9FF3F2EC"
+                                    BorderBrush="{StaticResource HairlineBrush}"
+                                    BorderThickness="1">
+                                <StackPanel Spacing="10">
+                                    <StackPanel Orientation="Horizontal" Spacing="7">
+                                        <FontIcon Glyph="&#xE70F;" FontSize="16" Foreground="{StaticResource AccentBrush}" />
+                                        <TextBlock Text="快速上手案例" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource InkBrush}" />
+                                    </StackPanel>
+                                    <ItemsControl x:Name="ExamplesItems">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <ItemsWrapGrid Orientation="Horizontal" MaximumRowsOrColumns="2" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Button Width="210" MinHeight="92" Margin="0,0,8,8" Click="ExampleButton_Click" Tag="{Binding}">
+                                                    <StackPanel Spacing="5">
+                                                        <Border Padding="7,3" HorizontalAlignment="Left" CornerRadius="6" Background="{StaticResource AccentWashBrush}" BorderBrush="#FFEAD28D" BorderThickness="1">
+                                                            <TextBlock Text="{Binding Label}" FontSize="11" FontWeight="SemiBold" Foreground="#FF77510B" />
+                                                        </Border>
+                                                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="{StaticResource InkBrush}" TextWrapping="Wrap" />
+                                                        <TextBlock Text="{Binding Hint}" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" />
+                                                    </StackPanel>
+                                                </Button>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Border>
+
+                            <ComboBox x:Name="CategoryComboBox"
+                                      Header="信息图类别"
+                                      DisplayMemberPath="DisplayName"
+                                      HorizontalAlignment="Stretch" />
+                            <TextBox x:Name="MethodContentBox"
+                                     Header="论文方法内容"
+                                     AcceptsReturn="True"
+                                     TextWrapping="Wrap"
+                                     MinHeight="150" />
+                            <TextBox x:Name="CaptionBox"
+                                     Header="目标图注"
+                                     AcceptsReturn="True"
+                                     TextWrapping="Wrap"
+                                     MinHeight="100" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Spacing="16">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <FontIcon Glyph="&#xEB9F;" FontSize="20" Foreground="{StaticResource AccentBrush}" />
+                                <StackPanel>
+                                    <TextBlock Text="生成结果" Style="{StaticResource SectionTitleStyle}" />
+                                    <TextBlock x:Name="CurrentJobText"
+                                               Text="提交任务后显示生成结果。"
+                                               Style="{StaticResource SectionSubtitleStyle}" />
+                                </StackPanel>
+                            </StackPanel>
+
+                            <Border MinHeight="520"
+                                    Padding="16"
+                                    CornerRadius="12"
+                                    Background="{StaticResource SurfaceMutedBrush}"
+                                    BorderBrush="{StaticResource HairlineStrongBrush}"
+                                    BorderThickness="1">
+                                <StackPanel Spacing="12">
+                                    <InfoBar x:Name="JobErrorInfoBar" IsOpen="False" Severity="Error" />
+                                    <ListView x:Name="ResultImagesList" MaxHeight="620">
+                                        <ListView.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Spacing="8" Padding="0,0,0,16">
+                                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                                    <Border Height="240" Background="{StaticResource SurfaceBrush}" CornerRadius="8">
+                                                        <Image Source="{Binding PreviewSource}" Stretch="Uniform" />
+                                                    </Border>
+                                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                                        <Button Content="打开" Click="OpenImageButton_Click" Tag="{Binding}" />
+                                                        <Button Content="保存" Click="SaveImageButton_Click" Tag="{Binding}" />
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ListView.ItemTemplate>
+                                    </ListView>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+        </ScrollViewer>
+
+        <ScrollViewer x:Name="RecordsPanel" Grid.Row="2" Padding="20,0,20,24" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
+            <Border MaxWidth="1120"
+                    HorizontalAlignment="Stretch"
+                    Padding="24"
+                    CornerRadius="14"
+                    BorderBrush="{StaticResource HairlineBrush}"
+                    BorderThickness="1"
+                    Background="{StaticResource SurfaceBrush}">
                 <StackPanel Spacing="18">
-                    <TextBlock Text="任务记录" FontSize="22" FontWeight="SemiBold" />
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <FontIcon Glyph="&#xE8A5;" FontSize="20" Foreground="{StaticResource AccentBrush}" />
+                        <StackPanel>
+                            <TextBlock Text="任务记录" Style="{StaticResource SectionTitleStyle}" />
+                            <TextBlock Text="只显示当前账号的生成任务，失败任务会直接显示模型返回原因。" Style="{StaticResource SectionSubtitleStyle}" />
+                        </StackPanel>
+                    </StackPanel>
+
                     <InfoBar x:Name="RecordsInfoBar" IsOpen="False" Severity="Error" />
-                    <Border Padding="16" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+
+                    <Border Padding="16"
+                            CornerRadius="12"
+                            BorderBrush="{StaticResource HairlineBrush}"
+                            BorderThickness="1"
+                            Background="#BFFFFFFB">
                         <StackPanel Spacing="12">
                             <Grid ColumnSpacing="12">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock x:Name="AccountText" VerticalAlignment="Center" />
+                                <TextBlock x:Name="AccountText"
+                                           VerticalAlignment="Center"
+                                           FontWeight="SemiBold"
+                                           Foreground="{StaticResource InkSoftBrush}" />
                                 <Button Grid.Column="1" Content="刷新记录" Click="RefreshRecordsButton_Click" />
                             </Grid>
 
@@ -182,12 +435,17 @@
                     <ListView x:Name="RecordsList">
                         <ListView.ItemTemplate>
                             <DataTemplate>
-                                <Border Padding="12" BorderThickness="0,0,0,1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                                <Border Padding="14"
+                                        Margin="0,0,0,10"
+                                        CornerRadius="10"
+                                        BorderThickness="1"
+                                        BorderBrush="{StaticResource HairlineBrush}"
+                                        Background="{StaticResource SurfaceBrush}">
                                     <StackPanel Spacing="6">
                                         <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                                        <TextBlock Text="{Binding Meta}" Opacity="0.72" TextWrapping="Wrap" />
+                                        <TextBlock Text="{Binding Meta}" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" />
                                         <TextBlock Text="{Binding StatusLabel}" />
-                                        <TextBlock Text="{Binding CreatedText}" Opacity="0.64" />
+                                        <TextBlock Text="{Binding CreatedText}" Foreground="{StaticResource MutedBrush}" />
                                         <TextBlock Text="{Binding Error}" Foreground="{ThemeResource SystemFillColorCriticalBrush}" TextWrapping="Wrap" />
                                     </StackPanel>
                                 </Border>
@@ -195,34 +453,7 @@
                         </ListView.ItemTemplate>
                     </ListView>
                 </StackPanel>
-            </ScrollViewer>
-
-            <ScrollViewer x:Name="AdminPanel" Grid.Column="1" Padding="24" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
-                <StackPanel Spacing="18">
-                    <TextBlock Text="站长记录" FontSize="22" FontWeight="SemiBold" />
-                    <TextBlock Text="输入 ADMIN_TOKEN 查看最近任务、模型选择和失败原因。" Opacity="0.72" />
-                    <InfoBar x:Name="AdminInfoBar" IsOpen="False" Severity="Error" />
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                        <PasswordBox x:Name="AdminTokenBox" Header="ADMIN_TOKEN" Width="320" />
-                        <Button Content="刷新" VerticalAlignment="Bottom" Click="RefreshAdminButton_Click" />
-                    </StackPanel>
-                    <ListView x:Name="AdminList">
-                        <ListView.ItemTemplate>
-                            <DataTemplate>
-                                <Border Padding="12" BorderThickness="0,0,0,1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
-                                    <StackPanel Spacing="6">
-                                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                                        <TextBlock Text="{Binding Meta}" Opacity="0.72" TextWrapping="Wrap" />
-                                        <TextBlock Text="{Binding StatusLabel}" />
-                                        <TextBlock Text="{Binding CreatedText}" Opacity="0.64" />
-                                        <TextBlock Text="{Binding Error}" Foreground="{ThemeResource SystemFillColorCriticalBrush}" TextWrapping="Wrap" />
-                                    </StackPanel>
-                                </Border>
-                            </DataTemplate>
-                        </ListView.ItemTemplate>
-                    </ListView>
-                </StackPanel>
-            </ScrollViewer>
-        </Grid>
+            </Border>
+        </ScrollViewer>
     </Grid>
 </Window>

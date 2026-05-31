@@ -1,7 +1,7 @@
 #define AppName "PaperBanana"
 #define AppVersion GetEnv("PAPERBANANA_WINDOWS_VERSION")
 #if AppVersion == ""
-  #define AppVersion "0.1.0"
+  #define AppVersion "0.1.1"
 #endif
 #define AppPublisher "PaperBanana"
 #define AppURL "https://paperbanana.asia"

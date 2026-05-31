@@ -46,7 +46,7 @@ public sealed partial class MainWindow : Window
         var hwnd = WindowNative.GetWindowHandle(this);
         var windowId = Win32Interop.GetWindowIdFromWindow(hwnd);
         var appWindow = AppWindow.GetFromWindowId(windowId);
-        appWindow.Resize(new SizeInt32(1280, 860));
+        appWindow.Resize(new SizeInt32(1440, 900));
     }
 
     private void BindStaticOptions()
@@ -396,20 +396,6 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private async void RefreshAdminButton_Click(object sender, RoutedEventArgs e)
-    {
-        HideInfo(AdminInfoBar);
-        try
-        {
-            var jobs = await _apiClient.AdminJobsAsync(ApiBase, _health, AdminTokenBox.Password.Trim());
-            AdminList.ItemsSource = jobs.Select(ToListItem).ToArray();
-        }
-        catch (Exception error)
-        {
-            ShowError(AdminInfoBar, ErrorFormatter.Format(error));
-        }
-    }
-
     private JobListItem ToListItem(PaperBananaJob job)
     {
         return new JobListItem
@@ -446,27 +432,17 @@ public sealed partial class MainWindow : Window
         ShowRecordsPanel();
         if (_currentUser is not null) await LoadRecordsAsync();
     }
-    private void AdminTabButton_Click(object sender, RoutedEventArgs e) => ShowAdminPanel();
 
     private void ShowGeneratePanel()
     {
         GeneratePanel.Visibility = Visibility.Visible;
         RecordsPanel.Visibility = Visibility.Collapsed;
-        AdminPanel.Visibility = Visibility.Collapsed;
     }
 
     private void ShowRecordsPanel()
     {
         GeneratePanel.Visibility = Visibility.Collapsed;
         RecordsPanel.Visibility = Visibility.Visible;
-        AdminPanel.Visibility = Visibility.Collapsed;
-    }
-
-    private void ShowAdminPanel()
-    {
-        GeneratePanel.Visibility = Visibility.Collapsed;
-        RecordsPanel.Visibility = Visibility.Collapsed;
-        AdminPanel.Visibility = Visibility.Visible;
     }
 
     private void ApiBaseBox_LostFocus(object sender, RoutedEventArgs e)

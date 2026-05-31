@@ -264,8 +264,6 @@ public static class ErrorFormatter
         if (value.Contains("timeout", StringComparison.OrdinalIgnoreCase) || value.Contains("TaskCanceledException", StringComparison.OrdinalIgnoreCase)) return "请求超时，请稍后重试。";
         if (value.Contains("Network", StringComparison.OrdinalIgnoreCase) || value.Contains("No such host", StringComparison.OrdinalIgnoreCase)) return "无法连接后端，请确认网络可访问 Sealos 后端地址。";
         if (value.Contains("password", StringComparison.OrdinalIgnoreCase)) return "密码至少需要 8 位。";
-        if (value.Contains("ADMIN_TOKEN is not configured", StringComparison.OrdinalIgnoreCase)) return "管理接口未启用：还没有配置 ADMIN_TOKEN。";
-        if (value.Contains("Admin API disabled", StringComparison.OrdinalIgnoreCase)) return "管理接口未启用。";
         if (value.Contains("HTTP 503", StringComparison.OrdinalIgnoreCase)) return "服务暂时不可用，请稍后重试。";
         return string.IsNullOrWhiteSpace(value) ? "操作失败" : value;
     }
