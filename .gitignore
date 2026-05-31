@@ -5,6 +5,8 @@ node_modules/
 dist/
 build/
 !apps/desktop/build/
+bin/
+obj/
 out/
 release/
 coverage/
