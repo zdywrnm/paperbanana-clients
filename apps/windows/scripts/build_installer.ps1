@@ -1,5 +1,5 @@
 param(
-  [string]$Version = "0.1.1",
+  [string]$Version = "0.1.2",
   [string]$Configuration = "Release",
   [string]$DotnetPath = "B:\tools\dotnet\dotnet.exe",
   [string]$InnoCompilerPath = "B:\tools\InnoSetup6\ISCC.exe"

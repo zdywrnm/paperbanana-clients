@@ -45,7 +45,7 @@
         <Border Grid.Row="0"
                 Margin="20,20,20,14"
                 Padding="28,20"
-                CornerRadius="16"
+                CornerRadius="22"
                 BorderBrush="{StaticResource HairlineBrush}"
                 BorderThickness="1"
                 Background="{StaticResource SurfaceBrush}">
@@ -58,7 +58,7 @@
                 <StackPanel Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
                     <Border Width="58"
                             Height="58"
-                            CornerRadius="16"
+                            CornerRadius="18"
                             Background="{StaticResource SurfaceBrush}"
                             BorderBrush="{StaticResource HairlineBrush}"
                             BorderThickness="1">
@@ -70,10 +70,10 @@
                                    FontWeight="Bold"
                                    Foreground="{StaticResource InkBrush}" />
                         <StackPanel Orientation="Horizontal" Spacing="6">
-                            <Border Padding="10,3" CornerRadius="999" Background="{StaticResource SageWashBrush}" BorderBrush="#FFC8D8CC" BorderThickness="1">
+                            <Border Padding="10,3" CornerRadius="8" Background="{StaticResource SageWashBrush}" BorderBrush="#FFC8D8CC" BorderThickness="1">
                                 <TextBlock Text="多智能体" FontSize="11" FontWeight="SemiBold" Foreground="#FF315F51" />
                             </Border>
-                            <Border Padding="10,3" CornerRadius="999" Background="{StaticResource AccentWashBrush}" BorderBrush="#FFEAD28D" BorderThickness="1">
+                            <Border Padding="10,3" CornerRadius="8" Background="{StaticResource AccentWashBrush}" BorderBrush="#FFEAD28D" BorderThickness="1">
                                 <TextBlock Text="学术图示生成" FontSize="11" FontWeight="SemiBold" Foreground="#FF6B4807" />
                             </Border>
                         </StackPanel>
@@ -82,7 +82,7 @@
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                     <Border Padding="12,7"
-                            CornerRadius="999"
+                            CornerRadius="11"
                             Background="{StaticResource SurfaceMutedBrush}"
                             BorderBrush="{StaticResource HairlineBrush}"
                             BorderThickness="1">
@@ -111,7 +111,7 @@
                 Margin="20,0,20,18"
                 Padding="4"
                 HorizontalAlignment="Left"
-                CornerRadius="12"
+                CornerRadius="14"
                 BorderBrush="{StaticResource HairlineBrush}"
                 BorderThickness="1"
                 Background="#BFFFFFFB">
@@ -139,7 +139,7 @@
 
                 <Border Grid.Column="0"
                         Padding="22"
-                        CornerRadius="14"
+                        CornerRadius="20"
                         BorderBrush="{StaticResource HairlineBrush}"
                         BorderThickness="1"
                         Background="{StaticResource SurfaceBrush}">
@@ -157,7 +157,7 @@
                         <StackPanel Spacing="8">
                             <TextBlock Text="使用模式" Style="{StaticResource FieldLabelStyle}" />
                             <Border Padding="5"
-                                    CornerRadius="12"
+                                    CornerRadius="16"
                                     Background="{StaticResource SurfaceMutedBrush}"
                                     BorderBrush="{StaticResource HairlineBrush}"
                                     BorderThickness="1">
@@ -192,7 +192,7 @@
                                   SelectionChanged="ProviderComboBox_SelectionChanged" />
 
                         <Border Padding="14"
-                                CornerRadius="12"
+                                CornerRadius="16"
                                 Background="#BFFFFFFB"
                                 BorderBrush="{StaticResource HairlineBrush}"
                                 BorderThickness="1">
@@ -214,8 +214,8 @@
                         </Border>
 
                         <Border x:Name="SimpleSummaryPanel"
-                                Padding="10,7"
-                                CornerRadius="999"
+                                Padding="12"
+                                CornerRadius="14"
                                 Background="{StaticResource SurfaceMutedBrush}"
                                 BorderBrush="{StaticResource HairlineBrush}"
                                 BorderThickness="1">
@@ -242,23 +242,6 @@
                             <CheckBox x:Name="MockCheckBox" Content="模拟模式" />
                         </StackPanel>
 
-                        <Border Padding="14"
-                                CornerRadius="12"
-                                Background="{StaticResource SurfaceMutedBrush}"
-                                BorderBrush="{StaticResource HairlineBrush}"
-                                BorderThickness="1">
-                            <StackPanel Spacing="10">
-                                <TextBlock Text="后端连接" FontWeight="SemiBold" Foreground="{StaticResource InkBrush}" />
-                                <TextBox x:Name="ApiBaseBox"
-                                         Header="后端地址"
-                                         Text="https://yifbnnzrwmxn.sealoshzh.site"
-                                         LostFocus="ApiBaseBox_LostFocus" />
-                                <Button Content="恢复默认后端"
-                                        HorizontalAlignment="Stretch"
-                                        Click="ResetApiBaseButton_Click" />
-                            </StackPanel>
-                        </Border>
-
                         <Button x:Name="SubmitButton"
                                 Content="生成候选图"
                                 MinHeight="42"
@@ -271,7 +254,7 @@
 
                 <Border Grid.Column="1"
                         Padding="24"
-                        CornerRadius="14"
+                        CornerRadius="20"
                         BorderBrush="{StaticResource HairlineBrush}"
                         BorderThickness="1"
                         Background="{StaticResource SurfaceBrush}">
@@ -291,7 +274,7 @@
                             </StackPanel>
 
                             <Border Padding="13"
-                                    CornerRadius="12"
+                                    CornerRadius="16"
                                     Background="#9FF3F2EC"
                                     BorderBrush="{StaticResource HairlineBrush}"
                                     BorderThickness="1">
@@ -310,7 +293,7 @@
                                             <DataTemplate>
                                                 <Button Width="210" MinHeight="92" Margin="0,0,8,8" Click="ExampleButton_Click" Tag="{Binding}">
                                                     <StackPanel Spacing="5">
-                                                        <Border Padding="7,3" HorizontalAlignment="Left" CornerRadius="6" Background="{StaticResource AccentWashBrush}" BorderBrush="#FFEAD28D" BorderThickness="1">
+                                                        <Border Padding="7,3" HorizontalAlignment="Left" CornerRadius="8" Background="{StaticResource AccentWashBrush}" BorderBrush="#FFEAD28D" BorderThickness="1">
                                                             <TextBlock Text="{Binding Label}" FontSize="11" FontWeight="SemiBold" Foreground="#FF77510B" />
                                                         </Border>
                                                         <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="{StaticResource InkBrush}" TextWrapping="Wrap" />
@@ -352,7 +335,7 @@
 
                             <Border MinHeight="520"
                                     Padding="16"
-                                    CornerRadius="12"
+                                    CornerRadius="18"
                                     Background="{StaticResource SurfaceMutedBrush}"
                                     BorderBrush="{StaticResource HairlineStrongBrush}"
                                     BorderThickness="1">
@@ -386,7 +369,7 @@
             <Border MaxWidth="1120"
                     HorizontalAlignment="Stretch"
                     Padding="24"
-                    CornerRadius="14"
+                    CornerRadius="20"
                     BorderBrush="{StaticResource HairlineBrush}"
                     BorderThickness="1"
                     Background="{StaticResource SurfaceBrush}">
@@ -402,7 +385,7 @@
                     <InfoBar x:Name="RecordsInfoBar" IsOpen="False" Severity="Error" />
 
                     <Border Padding="16"
-                            CornerRadius="12"
+                            CornerRadius="16"
                             BorderBrush="{StaticResource HairlineBrush}"
                             BorderThickness="1"
                             Background="#BFFFFFFB">
@@ -447,6 +430,40 @@
                                         <TextBlock Text="{Binding StatusLabel}" />
                                         <TextBlock Text="{Binding CreatedText}" Foreground="{StaticResource MutedBrush}" />
                                         <TextBlock Text="{Binding Error}" Foreground="{ThemeResource SystemFillColorCriticalBrush}" TextWrapping="Wrap" />
+                                        <ItemsControl ItemsSource="{Binding Images}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <ItemsWrapGrid Orientation="Horizontal" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Width="220"
+                                                            Margin="0,8,10,0"
+                                                            Padding="10"
+                                                            CornerRadius="14"
+                                                            BorderBrush="{StaticResource HairlineBrush}"
+                                                            BorderThickness="1"
+                                                            Background="{StaticResource SurfaceMutedBrush}">
+                                                        <StackPanel Spacing="8">
+                                                            <Border Height="124"
+                                                                    CornerRadius="12"
+                                                                    Background="{StaticResource SurfaceBrush}">
+                                                                <Image Source="{Binding PreviewSource}" Stretch="Uniform" />
+                                                            </Border>
+                                                            <TextBlock Text="{Binding Title}"
+                                                                       FontSize="12"
+                                                                       Foreground="{StaticResource MutedBrush}"
+                                                                       TextWrapping="Wrap" />
+                                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                                <Button Content="打开" Click="OpenImageButton_Click" Tag="{Binding}" />
+                                                                <Button Content="保存" Click="SaveRecordImageButton_Click" Tag="{Binding}" />
+                                                            </StackPanel>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
                                     </StackPanel>
                                 </Border>
                             </DataTemplate>

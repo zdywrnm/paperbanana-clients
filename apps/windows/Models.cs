@@ -242,6 +242,7 @@ public sealed class JobListItem
 {
     public required PaperBananaJob Job { get; init; }
     public required string StatusLabel { get; init; }
+    public IReadOnlyList<ResultImageViewModel> Images { get; init; } = [];
     public string Title => Job.Title;
     public string Meta => $"{Job.Provider} · {Job.MainModelName} · {Job.ImageModelName}";
     public string CreatedText => Job.CreatedAt?.ToLocalTime().ToString("MM-dd HH:mm") ?? "";
@@ -262,7 +263,7 @@ public static class ErrorFormatter
         if (value.Contains("Please log in", StringComparison.OrdinalIgnoreCase) || value.Contains("请先登录", StringComparison.OrdinalIgnoreCase) || value.Contains("Unauthorized", StringComparison.OrdinalIgnoreCase)) return "请先登录后再使用任务记录。";
         if (value.Contains("Forbidden", StringComparison.OrdinalIgnoreCase)) return "当前账号没有权限查看这个任务。";
         if (value.Contains("timeout", StringComparison.OrdinalIgnoreCase) || value.Contains("TaskCanceledException", StringComparison.OrdinalIgnoreCase)) return "请求超时，请稍后重试。";
-        if (value.Contains("Network", StringComparison.OrdinalIgnoreCase) || value.Contains("No such host", StringComparison.OrdinalIgnoreCase)) return "无法连接后端，请确认网络可访问 Sealos 后端地址。";
+        if (value.Contains("Network", StringComparison.OrdinalIgnoreCase) || value.Contains("No such host", StringComparison.OrdinalIgnoreCase)) return "无法连接服务，请确认网络可用后重试。";
         if (value.Contains("password", StringComparison.OrdinalIgnoreCase)) return "密码至少需要 8 位。";
         if (value.Contains("HTTP 503", StringComparison.OrdinalIgnoreCase)) return "服务暂时不可用，请稍后重试。";
         return string.IsNullOrWhiteSpace(value) ? "操作失败" : value;

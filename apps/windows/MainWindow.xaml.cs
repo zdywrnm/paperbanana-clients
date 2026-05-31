@@ -46,6 +46,8 @@ public sealed partial class MainWindow : Window
         var hwnd = WindowNative.GetWindowHandle(this);
         var windowId = Win32Interop.GetWindowIdFromWindow(hwnd);
         var appWindow = AppWindow.GetFromWindowId(windowId);
+        var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "icon.ico");
+        if (File.Exists(iconPath)) appWindow.SetIcon(iconPath);
         appWindow.Resize(new SizeInt32(1440, 900));
     }
 
@@ -86,7 +88,7 @@ public sealed partial class MainWindow : Window
     private CatalogOption SelectedCandidateCount => CandidateComboBox.SelectedItem as CatalogOption ?? _catalog.CandidateOptions[0];
     private CatalogOption SelectedCriticRounds => CriticRoundComboBox.SelectedItem as CatalogOption ?? _catalog.CriticRoundOptions[1];
     private bool IsAdvancedMode => AdvancedModeRadio.IsChecked == true;
-    private string ApiBase => PaperBananaApiClient.NormalizeApiBase(ApiBaseBox.Text);
+    private string ApiBase => PaperBananaApiClient.DefaultApiBase;
 
     private void ProviderComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -127,7 +129,7 @@ public sealed partial class MainWindow : Window
         var provider = SelectedProvider;
         var mainLabel = provider.MainModels.FirstOrDefault(item => item.Value == provider.MainModel)?.Label ?? provider.MainModel;
         var imageLabel = provider.ImageModels.FirstOrDefault(item => item.Value == provider.ImageModel)?.Label ?? provider.ImageModel;
-        SimpleSummaryText.Text = $"{mainLabel} · {imageLabel} · 规划器 + 评审器 · 16:9";
+        SimpleSummaryText.Text = $"默认配置：{mainLabel} · {imageLabel} · 规划器 + 评审器 · 16:9";
     }
 
     private async void RefreshButton_Click(object sender, RoutedEventArgs e)
@@ -141,7 +143,7 @@ public sealed partial class MainWindow : Window
         try
         {
             _health = await _apiClient.FetchBackendHealthAsync(ApiBase);
-            HealthText.Text = $"{_health.Runtime} · {_health.Detail}";
+            HealthText.Text = "服务在线";
             UpdateAdvancedVisibility();
         }
         catch (Exception error)
@@ -293,23 +295,41 @@ public sealed partial class MainWindow : Window
         if ((sender as FrameworkElement)?.Tag is not ResultImageViewModel item) return;
         try
         {
-            var bytes = await _apiClient.GetImageBytesAsync(ApiBase, item.Image.Url);
-            var picker = new FileSavePicker
-            {
-                SuggestedStartLocation = PickerLocationId.PicturesLibrary,
-                SuggestedFileName = Path.GetFileNameWithoutExtension(item.Image.Filename)
-            };
-            picker.FileTypeChoices.Add("PNG 图片", [".png"]);
-            InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(this));
-            var file = await picker.PickSaveFileAsync();
-            if (file is not null)
-            {
-                await FileIO.WriteBytesAsync(file, bytes);
-            }
+            await SaveImageAsync(item);
         }
         catch (Exception error)
         {
             ShowError(JobErrorInfoBar, ErrorFormatter.Format(error));
+        }
+    }
+
+    private async void SaveRecordImageButton_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.Tag is not ResultImageViewModel item) return;
+        try
+        {
+            await SaveImageAsync(item);
+        }
+        catch (Exception error)
+        {
+            ShowError(RecordsInfoBar, ErrorFormatter.Format(error));
+        }
+    }
+
+    private async Task SaveImageAsync(ResultImageViewModel item)
+    {
+        var bytes = await _apiClient.GetImageBytesAsync(ApiBase, item.Image.Url);
+        var picker = new FileSavePicker
+        {
+            SuggestedStartLocation = PickerLocationId.PicturesLibrary,
+            SuggestedFileName = Path.GetFileNameWithoutExtension(item.Image.Filename)
+        };
+        picker.FileTypeChoices.Add("PNG 图片", [".png"]);
+        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(this));
+        var file = await picker.PickSaveFileAsync();
+        if (file is not null)
+        {
+            await FileIO.WriteBytesAsync(file, bytes);
         }
     }
 
@@ -388,7 +408,7 @@ public sealed partial class MainWindow : Window
         try
         {
             var jobs = await _apiClient.UserJobsAsync(ApiBase, _health);
-            RecordsList.ItemsSource = jobs.Select(ToListItem).ToArray();
+            RecordsList.ItemsSource = await Task.WhenAll(jobs.Select(ToListItemAsync));
         }
         catch (Exception error)
         {
@@ -396,12 +416,13 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private JobListItem ToListItem(PaperBananaJob job)
+    private async Task<JobListItem> ToListItemAsync(PaperBananaJob job)
     {
         return new JobListItem
         {
             Job = job,
-            StatusLabel = StatusLabel(job.Status)
+            StatusLabel = StatusLabel(job.Status),
+            Images = await BuildImageItemsAsync(job.ResultImages)
         };
     }
 
@@ -443,18 +464,6 @@ public sealed partial class MainWindow : Window
     {
         GeneratePanel.Visibility = Visibility.Collapsed;
         RecordsPanel.Visibility = Visibility.Visible;
-    }
-
-    private void ApiBaseBox_LostFocus(object sender, RoutedEventArgs e)
-    {
-        ApiBaseBox.Text = ApiBase;
-    }
-
-    private async void ResetApiBaseButton_Click(object sender, RoutedEventArgs e)
-    {
-        ApiBaseBox.Text = PaperBananaApiClient.DefaultApiBase;
-        await RefreshHealthAsync();
-        await RefreshSessionAsync();
     }
 
     private static void ShowError(InfoBar infoBar, string message)
