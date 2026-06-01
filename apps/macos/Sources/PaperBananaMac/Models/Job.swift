@@ -96,6 +96,29 @@ struct Job: Decodable, Identifiable, Equatable {
     return id
   }
 
+  var providerID: ProviderID? {
+    ProviderID(rawValue: provider)
+  }
+
+  var mainModelDisplayName: String {
+    guard let providerID else { return mainModelName }
+    return ProviderCatalog.mainModelDisplayName(provider: providerID, value: mainModelName)
+  }
+
+  var imageModelDisplayName: String {
+    guard let providerID else { return imageGenModelName }
+    return ProviderCatalog.imageModelDisplayName(provider: providerID, value: imageGenModelName)
+  }
+
+  var failureText: String {
+    if !error.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return error }
+    return logsTail
+  }
+
+  var formattedFailureText: String {
+    formatUserFacingError(failureText)
+  }
+
   init(
     id: String,
     status: String,

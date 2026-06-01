@@ -9,7 +9,13 @@ final class NotificationService {
   func notifyJobFinished(job: Job) async {
     let content = UNMutableNotificationContent()
     content.title = "PaperBanana"
-    content.body = job.statusKind == .succeeded ? "候选图已生成完成。" : "任务生成失败。"
+    if job.statusKind == .succeeded {
+      content.body = "候选图已生成完成。"
+    } else if !job.failureText.isEmpty {
+      content.body = "任务生成失败：\(job.formattedFailureText)"
+    } else {
+      content.body = "任务生成失败。"
+    }
     content.sound = .default
     let request = UNNotificationRequest(
       identifier: "paperbanana-job-\(job.id)",

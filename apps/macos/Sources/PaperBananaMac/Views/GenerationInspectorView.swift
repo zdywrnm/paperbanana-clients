@@ -18,6 +18,20 @@ struct GenerationInspectorView: View {
     )
   }
 
+  private var mainModelBinding: Binding<String> {
+    Binding(
+      get: { model.draft.mainModelName },
+      set: { model.draft.mainModelName = $0 }
+    )
+  }
+
+  private var imageModelBinding: Binding<String> {
+    Binding(
+      get: { model.draft.imageModelName },
+      set: { model.draft.imageModelName = $0 }
+    )
+  }
+
   var body: some View {
     Form {
       Section("后端") {
@@ -57,15 +71,29 @@ struct GenerationInspectorView: View {
         }
       }
 
-      Section("默认配置") {
-        LabeledContent("主模型", value: model.selectedProviderConfig.mainModel)
-        LabeledContent("图像模型", value: model.selectedProviderConfig.imageModel)
-        LabeledContent("生成流程", value: "规划器 + 评审器")
-        LabeledContent("画面比例", value: "16:9")
+      if model.draft.configurationMode == .simple {
+        Section("普通模式默认配置") {
+          LabeledContent("主模型", value: model.selectedProviderConfig.mainModelDisplayName)
+          LabeledContent("图像模型", value: model.selectedProviderConfig.imageModelDisplayName)
+          LabeledContent("生成流程", value: "规划器 + 评审器")
+          LabeledContent("画面比例", value: "16:9")
+        }
       }
 
       if model.draft.configurationMode == .advanced {
         Section("专业参数") {
+          ModelPicker(
+            title: "主模型",
+            selection: mainModelBinding,
+            groups: model.selectedProviderConfig.mainModelGroups
+          )
+
+          ModelPicker(
+            title: "图像生成模型",
+            selection: imageModelBinding,
+            groups: model.selectedProviderConfig.imageModelGroups
+          )
+
           Picker("生成流程", selection: $model.draft.pipelineMode) {
             Text("规划器 + 评审器").tag("demo_planner_critic")
             Text("完整流程").tag("demo_full")
@@ -88,9 +116,6 @@ struct GenerationInspectorView: View {
 
           Stepper("候选图数量：\(model.draft.numCandidates)", value: $model.draft.numCandidates, in: 1...4)
           Stepper("评审轮数：\(model.draft.maxCriticRounds)", value: $model.draft.maxCriticRounds, in: 0...3)
-
-          TextField("主模型名称", text: $model.draft.mainModelName)
-          TextField("图像模型名称", text: $model.draft.imageModelName)
 
           if model.health?.mockEnabled == true {
             Toggle("模拟模式", isOn: $model.draft.mock)
@@ -121,5 +146,28 @@ struct GenerationInspectorView: View {
     .padding(.top, 8)
     .scrollContentBackground(.hidden)
     .background(PaperWorkspaceBackground().ignoresSafeArea())
+  }
+}
+
+private struct ModelPicker: View {
+  let title: String
+  @Binding var selection: String
+  let groups: [ModelOptionGroup]
+
+  private var selectedOption: ModelOption? {
+    groups.flatMap(\.options).first { $0.value == selection }
+  }
+
+  var body: some View {
+    Picker(title, selection: $selection) {
+      ForEach(groups) { group in
+        Section(group.name) {
+          ForEach(group.options) { option in
+            Text(option.label).tag(option.value)
+          }
+        }
+      }
+    }
+    .help(selectedOption?.value ?? selection)
   }
 }

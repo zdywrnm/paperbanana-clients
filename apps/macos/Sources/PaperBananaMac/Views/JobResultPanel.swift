@@ -36,8 +36,9 @@ struct JobResultPanel: View {
           }
           .frame(maxWidth: .infinity, minHeight: 120)
         } else if job.statusKind == .failed {
-          Text(job.error.isEmpty ? "任务失败。" : job.error)
+          Text(job.failureText.isEmpty ? "任务失败。" : job.formattedFailureText)
             .foregroundStyle(.red)
+            .textSelection(.enabled)
             .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
         } else if job.resultImages.isEmpty {
           Text("任务已完成，但后端没有返回图片地址。")

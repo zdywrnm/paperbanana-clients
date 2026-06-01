@@ -214,8 +214,9 @@ final class AppModel: ObservableObject {
     do {
       let email = authEmail.trimmingCharacters(in: .whitespacesAndNewlines)
       if authMode == .signUp {
-        let name = authName.trimmingCharacters(in: .whitespacesAndNewlines)
-        try await apiClient.signUp(apiBase: apiBase, email: email, password: authPassword, name: name.isEmpty ? email : name)
+        let name = String(authName.trimmingCharacters(in: .whitespacesAndNewlines).prefix(24))
+        let fallbackName = email.split(separator: "@").first.map(String.init) ?? "PaperBanana 用户"
+        try await apiClient.signUp(apiBase: apiBase, email: email, password: authPassword, name: name.isEmpty ? fallbackName : name)
       } else {
         try await apiClient.signIn(apiBase: apiBase, email: email, password: authPassword)
       }

@@ -35,6 +35,8 @@ Set `MACOS_CODESIGN_IDENTITY` when a Developer ID Application certificate is ava
 - Native SwiftUI workbench with sidebar, composer, inspector, records, and settings.
 - Custom PaperBanana app icon from `Assets/AppIcon.icns`.
 - Chinese-first interface with warm, Claude-inspired translucent macOS materials.
+- Fixed grouped model selectors aligned with Web, Android, Windows, and mini program defaults.
+- Simple mode uses platform defaults; advanced mode exposes model, workflow, ratio, candidate, and critic controls.
 - Email auth through the Sealos auth gateway.
 - Provider API keys stored in macOS Keychain.
-- Job submission, polling, result preview, image save/copy, and completion notifications.
+- Job submission, polling, failed-job reason display, result preview, image save/copy, and completion notifications.

@@ -26,8 +26,8 @@ struct JobDetailView: View {
           Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 8) {
             detailRow("模型平台", job.provider)
             detailRow("信息图类别", job.infographicCategory)
-            detailRow("主模型", job.mainModelName)
-            detailRow("图像模型", job.imageGenModelName)
+            detailRow("主模型", job.mainModelDisplayName)
+            detailRow("图像模型", job.imageModelDisplayName)
             detailRow("生成流程", job.pipelineMode)
             detailRow("画面比例", job.aspectRatio)
             detailRow("候选图数量", "\(job.numCandidates)")
@@ -35,10 +35,17 @@ struct JobDetailView: View {
           .padding(14)
           .paperGlass(cornerRadius: 16)
 
-          if !job.error.isEmpty {
-            Text(job.error)
-              .foregroundStyle(.red)
-              .textSelection(.enabled)
+          if job.statusKind == .failed, !job.failureText.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+              Label("失败原因", systemImage: "exclamationmark.triangle")
+                .font(.headline)
+              Text(job.formattedFailureText)
+                .foregroundStyle(.red)
+                .textSelection(.enabled)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+            .paperGlass(cornerRadius: 16)
           }
 
           if !job.methodContent.isEmpty {

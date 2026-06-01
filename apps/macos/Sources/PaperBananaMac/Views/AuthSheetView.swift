@@ -11,6 +11,13 @@ struct AuthSheetView: View {
     )
   }
 
+  private var nameBinding: Binding<String> {
+    Binding(
+      get: { model.authName },
+      set: { model.authName = String($0.prefix(24)) }
+    )
+  }
+
   var body: some View {
     VStack(alignment: .leading, spacing: 18) {
       HStack {
@@ -36,7 +43,10 @@ struct AuthSheetView: View {
         TextField("邮箱", text: $model.authEmail)
         SecureField("密码", text: $model.authPassword)
         if model.authMode == .signUp {
-          TextField("昵称", text: $model.authName)
+          TextField("昵称", text: nameBinding)
+          Text("最多 24 个字符；不填则使用邮箱前缀。")
+            .font(.caption)
+            .foregroundStyle(.secondary)
         }
       }
       .formStyle(.grouped)

@@ -75,12 +75,20 @@ struct JobRecordRow: View {
           .lineLimit(1)
         HStack(spacing: 8) {
           Text(job.provider.ifEmpty("未知平台"))
-          Text(job.aspectRatio.ifEmpty("比例未知"))
+          Text(job.mainModelDisplayName.ifEmpty("主模型未知"))
+          Text(job.imageModelDisplayName.ifEmpty("图像模型未知"))
           Text(job.createdAt)
         }
         .font(.caption)
         .foregroundStyle(.secondary)
         .lineLimit(1)
+
+        if job.statusKind == .failed, !job.failureText.isEmpty {
+          Label(job.formattedFailureText, systemImage: "exclamationmark.triangle")
+            .font(.caption)
+            .foregroundStyle(.red)
+            .lineLimit(2)
+        }
       }
 
       Spacer()
