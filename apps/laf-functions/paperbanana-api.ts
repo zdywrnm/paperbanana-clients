@@ -2,6 +2,7 @@ import cloud from '@lafjs/cloud'
 
 type Provider = 'openrouter' | 'gemini' | 'openai' | 'bailian'
 type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed'
+type OutputFormat = 'png' | 'svg'
 
 type ApiKeys = {
   openrouter?: string
@@ -16,6 +17,8 @@ type CreateJobBody = {
   apiKeys: ApiKeys
   methodContent: string
   caption: string
+  outputFormat?: OutputFormat
+  output_format?: OutputFormat
   mainModelName: string
   imageModelName: string
   pipelineMode?: 'planner_critic' | 'full' | 'vanilla'
@@ -57,7 +60,7 @@ export default async function (ctx: FunctionContext) {
 
   try {
     if (action === 'health') {
-      return ok({ ok: true, runtime: 'laf', version: '0.1.1' })
+      return ok({ ok: true, runtime: 'laf', version: '0.1.8' })
     }
     if (action === 'createJob') {
       return await createJob(body as CreateJobBody, ctx)
@@ -87,6 +90,7 @@ async function createJob(body: CreateJobBody, ctx: FunctionContext) {
     ...body,
     mainModelName: normalizeModelName(body.provider, body.mainModelName),
     imageModelName: normalizeModelName(body.provider, body.imageModelName),
+    outputFormat: normalizeOutputFormat(body.outputFormat || body.output_format),
   }
   const apiKey = selectApiKey(normalizedBody.provider, normalizedBody.apiKeys)
   if (!apiKey) {
@@ -106,6 +110,7 @@ async function createJob(body: CreateJobBody, ctx: FunctionContext) {
     caption: normalizedBody.caption,
     mainModelName: normalizedBody.mainModelName,
     imageModelName: normalizedBody.imageModelName,
+    outputFormat: normalizedBody.outputFormat,
     pipelineMode: normalizedBody.pipelineMode || 'planner_critic',
     aspectRatio: normalizedBody.aspectRatio || '16:9',
     numCandidates: safeNumCandidates,
@@ -164,14 +169,15 @@ async function runJob(
   const results = []
   for (let i = 0; i < numCandidates; i += 1) {
     await appendLog(jobId, `Candidate ${i + 1}: planning`)
-    const image = await runCandidate(body, apiKey, maxCriticRounds)
-    const saved = await saveImage(jobId, i, image.base64, image.mimeType)
+    const result = await runCandidate(body, apiKey, maxCriticRounds)
+    const saved = await saveResult(jobId, i, result.content, result.mimeType, result.encoding)
     results.push({
       candidateId: i,
+      filename: saved.filename,
       url: saved.url,
       storage: saved.storage,
-      mimeType: image.mimeType,
-      description: image.description,
+      mimeType: result.mimeType,
+      description: result.description,
     })
   }
 
@@ -189,10 +195,27 @@ async function runJob(
 }
 
 async function runCandidate(body: CreateJobBody, apiKey: string, maxCriticRounds: number) {
+  if (normalizeOutputFormat(body.outputFormat) === 'svg') {
+    const description = await planDiagramDescription(body, apiKey, maxCriticRounds)
+    const svg = await callSvgModel(body.provider, body.mainModelName, apiKey, description)
+    return { content: svg, encoding: 'utf8' as const, mimeType: 'image/svg+xml', description }
+  }
+
   if ((body.pipelineMode || 'planner_critic') === 'vanilla') {
     const prompt = diagramPrompt(body.methodContent, body.caption)
     const base64 = await callImageModel(body.provider, body.imageModelName, apiKey, prompt, body.aspectRatio || '16:9')
-    return { base64, mimeType: 'image/png', description: prompt }
+    return { content: base64, encoding: 'base64' as const, mimeType: 'image/png', description: prompt }
+  }
+
+  const description = await planDiagramDescription(body, apiKey, maxCriticRounds)
+  const imagePrompt = diagramPromptFromDescription(description)
+  const base64 = await callImageModel(body.provider, body.imageModelName, apiKey, imagePrompt, body.aspectRatio || '16:9')
+  return { content: base64, encoding: 'base64' as const, mimeType: 'image/png', description }
+}
+
+async function planDiagramDescription(body: CreateJobBody, apiKey: string, maxCriticRounds: number) {
+  if ((body.pipelineMode || 'planner_critic') === 'vanilla') {
+    return `Create an academic method diagram for this methodology:\n${body.methodContent}\n\nVisual intent:\n${body.caption}`
   }
 
   const planner = await callTextModel(
@@ -214,9 +237,6 @@ async function runCandidate(body: CreateJobBody, apiKey: string, maxCriticRounds
     )
   }
 
-  let imagePrompt = diagramPromptFromDescription(description)
-  let base64 = await callImageModel(body.provider, body.imageModelName, apiKey, imagePrompt, body.aspectRatio || '16:9')
-
   for (let round = 0; round < maxCriticRounds; round += 1) {
     const critique = await callTextModel(
       body.provider,
@@ -227,11 +247,9 @@ async function runCandidate(body: CreateJobBody, apiKey: string, maxCriticRounds
     )
     if (/no changes needed/i.test(critique)) break
     description = critique
-    imagePrompt = diagramPromptFromDescription(description)
-    base64 = await callImageModel(body.provider, body.imageModelName, apiKey, imagePrompt, body.aspectRatio || '16:9')
   }
 
-  return { base64, mimeType: 'image/png', description }
+  return description
 }
 
 async function callTextModel(provider: Provider, model: string, apiKey: string, system: string, user: string): Promise<string> {
@@ -257,6 +275,17 @@ async function callTextModel(provider: Provider, model: string, apiKey: string, 
   })
   const data = await parseModelResponse(response)
   return data.choices?.[0]?.message?.content || ''
+}
+
+async function callSvgModel(provider: Provider, model: string, apiKey: string, description: string): Promise<string> {
+  const rawSvg = await callTextModel(
+    provider,
+    model,
+    apiKey,
+    svgSystemPrompt(),
+    svgUserPrompt(description),
+  )
+  return sanitizeSvg(rawSvg)
 }
 
 async function callImageModel(provider: Provider, model: string, apiKey: string, prompt: string, aspectRatio: string): Promise<string> {
@@ -408,22 +437,39 @@ async function fetchImageAsBase64(url: string) {
   return Buffer.from(arrayBuffer).toString('base64')
 }
 
-async function saveImage(jobId: string, candidateId: number, base64: string, mimeType: string) {
-  const filename = `${jobId}/candidate-${candidateId}.png`
+async function saveResult(
+  jobId: string,
+  candidateId: number,
+  content: string,
+  mimeType: string,
+  encoding: 'base64' | 'utf8',
+) {
+  const filename = `${jobId}/candidate-${candidateId}.${resultExtension(mimeType)}`
+  const buffer = encoding === 'base64' ? Buffer.from(content, 'base64') : Buffer.from(content, 'utf8')
+  const base64 = encoding === 'base64' ? content : buffer.toString('base64')
   try {
     const bucket = cloud.storage.bucket(bucketName)
-    await bucket.writeFile(filename, Buffer.from(base64, 'base64'), { ContentType: mimeType })
+    await bucket.writeFile(filename, buffer, { ContentType: mimeType })
     return {
       storage: 'bucket',
+      filename,
       url: await bucket.getDownloadUrl(filename, 3600 * 24 * 7),
     }
   } catch (error: any) {
     return {
       storage: 'database-data-url',
+      filename,
       url: `data:${mimeType};base64,${base64}`,
       storageError: error?.message || String(error),
     }
   }
+}
+
+function resultExtension(mimeType: string) {
+  if (mimeType === 'image/svg+xml') return 'svg'
+  if (mimeType === 'image/webp') return 'webp'
+  if (mimeType === 'image/jpeg') return 'jpg'
+  return 'png'
 }
 
 async function markFailed(jobId: string, error: string) {
@@ -530,10 +576,81 @@ function diagramPromptFromDescription(description: string) {
   ].join('\n')
 }
 
+function svgSystemPrompt() {
+  return [
+    'You are the SVG Diagram Agent for PaperBanana.',
+    'Return one standalone, valid SVG document only. Do not use Markdown fences.',
+    'Use inline SVG elements such as rect, circle, ellipse, path, line, polyline, polygon, text, defs, marker, linearGradient, and g.',
+    'Do not use script, style, foreignObject, image, external URLs, event handlers, JavaScript links, or embedded HTML.',
+    'Use a clean academic diagram style with readable labels, balanced whitespace, and a light background.',
+    'Do not include the figure title or caption text inside the SVG.',
+  ].join('\n')
+}
+
+function svgUserPrompt(description: string) {
+  return [
+    'Create an editable SVG academic diagram from this visual specification.',
+    'Use viewBox="0 0 1600 900" unless the layout clearly needs another proportional viewBox.',
+    'Prefer simple geometric shapes, arrows, concise labels, and semantic grouping.',
+    '',
+    description,
+  ].join('\n')
+}
+
+function sanitizeSvg(raw: string) {
+  let svg = extractSvg(raw)
+    .replace(/<\?xml[\s\S]*?\?>/gi, '')
+    .replace(/<!doctype[\s\S]*?>/gi, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .trim()
+
+  if (!/^<svg[\s>]/i.test(svg)) {
+    throw new Error('SVG model output did not contain a valid <svg> root')
+  }
+
+  const forbiddenElement = /<(script|foreignObject|iframe|object|embed|link|meta|base|audio|video|canvas|image)\b/i
+  if (forbiddenElement.test(svg)) {
+    throw new Error('SVG output contained unsupported unsafe elements')
+  }
+
+  const styleBlocks = [...svg.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map((match) => match[1] || '')
+  const unsafeStylePattern = /(@import|javascript:|url\s*\(\s*['"]?\s*(?:https?:|data:|javascript:))/i
+  if (styleBlocks.some((style) => unsafeStylePattern.test(style))) {
+    throw new Error('SVG output contained unsupported unsafe style references')
+  }
+
+  const unsafePattern = /(on[a-z]+\s*=|javascript:|data:text\/html|@import|url\s*\(\s*['"]?\s*(?:https?:|data:|javascript:)|href\s*=\s*['"]?\s*(?:https?:|data:|javascript:)|xlink:href\s*=\s*['"]?\s*(?:https?:|data:|javascript:))/i
+  if (unsafePattern.test(svg)) {
+    throw new Error('SVG output contained unsupported unsafe references')
+  }
+
+  svg = svg.replace(/\s+xmlns:xlink=(["'])[^"']*\1/gi, '')
+  if (!/\sxmlns=/.test(svg)) {
+    svg = svg.replace(/^<svg/i, '<svg xmlns="http://www.w3.org/2000/svg"')
+  }
+  return svg
+}
+
+function extractSvg(raw: string) {
+  const text = String(raw || '')
+    .trim()
+    .replace(/^```(?:svg|xml)?\s*/i, '')
+    .replace(/```\s*$/i, '')
+    .trim()
+  const start = text.search(/<svg[\s>]/i)
+  const end = text.toLowerCase().lastIndexOf('</svg>')
+  if (start < 0 || end < 0) {
+    throw new Error('SVG model did not return SVG markup')
+  }
+  return text.slice(start, end + '</svg>'.length)
+}
+
 function validateCreateBody(body: CreateJobBody) {
   if (!['openrouter', 'gemini', 'openai', 'bailian'].includes(body.provider)) throw new Error('Invalid provider')
   if (!body.methodContent || body.methodContent.trim().length < 20) throw new Error('methodContent is too short')
   if (!body.caption || body.caption.trim().length < 3) throw new Error('caption is required')
+  const requestedFormat = body.outputFormat || body.output_format
+  if (requestedFormat && !['png', 'svg'].includes(requestedFormat)) throw new Error('Invalid outputFormat')
   if (!body.mainModelName) throw new Error('mainModelName is required')
   if (!body.imageModelName) throw new Error('imageModelName is required')
 }
@@ -553,6 +670,7 @@ function publicJob(job: any) {
     provider: job.provider,
     methodContent: job.methodContent,
     caption: job.caption,
+    outputFormat: job.outputFormat || 'png',
     mainModelName: job.mainModelName,
     imageModelName: job.imageModelName,
     pipelineMode: job.pipelineMode,
@@ -605,6 +723,10 @@ function toOpenRouterModel(model: string) {
 function normalizeModelName(provider: string, model: string) {
   if (provider === 'gemini' && model === 'gemini-3.1-flash-image-preview') return 'gemini-3.1-flash-image'
   return model
+}
+
+function normalizeOutputFormat(format?: string): OutputFormat {
+  return format === 'svg' ? 'svg' : 'png'
 }
 
 function clamp(value: number, min: number, max: number) {

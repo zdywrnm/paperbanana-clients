@@ -718,6 +718,10 @@ button {
   margin-bottom: 0;
 }
 
+.output-format-field {
+  margin: 0 0 14px;
+}
+
 .primary-button,
 .admin-controls button {
   display: inline-flex;
@@ -859,6 +863,33 @@ figcaption {
   color: var(--muted);
   font-size: 13px;
   font-weight: 650;
+}
+
+.result-caption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.result-caption span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.result-caption a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.result-caption a:hover {
+  color: var(--accent);
 }
 
 .running-line,

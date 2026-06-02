@@ -1,5 +1,6 @@
 import { AlertTriangle } from 'lucide-react';
-import { formatConfigurationMode, formatDate, formatErrorMessage, resolveImageUrl } from '../utils';
+import { formatConfigurationMode, formatDate, formatErrorMessage, formatOutputFormat } from '../utils';
+import ResultFigure from './ResultFigure';
 import StatusBadge from './StatusBadge';
 
 export default function JobTable({ jobs, showUser, apiBase }) {
@@ -25,6 +26,10 @@ export default function JobTable({ jobs, showUser, apiBase }) {
               <span>
                 <strong>类别</strong>
                 {item.infographic_category || '方法框架图'}
+              </span>
+              <span>
+                <strong>格式</strong>
+                {formatOutputFormat(item.output_format)}
               </span>
               {showUser ? (
                 <span>
@@ -64,10 +69,7 @@ export default function JobTable({ jobs, showUser, apiBase }) {
           {item.status === 'succeeded' && (item.result_images || []).some((image) => image.url) ? (
             <div className="job-record-images">
               {(item.result_images || []).filter((image) => image.url).map((image) => (
-                <figure key={image.filename}>
-                  <img src={resolveImageUrl(apiBase, image.url)} alt={`任务结果图 ${image.candidate_id + 1}`} loading="lazy" />
-                  <figcaption>结果图 {image.candidate_id + 1}</figcaption>
-                </figure>
+                <ResultFigure key={image.filename} image={image} apiBase={apiBase} labelPrefix="结果图" outputFormat={item.output_format} />
               ))}
             </div>
           ) : null}

@@ -34,6 +34,7 @@ import {
 } from './config';
 import {
   INFOGRAPHIC_CATEGORIES,
+  OUTPUT_FORMATS,
   PROVIDERS,
   QUICK_START_EXAMPLES,
   SAMPLE_METHOD,
@@ -47,7 +48,7 @@ import JobTable from './components/JobTable';
 import Select from './components/Select';
 import TaskRecordsPanel from './components/TaskRecordsPanel';
 import { useAuthSession } from './hooks/useAuthSession';
-import { formatErrorMessage } from './utils';
+import { formatErrorMessage, formatOutputFormat } from './utils';
 
 export default function App() {
   const authSession = useAuthSession();
@@ -60,6 +61,7 @@ export default function App() {
   const [methodContent, setMethodContent] = useState(SAMPLE_METHOD);
   const [caption, setCaption] = useState('图 1：所提出的多智能体学术图示生成框架总览。');
   const [infographicCategory, setInfographicCategory] = useState('method_framework');
+  const [outputFormat, setOutputFormat] = useState('png');
   const [mainModelName, setMainModelName] = useState(PROVIDERS.bailian.mainModel);
   const [imageGenModelName, setImageGenModelName] = useState(PROVIDERS.bailian.imageModel);
   const [pipelineMode, setPipelineMode] = useState('demo_planner_critic');
@@ -163,6 +165,7 @@ export default function App() {
         methodContent,
         caption,
         infographicCategory: selectedInfographicCategory[1],
+        outputFormat,
         mainModelName: isAdvancedMode ? mainModelName : providerConfig.mainModel,
         imageGenModelName: isAdvancedMode ? imageGenModelName : providerConfig.imageModel,
         pipelineMode: isAdvancedMode ? pipelineMode : 'demo_planner_critic',
@@ -349,6 +352,10 @@ export default function App() {
             </div>
           </div>
 
+          <div className="output-format-field">
+            <Select label="导出格式" value={outputFormat} onChange={setOutputFormat} options={OUTPUT_FORMATS} />
+          </div>
+
           <details className="api-keys-panel" open>
             <summary><KeyRound size={17} /> API 密钥</summary>
             <p>不需要填写全部密钥，只填当前选中的模型接口即可。</p>
@@ -374,6 +381,7 @@ export default function App() {
               <span>{defaultImageModelLabel}</span>
               <span>规划器 + 评审器</span>
               <span>16:9</span>
+              <span>{formatOutputFormat(outputFormat)}</span>
             </div>
           ) : (
             <>

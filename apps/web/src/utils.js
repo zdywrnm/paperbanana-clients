@@ -20,6 +20,11 @@ export function formatConfigurationMode(mode) {
   return mode === 'simple' ? '普通模式' : '专业模式';
 }
 
+export function formatOutputFormat(format) {
+  if (format === 'svg') return 'SVG 矢量图';
+  return 'PNG 图片';
+}
+
 export function formatDate(value) {
   if (!value) return '';
   return new Intl.DateTimeFormat('zh-CN', {

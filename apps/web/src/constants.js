@@ -192,6 +192,11 @@ export const INFOGRAPHIC_CATEGORIES = [
   ['concept_map', '概念关系图', '突出关键词、层级、类别和概念之间的关系。'],
 ];
 
+export const OUTPUT_FORMATS = [
+  ['png', 'PNG 图片'],
+  ['svg', 'SVG 矢量图'],
+];
+
 export const QUICK_START_EXAMPLES = [
   {
     id: 'paper-framework',

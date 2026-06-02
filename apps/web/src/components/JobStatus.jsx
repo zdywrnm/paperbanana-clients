@@ -1,5 +1,6 @@
 import { AlertTriangle, Loader2, Settings2 } from 'lucide-react';
-import { formatConfigurationMode, formatErrorMessage, resolveImageUrl } from '../utils';
+import { formatConfigurationMode, formatErrorMessage, formatOutputFormat } from '../utils';
+import ResultFigure from './ResultFigure';
 import StatusBadge from './StatusBadge';
 
 export default function JobStatus({ job, apiBase }) {
@@ -19,15 +20,13 @@ export default function JobStatus({ job, apiBase }) {
         <span>{formatConfigurationMode(job.configuration_mode)}</span>
         <span>{job.provider}</span>
         <span>{job.aspect_ratio}</span>
+        <span>{formatOutputFormat(job.output_format)}</span>
         <span>{job.num_candidates} 张候选图</span>
       </div>
       {job.error ? <div className="error-line"><AlertTriangle size={16} /> {formatErrorMessage(job.error)}</div> : null}
       <div className="image-grid">
         {job.result_images.map((image) => (
-          <figure key={image.filename}>
-            <img src={resolveImageUrl(apiBase, image.url)} alt={`候选图 ${image.candidate_id + 1}`} />
-            <figcaption>候选图 {image.candidate_id + 1}</figcaption>
-          </figure>
+          <ResultFigure key={image.filename} image={image} apiBase={apiBase} outputFormat={job.output_format} />
         ))}
       </div>
       {job.status === 'running' || job.status === 'queued' ? (
