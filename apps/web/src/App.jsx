@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Apple,
@@ -73,6 +73,7 @@ export default function App() {
   const [mock, setMock] = useState(false);
   const [currentJobId, setCurrentJobId] = useState('');
   const [job, setJob] = useState(null);
+  const latestJobRef = useRef(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [adminToken, setAdminToken] = useState('');
@@ -116,9 +117,15 @@ export default function App() {
     const load = async () => {
       try {
         const data = await getJobRequest(apiBaseNormalized, health, currentJobId);
-        if (!cancelled) setJob(data);
+        if (!cancelled) {
+          latestJobRef.current = data;
+          setJob(data);
+          setError('');
+        }
       } catch (err) {
-        if (!cancelled) setError(err.message);
+        const latestJob = latestJobRef.current;
+        const hasVisibleResult = latestJob?.status === 'succeeded' || (latestJob?.result_images || []).some((image) => image.url);
+        if (!cancelled && !hasVisibleResult) setError(err.message);
       }
     };
     load();
@@ -149,6 +156,7 @@ export default function App() {
     setError('');
     setIsSubmitting(true);
     setJob(null);
+    latestJobRef.current = null;
     try {
       const scopedApiKeys = {
         openrouter: '',

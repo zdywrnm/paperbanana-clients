@@ -7,6 +7,7 @@ export function resolveImageUrl(apiBase, url) {
 export function formatErrorMessage(message) {
   if (!message) return '';
   if (message.includes('Missing API key')) return '缺少所选模型接口的 API 密钥。';
+  if (message.includes('Failed to fetch')) return '任务状态刷新失败，页面会自动重试。';
   if (message.includes('Please log in') || message.includes('请先登录') || message.includes('Unauthorized')) return '请先登录后再使用生成服务。';
   if (message.includes('password')) return '密码至少需要 8 位。';
   if (message.includes('ADMIN_TOKEN is not configured')) return '管理接口未启用：还没有配置 ADMIN_TOKEN。';
