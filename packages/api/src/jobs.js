@@ -76,12 +76,12 @@ export async function createJobRequest(apiBase, health, payload) {
   });
 }
 
-export async function getJobRequest(apiBase, health, jobId) {
+export async function getJobRequest(apiBase, health, jobId, options = {}) {
   if (shouldUseLaf(apiBase, health)) {
     const data = await fetchJson(lafEndpoint(apiBase), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'getJob', jobId }),
+      body: JSON.stringify({ action: 'getJob', jobId, adminToken: options.adminToken || undefined }),
     });
     return normalizeJob(data.job);
   }
@@ -95,7 +95,8 @@ export async function adminJobsRequest(apiBase, health, adminToken) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'adminJobs', adminToken, limit: 50 }),
     });
-    return { jobs: (data.jobs || []).map(normalizeJob) };
+    const jobs = (data.jobs || []).map(normalizeJob);
+    return { jobs: await hydrateRecordImages(apiBase, health, jobs, { adminToken }) };
   }
   return fetchJson(`${apiBase}/api/admin/jobs?limit=50`, {
     headers: { 'x-admin-token': adminToken },
@@ -132,13 +133,14 @@ export async function userJobsRequest(apiBase, health) {
   throw new Error('任务记录需要先启用登录网关。');
 }
 
-export async function hydrateRecordImages(apiBase, health, jobs) {
+export async function hydrateRecordImages(apiBase, health, jobs, options = {}) {
   return Promise.all(jobs.map(async (job) => {
-    const hasImageUrl = (job.result_images || []).some((image) => image.url);
-    const hasResult = job.result_image_count > 0 || (job.result_images || []).length > 0;
-    if (job.status !== 'succeeded' || hasImageUrl || !hasResult) return job;
+    const images = job.result_images || [];
+    const hasResult = job.result_image_count > 0 || images.length > 0;
+    const needsFreshDetail = images.some((image) => image.storage === 'bucket' || (image.url && !image.url.startsWith('data:')));
+    if (job.status !== 'succeeded' || (!hasResult && !needsFreshDetail)) return job;
     try {
-      const detail = await getJobRequest(apiBase, health, job.id);
+      const detail = await getJobRequest(apiBase, health, job.id, options);
       return { ...job, ...detail };
     } catch {
       return job;
@@ -188,6 +190,7 @@ function normalizeJob(job = {}) {
     result_images: (job.result_images || job.resultImages || []).map((image, index) => ({
       filename: image.filename || image.url || `${index}`,
       url: image.url,
+      storage: image.storage || '',
       candidate_id: image.candidate_id ?? image.candidateId ?? index,
       mime_type: image.mime_type || image.mimeType || '',
     })),

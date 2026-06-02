@@ -879,17 +879,29 @@ figcaption {
   white-space: nowrap;
 }
 
-.result-caption a {
+.result-caption a,
+.result-caption button {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   flex: 0 0 auto;
+  padding: 0;
+  border: 0;
   color: var(--ink);
+  background: transparent;
+  font-size: 13px;
+  font-weight: 700;
   text-decoration: none;
 }
 
-.result-caption a:hover {
+.result-caption a:hover,
+.result-caption button:hover {
   color: var(--accent);
+}
+
+.result-caption button:disabled {
+  cursor: wait;
+  opacity: 0.72;
 }
 
 .running-line,

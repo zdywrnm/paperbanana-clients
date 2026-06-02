@@ -103,7 +103,8 @@ app.post('/paperbanana-api', async (req, res) => {
       const session = await optionalSession(req);
       const data = await callLaf(withGatewayToken(req.body));
       const ownerId = data?.job?.userId || data?.job?.user_id || '';
-      if (ownerId && ownerId !== session?.user?.id) {
+      const isAdmin = isValidAdminToken(req.body?.adminToken);
+      if (ownerId && !isAdmin && ownerId !== session?.user?.id) {
         return res.status(403).json({ code: 403, error: 'Forbidden' });
       }
       return sendLafResponse(res, data);
@@ -218,6 +219,10 @@ function requireAdminToken(token) {
     error.status = 401;
     throw error;
   }
+}
+
+function isValidAdminToken(token) {
+  return Boolean(adminToken && token === adminToken);
 }
 
 async function listAuthUsers(body = {}) {

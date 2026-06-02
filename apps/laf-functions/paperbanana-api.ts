@@ -69,7 +69,7 @@ export default async function (ctx: FunctionContext) {
 
   try {
     if (action === 'health') {
-      return ok({ ok: true, runtime: 'laf', version: '0.1.9' })
+      return ok({ ok: true, runtime: 'laf', version: '0.1.10' })
     }
     if (action === 'createJob') {
       return await createJob(body as CreateJobBody, ctx)
@@ -156,7 +156,7 @@ async function getJob(jobId: string) {
   if (!jobId) return fail('jobId is required', 400)
   const job = await jobs.findOne({ _id: jobId })
   if (!job) return fail('Job not found', 404)
-  return ok({ job: publicJob(job) })
+  return ok({ job: await publicJob(job) })
 }
 
 async function adminJobs(body: AdminJobsBody) {
@@ -165,7 +165,7 @@ async function adminJobs(body: AdminJobsBody) {
   if (body.adminToken !== expected) return fail('Invalid admin token', 401)
   const limit = clamp(Number(body.limit || 50), 1, 200)
   const list = await jobs.find({}).sort({ createdAt: -1 }).limit(limit).toArray()
-  return ok({ jobs: list.map(publicJob) })
+  return ok({ jobs: await Promise.all(list.map(publicJob)) })
 }
 
 async function userJobs(body: UserJobsBody) {
@@ -177,7 +177,7 @@ async function userJobs(body: UserJobsBody) {
     ? { $or: [{ userId }, { user_id: userId }] }
     : { $or: [{ userEmail }, { user_email: userEmail }] }
   const list = await jobs.find(query).sort({ createdAt: -1 }).limit(limit).toArray()
-  return ok({ jobs: list.map(publicJob) })
+  return ok({ jobs: await Promise.all(list.map(publicJob)) })
 }
 
 async function runJob(
@@ -689,7 +689,7 @@ function selectApiKey(provider: Provider, apiKeys: ApiKeys) {
   return ''
 }
 
-function publicJob(job: any) {
+async function publicJob(job: any) {
   return {
     id: job._id,
     status: job.status,
@@ -706,7 +706,7 @@ function publicJob(job: any) {
     numCandidates: job.numCandidates,
     maxCriticRounds: job.maxCriticRounds,
     promptCharCount: job.promptCharCount,
-    resultImages: job.resultImages || [],
+    resultImages: await refreshResultImageUrls(job.resultImages || []),
     logs: job.logs || [],
     error: job.error || '',
     createdAt: job.createdAt,
@@ -714,6 +714,22 @@ function publicJob(job: any) {
     startedAt: job.startedAt,
     completedAt: job.completedAt,
   }
+}
+
+async function refreshResultImageUrls(images: any[]) {
+  if (!images.length) return []
+  const bucket = cloud.storage.bucket(bucketName)
+  return await Promise.all(images.map(async (image) => {
+    if (!image?.filename || String(image.url || '').startsWith('data:')) return image
+    try {
+      return {
+        ...image,
+        url: await bucket.getDownloadUrl(image.filename, 3600 * 24 * 7),
+      }
+    } catch {
+      return image
+    }
+  }))
 }
 
 function ok(data: any) {
