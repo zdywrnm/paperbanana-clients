@@ -9,6 +9,7 @@ This app contains the Node.js gateway deployed on Sealos for PaperBanana account
 - Proxy PaperBanana job requests to the Laf function at `/paperbanana-api`.
 - Attach the logged-in user's `userId` and `userEmail` to `createJob` requests.
 - Protect `myJobs` and owner-scoped `getJob` access.
+- Expose an admin-only account list for registered/logged-in users.
 
 ## Production
 
@@ -31,6 +32,7 @@ Required variables:
 - `MONGODB_DB`: MongoDB database name.
 - `LAF_API_URL`: Laf function URL.
 - `PAPERBANANA_GATEWAY_TOKEN`: shared token forwarded to Laf when direct public writes are restricted.
+- `ADMIN_TOKEN`: shared owner token for the website admin panel.
 
 ## Local Development
 
@@ -74,4 +76,5 @@ After the first successful workflow run, make the GHCR package public or configu
 
 - This app does not store model API keys. User-provided model keys are forwarded only as part of the job request.
 - `PAPERBANANA_GATEWAY_TOKEN` only blocks direct Laf writes if the Laf function also validates it.
+- `adminUsers` returns only sanitized user profile and session summary fields; it does not expose passwords, session tokens, or auth account secrets.
 - The archived Laf function source lives in `apps/laf-functions/`.

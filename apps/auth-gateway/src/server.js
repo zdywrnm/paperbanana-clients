@@ -2,13 +2,14 @@ import 'dotenv/config';
 import cors from 'cors';
 import express from 'express';
 import { fromNodeHeaders, toNodeHandler } from 'better-auth/node';
-import { auth, closeAuthDatabase } from './auth.js';
+import { auth, authDb, closeAuthDatabase } from './auth.js';
 import { parseList, requiredEnv } from './env.js';
 
 const app = express();
 const port = Number(process.env.PORT || 3005);
 const lafApiUrl = process.env.LAF_API_URL || 'https://sdswgya641.sealoshzh.site/paperbanana-api';
 const gatewayToken = process.env.PAPERBANANA_GATEWAY_TOKEN || '';
+const adminToken = process.env.ADMIN_TOKEN || '';
 const allowedOrigins = new Set(
   parseList(
     process.env.FRONTEND_ORIGINS ||
@@ -77,6 +78,12 @@ app.post('/paperbanana-api', async (req, res) => {
     if (action === 'adminJobs' || action === 'initDatabase') {
       const data = await callLaf(withGatewayToken(req.body));
       return sendLafResponse(res, data);
+    }
+
+    if (action === 'adminUsers') {
+      requireAdminToken(req.body?.adminToken);
+      const data = await listAuthUsers(req.body);
+      return res.json({ code: 0, ...data });
     }
 
     if (action === 'createJob') {
@@ -198,4 +205,84 @@ function normalizeModelName(provider, model) {
     return 'gemini-3.1-flash-image';
   }
   return model;
+}
+
+function requireAdminToken(token) {
+  if (!adminToken) {
+    const error = new Error('Admin API disabled: ADMIN_TOKEN is not configured');
+    error.status = 503;
+    throw error;
+  }
+  if (token !== adminToken) {
+    const error = new Error('Invalid admin token');
+    error.status = 401;
+    throw error;
+  }
+}
+
+async function listAuthUsers(body = {}) {
+  const limit = clamp(Number(body.limit || 100), 1, 500);
+  const users = await authDb
+    .collection('user')
+    .find({})
+    .sort({ createdAt: -1, _id: -1 })
+    .limit(limit)
+    .toArray();
+
+  const userIds = users.map((user) => user._id).filter(Boolean);
+  const userIdStrings = userIds.map((id) => String(id));
+  const sessionLookup = await latestSessionsByUser(userIds, userIdStrings);
+
+  return {
+    users: users.map((user) => publicAuthUser(user, sessionLookup.get(String(user._id)))),
+  };
+}
+
+async function latestSessionsByUser(userIds, userIdStrings) {
+  if (!userIds.length) return new Map();
+  const rows = await authDb
+    .collection('session')
+    .aggregate([
+      {
+        $match: {
+          $or: [
+            { userId: { $in: userIds } },
+            { userId: { $in: userIdStrings } },
+          ],
+        },
+      },
+      { $sort: { updatedAt: -1, createdAt: -1, _id: -1 } },
+      {
+        $group: {
+          _id: '$userId',
+          sessionCount: { $sum: 1 },
+          latestSessionAt: { $first: { $ifNull: ['$updatedAt', '$createdAt'] } },
+          lastIpAddress: { $first: '$ipAddress' },
+          lastUserAgent: { $first: '$userAgent' },
+        },
+      },
+    ])
+    .toArray();
+  return new Map(rows.map((row) => [String(row._id), row]));
+}
+
+function publicAuthUser(user, session) {
+  return {
+    id: String(user._id || user.id || ''),
+    email: user.email || '',
+    name: user.name || '',
+    emailVerified: Boolean(user.emailVerified),
+    image: user.image || '',
+    createdAt: user.createdAt || '',
+    updatedAt: user.updatedAt || '',
+    lastLoginAt: session?.latestSessionAt || '',
+    sessionCount: Number(session?.sessionCount || 0),
+    lastIpAddress: session?.lastIpAddress || '',
+    lastUserAgent: session?.lastUserAgent || '',
+  };
+}
+
+function clamp(value, min, max) {
+  if (Number.isNaN(value)) return min;
+  return Math.max(min, Math.min(value, max));
 }

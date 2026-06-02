@@ -102,6 +102,18 @@ export async function adminJobsRequest(apiBase, health, adminToken) {
   });
 }
 
+export async function adminUsersRequest(apiBase, health, adminToken) {
+  if (BACKEND_MODE === 'gateway' || health?.backendMode === 'gateway') {
+    const data = await fetchJson(lafEndpoint(apiBase), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'adminUsers', adminToken, limit: 100 }),
+    });
+    return { users: (data.users || []).map(normalizeAuthUser) };
+  }
+  throw new Error('账号后台需要先启用登录网关。');
+}
+
 export async function userJobsRequest(apiBase, health) {
   if (BACKEND_MODE === 'gateway' || health?.backendMode === 'gateway') {
     const data = await fetchJson(lafEndpoint(apiBase), {
@@ -185,5 +197,21 @@ function normalizeJob(job = {}) {
     updated_at: job.updated_at || job.updatedAt,
     started_at: job.started_at || job.startedAt,
     completed_at: job.completed_at || job.completedAt,
+  };
+}
+
+function normalizeAuthUser(user = {}) {
+  return {
+    id: user.id || user._id || '',
+    email: user.email || '',
+    name: user.name || '',
+    email_verified: Boolean(user.email_verified ?? user.emailVerified),
+    image: user.image || '',
+    created_at: user.created_at || user.createdAt,
+    updated_at: user.updated_at || user.updatedAt,
+    last_login_at: user.last_login_at || user.lastLoginAt,
+    session_count: Number(user.session_count ?? user.sessionCount ?? 0),
+    last_ip_address: user.last_ip_address || user.lastIpAddress || '',
+    last_user_agent: user.last_user_agent || user.lastUserAgent || '',
   };
 }

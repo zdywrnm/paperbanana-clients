@@ -17,6 +17,7 @@ const cookieSameSite = (process.env.COOKIE_SAME_SITE || '').toLowerCase();
 
 export const mongoClient = new MongoClient(mongoUri);
 await mongoClient.connect();
+export const authDb = mongoClient.db(mongoDbName);
 
 const advanced = {
   useSecureCookies: isProduction(),
@@ -41,7 +42,7 @@ export const auth = betterAuth({
   secret: authSecret,
   baseURL: authBaseUrl,
   trustedOrigins,
-  database: mongodbAdapter(mongoClient.db(mongoDbName)),
+  database: mongodbAdapter(authDb),
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: false,

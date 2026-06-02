@@ -1021,6 +1021,115 @@ figcaption {
   background: var(--ink);
 }
 
+.admin-section {
+  display: grid;
+  gap: 12px;
+  padding-top: 16px;
+  margin-top: 16px;
+  border-top: 1px solid var(--hairline);
+}
+
+.admin-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.admin-section-title svg {
+  color: var(--accent);
+  flex: 0 0 auto;
+}
+
+.admin-section-title strong {
+  font-weight: 760;
+}
+
+.admin-section-title span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-users-table {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-users-head,
+.admin-user-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.25fr) minmax(110px, 0.72fr) minmax(110px, 0.72fr) minmax(120px, 0.72fr) minmax(180px, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.admin-users-head {
+  padding: 0 12px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.admin-user-row {
+  min-height: 66px;
+  padding: 12px;
+  color: var(--ink-soft);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.admin-user-row > span {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  overflow: hidden;
+}
+
+.admin-user-row > span:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.admin-user-row strong,
+.admin-user-row small,
+.admin-user-row > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-user-row strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 720;
+}
+
+.admin-user-row small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.admin-user-row svg {
+  flex: 0 0 auto;
+  color: var(--sage);
+}
+
+.admin-user-row svg + small,
+.admin-user-row .lucide-x-circle {
+  color: var(--muted);
+}
+
 .job-table {
   display: grid;
   gap: 12px;
@@ -1263,8 +1372,17 @@ figcaption {
   .job-record-meta,
   .job-models,
   .job-prompts,
-  .job-record-images {
+  .job-record-images,
+  .admin-user-row {
     grid-template-columns: 1fr;
+  }
+
+  .admin-users-head {
+    display: none;
+  }
+
+  .admin-user-row > span {
+    align-items: flex-start;
   }
 
   .job-record-images {

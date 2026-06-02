@@ -17,6 +17,8 @@ type CreateJobBody = {
   apiKeys: ApiKeys
   methodContent: string
   caption: string
+  userId?: string
+  userEmail?: string
   outputFormat?: OutputFormat
   output_format?: OutputFormat
   mainModelName: string
@@ -38,11 +40,18 @@ type AdminJobsBody = {
   limit?: number
 }
 
+type UserJobsBody = {
+  action: 'userJobs'
+  userId: string
+  userEmail?: string
+  limit?: number
+}
+
 type HealthBody = {
   action: 'health'
 }
 
-type RequestBody = CreateJobBody | GetJobBody | AdminJobsBody | HealthBody
+type RequestBody = CreateJobBody | GetJobBody | AdminJobsBody | UserJobsBody | HealthBody
 
 const db = cloud.mongo.db
 const jobs = db.collection('paperbanana_jobs')
@@ -60,7 +69,7 @@ export default async function (ctx: FunctionContext) {
 
   try {
     if (action === 'health') {
-      return ok({ ok: true, runtime: 'laf', version: '0.1.8' })
+      return ok({ ok: true, runtime: 'laf', version: '0.1.9' })
     }
     if (action === 'createJob') {
       return await createJob(body as CreateJobBody, ctx)
@@ -70,6 +79,9 @@ export default async function (ctx: FunctionContext) {
     }
     if (action === 'adminJobs') {
       return await adminJobs(body as AdminJobsBody)
+    }
+    if (action === 'userJobs') {
+      return await userJobs(body as UserJobsBody)
     }
     return fail(`Unknown action: ${action}`, 400)
   } catch (error: any) {
@@ -106,6 +118,8 @@ async function createJob(body: CreateJobBody, ctx: FunctionContext) {
     _id: jobId,
     status: 'queued' as JobStatus,
     provider: normalizedBody.provider,
+    userId: normalizedBody.userId || '',
+    userEmail: normalizedBody.userEmail || '',
     methodContent: normalizedBody.methodContent,
     caption: normalizedBody.caption,
     mainModelName: normalizedBody.mainModelName,
@@ -151,6 +165,18 @@ async function adminJobs(body: AdminJobsBody) {
   if (body.adminToken !== expected) return fail('Invalid admin token', 401)
   const limit = clamp(Number(body.limit || 50), 1, 200)
   const list = await jobs.find({}).sort({ createdAt: -1 }).limit(limit).toArray()
+  return ok({ jobs: list.map(publicJob) })
+}
+
+async function userJobs(body: UserJobsBody) {
+  const userId = body.userId?.trim() || ''
+  const userEmail = body.userEmail?.trim() || ''
+  if (!userId && !userEmail) return fail('userId is required', 400)
+  const limit = clamp(Number(body.limit || 50), 1, 200)
+  const query = userId
+    ? { $or: [{ userId }, { user_id: userId }] }
+    : { $or: [{ userEmail }, { user_email: userEmail }] }
+  const list = await jobs.find(query).sort({ createdAt: -1 }).limit(limit).toArray()
   return ok({ jobs: list.map(publicJob) })
 }
 
@@ -668,6 +694,8 @@ function publicJob(job: any) {
     id: job._id,
     status: job.status,
     provider: job.provider,
+    userId: job.userId || job.user_id || '',
+    userEmail: job.userEmail || job.user_email || '',
     methodContent: job.methodContent,
     caption: job.caption,
     outputFormat: job.outputFormat || 'png',

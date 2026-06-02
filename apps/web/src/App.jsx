@@ -16,9 +16,11 @@ import {
   ShieldCheck,
   Smartphone,
   Sparkles,
+  Users,
 } from 'lucide-react';
 import {
   adminJobsRequest,
+  adminUsersRequest,
   createJobRequest,
   fetchBackendHealth,
   getJobRequest,
@@ -40,6 +42,7 @@ import {
   SAMPLE_METHOD,
 } from './constants';
 import ApiKeyGuide from './components/ApiKeyGuide';
+import AdminUsersTable from './components/AdminUsersTable';
 import AuthPanel from './components/AuthPanel';
 import AuthUnavailablePanel from './components/AuthUnavailablePanel';
 import ExampleTemplates from './components/ExampleTemplates';
@@ -78,7 +81,9 @@ export default function App() {
   const [error, setError] = useState('');
   const [adminToken, setAdminToken] = useState('');
   const [adminJobs, setAdminJobs] = useState([]);
+  const [adminUsers, setAdminUsers] = useState([]);
   const [adminError, setAdminError] = useState('');
+  const [adminUsersError, setAdminUsersError] = useState('');
   const [userJobs, setUserJobs] = useState([]);
   const [userJobsError, setUserJobsError] = useState('');
 
@@ -193,13 +198,24 @@ export default function App() {
     }
   }
 
-  async function loadAdminJobs() {
+  async function loadAdminOverview() {
     setAdminError('');
-    try {
-      const data = await adminJobsRequest(apiBaseNormalized, health, adminToken);
-      setAdminJobs(data.jobs || []);
-    } catch (err) {
-      setAdminError(err.message);
+    setAdminUsersError('');
+    const [jobsResult, usersResult] = await Promise.allSettled([
+      adminJobsRequest(apiBaseNormalized, health, adminToken),
+      adminUsersRequest(apiBaseNormalized, health, adminToken),
+    ]);
+
+    if (jobsResult.status === 'fulfilled') {
+      setAdminJobs(jobsResult.value.jobs || []);
+    } else {
+      setAdminError(jobsResult.reason?.message || String(jobsResult.reason));
+    }
+
+    if (usersResult.status === 'fulfilled') {
+      setAdminUsers(usersResult.value.users || []);
+    } else {
+      setAdminUsersError(usersResult.reason?.message || String(usersResult.reason));
     }
   }
 
@@ -496,15 +512,31 @@ export default function App() {
           <Eye size={20} />
           <div>
             <h2>站长观察面板</h2>
-            <p>输入 ADMIN_TOKEN 查看最近任务、模型选择和失败原因。</p>
+            <p>输入 ADMIN_TOKEN 查看账号记录、最近任务、模型选择和失败原因。</p>
           </div>
         </div>
         <div className="admin-controls">
           <input type="password" value={adminToken} onChange={(event) => setAdminToken(event.target.value)} placeholder="ADMIN_TOKEN" />
-          <button type="button" onClick={loadAdminJobs}><RefreshCcw size={17} />刷新</button>
+          <button type="button" onClick={loadAdminOverview}><RefreshCcw size={17} />刷新</button>
         </div>
-        {adminError ? <div className="error-line"><AlertTriangle size={16} /> {formatErrorMessage(adminError)}</div> : null}
-        <JobTable jobs={adminJobs} showUser apiBase={apiBaseNormalized} />
+        <div className="admin-section">
+          <div className="admin-section-title">
+            <Users size={17} />
+            <strong>账号记录</strong>
+            <span>{adminUsers.length ? `${adminUsers.length} 个账号` : '注册/登录后会出现在这里'}</span>
+          </div>
+          {adminUsersError ? <div className="error-line"><AlertTriangle size={16} /> {formatErrorMessage(adminUsersError)}</div> : null}
+          <AdminUsersTable users={adminUsers} />
+        </div>
+        <div className="admin-section">
+          <div className="admin-section-title">
+            <FileText size={17} />
+            <strong>最近任务</strong>
+            <span>{adminJobs.length ? `${adminJobs.length} 条任务` : '暂无任务数据'}</span>
+          </div>
+          {adminError ? <div className="error-line"><AlertTriangle size={16} /> {formatErrorMessage(adminError)}</div> : null}
+          <JobTable jobs={adminJobs} showUser apiBase={apiBaseNormalized} />
+        </div>
       </section>
         </>
       ) : (
