@@ -83,9 +83,6 @@ export default async function (ctx: FunctionContext) {
     if (action === 'userJobs') {
       return await userJobs(body as UserJobsBody)
     }
-    if (action === '__spikeBucket') {
-      return await spikeBucket(body as any)
-    }
     return fail(`Unknown action: ${action}`, 400)
   } catch (error: any) {
     return fail(error?.message || String(error), 500)
@@ -181,28 +178,6 @@ async function userJobs(body: UserJobsBody) {
     : { $or: [{ userEmail }, { user_email: userEmail }] }
   const list = await jobs.find(query).sort({ createdAt: -1 }).limit(limit).toArray()
   return ok({ jobs: await Promise.all(list.map(publicJob)) })
-}
-
-// TEMP SPIKE: 找出 cloud.storage.bucket() 认的正确桶名。用完即删。
-async function spikeBucket(body: any) {
-  if (body?.spikeKey !== 'spike-7f3a9c2e-refimg') return fail('forbidden', 403)
-  const names = ['paperbanana', 'sealaf-sdswgya641-cloud-bin', 'wmm0x76h-sealaf-sdswgya641-cloud-bin']
-  const out: any = {}
-  for (const n of names) {
-    const r: any = {}
-    try {
-      const b: any = cloud.storage.bucket(n)
-      const key = `spike-${Date.now()}.txt`
-      try {
-        await b.writeFile(key, Buffer.from('ok', 'utf8'), { ContentType: 'text/plain' })
-        r.write = 'OK'
-        try { r.downloadUrl = String(await b.getDownloadUrl(key, 300)).slice(0, 80) } catch (e: any) { r.downloadErr = String(e?.message || e) }
-        try { await b.deleteFile(key); r.cleanup = 'OK' } catch (e: any) { r.cleanup = String(e?.message || e) }
-      } catch (e: any) { r.write = String(e?.message || e) }
-    } catch (e: any) { r.bucketErr = String(e?.message || e) }
-    out[n] = r
-  }
-  return ok({ envBucket: process.env.PAPERBANANA_BUCKET || '(unset → default paperbanana)', buckets: out })
 }
 
 async function runJob(
