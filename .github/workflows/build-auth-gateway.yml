@@ -51,6 +51,7 @@ jobs:
             type=sha,prefix=sha-
 
       - name: Build and push image
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -60,3 +61,20 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Roll out to Sealos
+        env:
+          KUBECONFIG_DATA: ${{ secrets.SEALOS_KUBECONFIG }}
+          DEPLOYMENT: paperbanana-auth-gateway
+          IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.kube"
+          printf '%s' "$KUBECONFIG_DATA" > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+          container="$(kubectl get deployment "$DEPLOYMENT" -o jsonpath='{.spec.template.spec.containers[0].name}')"
+          kubectl set image "deployment/$DEPLOYMENT" "$container=$IMAGE_REF"
+          kubectl rollout status "deployment/$DEPLOYMENT" --timeout=180s

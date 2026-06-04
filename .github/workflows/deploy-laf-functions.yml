@@ -1,6 +1,12 @@
 name: Deploy Laf Functions
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - apps/laf-functions/paperbanana-api.ts
+      - .github/workflows/deploy-laf-functions.yml
   workflow_dispatch:
     inputs:
       function_name:
@@ -26,8 +32,8 @@ jobs:
       LAF_APPID: ${{ secrets.LAF_APPID }}
       LAF_PAT: ${{ secrets.LAF_PAT }}
       LAF_SERVER: ${{ secrets.LAF_SERVER }}
-      FUNCTION_NAME: ${{ inputs.function_name }}
-      SOURCE_FILE: ${{ inputs.source_file }}
+      FUNCTION_NAME: ${{ inputs.function_name || 'paperbanana-api' }}
+      SOURCE_FILE: ${{ inputs.source_file || 'apps/laf-functions/paperbanana-api.ts' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
