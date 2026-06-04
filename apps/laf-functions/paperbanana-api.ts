@@ -205,21 +205,38 @@ async function spikeUpload(body: any) {
   } catch (e: any) {
     result.introspectError = String(e?.message || e)
   }
-  const testKey = `spike/${Date.now()}.txt`
+  const ts = Date.now()
   result.typeofGetUploadUrl = typeof bucket.getUploadUrl
   try {
     if (typeof bucket.getUploadUrl === 'function') {
-      result.getUploadUrl = await bucket.getUploadUrl(testKey, 600)
+      result.getUploadUrl = await bucket.getUploadUrl(`spike/${ts}.txt`, 600)
     }
   } catch (e: any) {
     result.getUploadUrlError = String(e?.message || e)
   }
+  // 试写不同路径，判断是不是按前缀拒绝
+  result.writeTests = {}
+  for (const key of [`spike/${ts}.txt`, `${ts}.txt`, `${ts}/c.txt`]) {
+    try {
+      await bucket.writeFile(key, Buffer.from('spike', 'utf8'), { ContentType: 'text/plain' })
+      result.writeTests[key] = 'OK'
+    } catch (e: any) {
+      result.writeTests[key] = String(e?.message || e)
+    }
+  }
+  // 核实生产结果图的实际存储方式（只看 storage 字段与 url 协议，不返回内容）
   try {
-    await bucket.writeFile(testKey, Buffer.from('spike', 'utf8'), { ContentType: 'text/plain' })
-    result.writeFileOk = true
-    result.downloadUrl = await bucket.getDownloadUrl(testKey, 600)
+    const recent = await jobs.find({ status: 'succeeded' }).sort({ createdAt: -1 }).limit(3).toArray()
+    result.recentResultStorage = recent.map((j: any) => ({
+      id: j._id,
+      images: (j.resultImages || []).map((im: any) => ({
+        storage: im.storage,
+        urlScheme: String(im.url || '').slice(0, 5),
+        hasStorageError: Boolean(im.storageError),
+      })),
+    }))
   } catch (e: any) {
-    result.writeFileError = String(e?.message || e)
+    result.recentReadError = String(e?.message || e)
   }
   return ok(result)
 }
