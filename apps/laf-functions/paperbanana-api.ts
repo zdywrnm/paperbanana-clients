@@ -83,9 +83,6 @@ export default async function (ctx: FunctionContext) {
     if (action === 'userJobs') {
       return await userJobs(body as UserJobsBody)
     }
-    if (action === '__spikeUpload') {
-      return await spikeUpload(body as any)
-    }
     return fail(`Unknown action: ${action}`, 400)
   } catch (error: any) {
     return fail(error?.message || String(error), 500)
@@ -181,64 +178,6 @@ async function userJobs(body: UserJobsBody) {
     : { $or: [{ userEmail }, { user_email: userEmail }] }
   const list = await jobs.find(query).sort({ createdAt: -1 }).limit(limit).toArray()
   return ok({ jobs: await Promise.all(list.map(publicJob)) })
-}
-
-// TEMP SPIKE: 验证 Sealaf 是否支持浏览器预签名直传。用完即删。
-async function spikeUpload(body: any) {
-  if (body?.spikeKey !== 'spike-7f3a9c2e-refimg') return fail('forbidden', 403)
-  const result: any = { bucketName }
-  let bucket: any
-  try {
-    bucket = cloud.storage.bucket(bucketName)
-  } catch (e: any) {
-    return ok({ stage: 'bucket-init', error: String(e?.message || e) })
-  }
-  try {
-    const methods = new Set<string>()
-    let proto: any = bucket
-    while (proto && proto !== Object.prototype) {
-      for (const n of Object.getOwnPropertyNames(proto)) methods.add(n)
-      proto = Object.getPrototypeOf(proto)
-    }
-    result.bucketMethods = [...methods].sort()
-    result.storageKeys = Object.getOwnPropertyNames((cloud as any).storage || {})
-  } catch (e: any) {
-    result.introspectError = String(e?.message || e)
-  }
-  const ts = Date.now()
-  result.typeofGetUploadUrl = typeof bucket.getUploadUrl
-  try {
-    if (typeof bucket.getUploadUrl === 'function') {
-      result.getUploadUrl = await bucket.getUploadUrl(`spike/${ts}.txt`, 600)
-    }
-  } catch (e: any) {
-    result.getUploadUrlError = String(e?.message || e)
-  }
-  // 试写不同路径，判断是不是按前缀拒绝
-  result.writeTests = {}
-  for (const key of [`spike/${ts}.txt`, `${ts}.txt`, `${ts}/c.txt`]) {
-    try {
-      await bucket.writeFile(key, Buffer.from('spike', 'utf8'), { ContentType: 'text/plain' })
-      result.writeTests[key] = 'OK'
-    } catch (e: any) {
-      result.writeTests[key] = String(e?.message || e)
-    }
-  }
-  // 核实生产结果图的实际存储方式（只看 storage 字段与 url 协议，不返回内容）
-  try {
-    const recent = await jobs.find({ status: 'succeeded' }).sort({ createdAt: -1 }).limit(3).toArray()
-    result.recentResultStorage = recent.map((j: any) => ({
-      id: j._id,
-      images: (j.resultImages || []).map((im: any) => ({
-        storage: im.storage,
-        urlScheme: String(im.url || '').slice(0, 5),
-        hasStorageError: Boolean(im.storageError),
-      })),
-    }))
-  } catch (e: any) {
-    result.recentReadError = String(e?.message || e)
-  }
-  return ok(result)
 }
 
 async function runJob(
