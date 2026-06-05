@@ -24,6 +24,7 @@ import {
   createJobRequest,
   fetchBackendHealth,
   getJobRequest,
+  prepareReferenceUploadRequest,
   userJobsRequest,
 } from '@paperbanana/api';
 import {
@@ -39,6 +40,7 @@ import {
   OUTPUT_FORMATS,
   PROVIDERS,
   QUICK_START_EXAMPLES,
+  REFERENCE_IMAGE_LIMITS,
   SAMPLE_METHOD,
 } from './constants';
 import ApiKeyGuide from './components/ApiKeyGuide';
@@ -48,6 +50,7 @@ import AuthUnavailablePanel from './components/AuthUnavailablePanel';
 import ExampleTemplates from './components/ExampleTemplates';
 import JobStatus from './components/JobStatus';
 import JobTable from './components/JobTable';
+import ReferenceUploadPanel from './components/ReferenceUploadPanel';
 import Select from './components/Select';
 import TaskRecordsPanel from './components/TaskRecordsPanel';
 import { useAuthSession } from './hooks/useAuthSession';
@@ -67,6 +70,11 @@ export default function App() {
   const [outputFormat, setOutputFormat] = useState('png');
   const [mainModelName, setMainModelName] = useState(PROVIDERS.bailian.mainModel);
   const [imageGenModelName, setImageGenModelName] = useState(PROVIDERS.bailian.imageModel);
+  const [referenceVisionModelName, setReferenceVisionModelName] = useState(PROVIDERS.bailian.visionModel);
+  const [referenceImages, setReferenceImages] = useState([]);
+  const referenceImagesRef = useRef([]);
+  const [referenceUploadError, setReferenceUploadError] = useState('');
+  const [isUploadingReferences, setIsUploadingReferences] = useState(false);
   const [pipelineMode, setPipelineMode] = useState('demo_planner_critic');
   const [retrievalSetting, setRetrievalSetting] = useState('none');
   const [aspectRatio, setAspectRatio] = useState('16:9');
@@ -96,6 +104,7 @@ export default function App() {
   const isAdvancedMode = configurationMode === 'advanced';
   const defaultMainModelLabel = findModelLabel(providerConfig.mainModels, providerConfig.mainModel);
   const defaultImageModelLabel = findModelLabel(providerConfig.imageModels, providerConfig.imageModel);
+  const defaultVisionModelLabel = findModelLabel(providerConfig.visionModels || [], providerConfig.visionModel);
 
   useEffect(() => {
     let cancelled = false;
@@ -114,7 +123,16 @@ export default function App() {
   useEffect(() => {
     setMainModelName(PROVIDERS[provider].mainModel);
     setImageGenModelName(PROVIDERS[provider].imageModel);
+    setReferenceVisionModelName(PROVIDERS[provider].visionModel);
   }, [provider]);
+
+  useEffect(() => {
+    referenceImagesRef.current = referenceImages;
+  }, [referenceImages]);
+
+  useEffect(() => () => {
+    referenceImagesRef.current.forEach((image) => URL.revokeObjectURL(image.previewUrl));
+  }, []);
 
   useEffect(() => {
     if (!currentJobId) return undefined;
@@ -144,8 +162,9 @@ export default function App() {
   const canSubmit = useMemo(() => {
     const hasKey = selectedKey.trim();
     const canMock = isAdvancedMode && mock && health?.mock_enabled;
-    return authReady && (hasKey || canMock) && methodContent.trim().length >= 20 && caption.trim().length >= 3 && !isSubmitting;
-  }, [authReady, selectedKey, methodContent, caption, isSubmitting, mock, health, isAdvancedMode]);
+    const hasVisionModel = !referenceImages.length || Boolean((isAdvancedMode ? referenceVisionModelName : providerConfig.visionModel)?.trim());
+    return authReady && hasVisionModel && (hasKey || canMock) && methodContent.trim().length >= 20 && caption.trim().length >= 3 && !isSubmitting && !isUploadingReferences;
+  }, [authReady, selectedKey, methodContent, caption, isSubmitting, mock, health, isAdvancedMode, referenceImages.length, referenceVisionModelName, providerConfig.visionModel, isUploadingReferences]);
 
   useEffect(() => {
     if (!AUTH_ENABLED || !currentUser) return undefined;
@@ -156,6 +175,131 @@ export default function App() {
     };
   }, [apiBaseNormalized, currentUser?.id, health]);
 
+  function addReferenceFiles(files) {
+    setReferenceUploadError('');
+    if (!files.length) return;
+
+    const availableSlots = REFERENCE_IMAGE_LIMITS.maxCount - referenceImages.length;
+    if (availableSlots <= 0) {
+      setReferenceUploadError(`最多只能上传 ${REFERENCE_IMAGE_LIMITS.maxCount} 张参考图。`);
+      return;
+    }
+
+    const accepted = [];
+    for (const file of files.slice(0, availableSlots)) {
+      const mimeType = normalizeReferenceMimeType(file);
+      if (!REFERENCE_IMAGE_LIMITS.mimeTypes.includes(mimeType)) {
+        setReferenceUploadError('参考图仅支持 PNG、JPG、WebP 或 SVG。');
+        continue;
+      }
+      if (file.size > REFERENCE_IMAGE_LIMITS.maxBytes) {
+        setReferenceUploadError('单张参考图不能超过 5MB。');
+        continue;
+      }
+      accepted.push({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        file,
+        filename: file.name || `reference-${referenceImages.length + accepted.length + 1}.${extensionForMimeType(mimeType)}`,
+        mimeType,
+        size: file.size,
+        previewUrl: URL.createObjectURL(file),
+      });
+    }
+
+    if (files.length > availableSlots) {
+      setReferenceUploadError(`最多只能上传 ${REFERENCE_IMAGE_LIMITS.maxCount} 张参考图，已忽略多余文件。`);
+    }
+
+    if (accepted.length) {
+      setReferenceImages((current) => [...current, ...accepted]);
+    }
+  }
+
+  function removeReferenceImage(id) {
+    setReferenceImages((current) => {
+      const target = current.find((image) => image.id === id);
+      if (target) URL.revokeObjectURL(target.previewUrl);
+      return current.filter((image) => image.id !== id);
+    });
+  }
+
+  async function uploadReferencesForJob() {
+    if (!referenceImages.length) return [];
+
+    setIsUploadingReferences(true);
+    setReferenceUploadError('');
+    try {
+      const uploadItems = [];
+      for (const image of referenceImages) {
+        uploadItems.push({
+          clientId: `${image.id}:original`,
+          imageId: image.id,
+          role: 'original',
+          file: image.file,
+          filename: image.filename,
+          mimeType: image.mimeType,
+          size: image.size,
+        });
+
+        if (image.mimeType === 'image/svg+xml') {
+          const analysisFile = await rasterizeSvgFile(image.file, image.filename);
+          uploadItems.push({
+            clientId: `${image.id}:analysis`,
+            imageId: image.id,
+            role: 'analysis',
+            file: analysisFile,
+            filename: analysisFile.name,
+            mimeType: analysisFile.type,
+            size: analysisFile.size,
+          });
+        }
+      }
+
+      const prepared = await prepareReferenceUploadRequest(
+        apiBaseNormalized,
+        health,
+        uploadItems.map(({ clientId, role, filename, mimeType, size }) => ({ clientId, role, filename, mimeType, size })),
+      );
+      const uploadMap = new Map((prepared.uploads || []).map((upload) => [upload.clientId, upload]));
+
+      await Promise.all(uploadItems.map(async (item) => {
+        const upload = uploadMap.get(item.clientId);
+        if (!upload?.uploadUrl) throw new Error('参考图上传地址创建失败。');
+        const response = await fetch(upload.uploadUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': item.mimeType },
+          body: item.file,
+        });
+        if (!response.ok) throw new Error(`参考图上传失败：HTTP ${response.status}`);
+      }));
+
+      const references = [];
+      for (const image of referenceImages) {
+        const original = uploadMap.get(`${image.id}:original`);
+        if (!original) throw new Error('参考图上传结果缺少原图记录。');
+        const reference = {
+          filename: image.filename,
+          mimeType: image.mimeType,
+          size: image.size,
+          objectKey: original.objectKey,
+          uploadToken: original.uploadToken,
+        };
+        const analysis = uploadMap.get(`${image.id}:analysis`);
+        if (analysis) {
+          reference.analysisObjectKey = analysis.objectKey;
+          reference.analysisMimeType = analysis.mimeType;
+          reference.analysisSize = analysis.size;
+          reference.analysisUploadToken = analysis.uploadToken;
+        }
+        references.push(reference);
+      }
+
+      return references;
+    } finally {
+      setIsUploadingReferences(false);
+    }
+  }
+
   async function submitJob(event) {
     event.preventDefault();
     setError('');
@@ -163,6 +307,7 @@ export default function App() {
     setJob(null);
     latestJobRef.current = null;
     try {
+      const uploadedReferenceImages = await uploadReferencesForJob();
       const scopedApiKeys = {
         openrouter: '',
         gemini: '',
@@ -181,6 +326,8 @@ export default function App() {
         outputFormat,
         mainModelName: isAdvancedMode ? mainModelName : providerConfig.mainModel,
         imageGenModelName: isAdvancedMode ? imageGenModelName : providerConfig.imageModel,
+        referenceVisionModelName: isAdvancedMode ? referenceVisionModelName : providerConfig.visionModel,
+        referenceImages: uploadedReferenceImages,
         pipelineMode: isAdvancedMode ? pipelineMode : 'demo_planner_critic',
         retrievalSetting: isAdvancedMode ? retrievalSetting : 'none',
         aspectRatio: isAdvancedMode ? aspectRatio : '16:9',
@@ -403,6 +550,7 @@ export default function App() {
             <div className="default-summary" aria-label="默认生成配置">
               <span>{defaultMainModelLabel}</span>
               <span>{defaultImageModelLabel}</span>
+              <span>{defaultVisionModelLabel}</span>
               <span>规划器 + 评审器</span>
               <span>16:9</span>
               <span>{formatOutputFormat(outputFormat)}</span>
@@ -445,6 +593,7 @@ export default function App() {
               <div className="model-grid">
                 <Select label="主模型" value={mainModelName} onChange={setMainModelName} options={providerConfig.mainModels} />
                 <Select label="图像生成模型" value={imageGenModelName} onChange={setImageGenModelName} options={providerConfig.imageModels} />
+                <Select label="参考图识别模型" value={referenceVisionModelName} onChange={setReferenceVisionModelName} options={providerConfig.visionModels || []} />
               </div>
 
               {health?.mock_enabled ? (
@@ -458,7 +607,7 @@ export default function App() {
 
           <button className="primary-button" type="submit" disabled={!canSubmit}>
             {isSubmitting ? <Loader2 className="spin" size={18} /> : <Send size={18} />}
-            生成候选图
+            {isUploadingReferences ? '上传参考图' : '生成候选图'}
           </button>
           {error ? <div className="error-line"><AlertTriangle size={16} /> {formatErrorMessage(error)}</div> : null}
         </form>
@@ -483,6 +632,15 @@ export default function App() {
             />
             <p>{selectedInfographicCategory[2]}</p>
           </div>
+
+          <ReferenceUploadPanel
+            images={referenceImages}
+            error={referenceUploadError}
+            disabled={isSubmitting}
+            isUploading={isUploadingReferences}
+            onAddFiles={addReferenceFiles}
+            onRemove={removeReferenceImage}
+          />
 
           <div className="two-col input-copy">
             <label className="field">
@@ -555,6 +713,73 @@ export default function App() {
       )}
     </main>
   );
+}
+
+function normalizeReferenceMimeType(file) {
+  const mimeType = (file.type || '').toLowerCase();
+  if (mimeType === 'image/jpg') return 'image/jpeg';
+  if (mimeType) return mimeType;
+  const name = (file.name || '').toLowerCase();
+  if (name.endsWith('.png')) return 'image/png';
+  if (name.endsWith('.jpg') || name.endsWith('.jpeg')) return 'image/jpeg';
+  if (name.endsWith('.webp')) return 'image/webp';
+  if (name.endsWith('.svg')) return 'image/svg+xml';
+  return '';
+}
+
+function extensionForMimeType(mimeType) {
+  if (mimeType === 'image/png') return 'png';
+  if (mimeType === 'image/jpeg') return 'jpg';
+  if (mimeType === 'image/webp') return 'webp';
+  if (mimeType === 'image/svg+xml') return 'svg';
+  return 'png';
+}
+
+async function rasterizeSvgFile(file, filename) {
+  const svgText = await file.text();
+  const svgUrl = URL.createObjectURL(new Blob([svgText], { type: 'image/svg+xml' }));
+  try {
+    const image = await loadImage(svgUrl);
+    const width = clampCanvasSize(image.naturalWidth || 1600);
+    const height = clampCanvasSize(image.naturalHeight || 900);
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d');
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, width, height);
+    context.drawImage(image, 0, 0, width, height);
+    const blob = await canvasToBlob(canvas, 'image/png');
+    if (blob.size > REFERENCE_IMAGE_LIMITS.maxBytes) {
+      throw new Error('SVG 参考图栅格化后超过 5MB，请换一张更简单的 SVG。');
+    }
+    const pngName = filename.replace(/\.svg$/i, '') || 'reference';
+    return new File([blob], `${pngName}.png`, { type: 'image/png' });
+  } finally {
+    URL.revokeObjectURL(svgUrl);
+  }
+}
+
+function loadImage(url) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('SVG 参考图无法加载。'));
+    image.src = url;
+  });
+}
+
+function canvasToBlob(canvas, mimeType) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error('SVG 参考图无法栅格化。'));
+    }, mimeType);
+  });
+}
+
+function clampCanvasSize(value) {
+  return Math.max(320, Math.min(1600, Math.round(value)));
 }
 
 function findModelLabel(options, value) {

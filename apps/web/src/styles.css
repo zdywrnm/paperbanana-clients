@@ -286,6 +286,7 @@ button {
 .input-results > .section-head:not(.results-head),
 .input-results > .example-panel,
 .input-results > .input-options,
+.input-results > .reference-upload-panel,
 .input-results > .input-copy {
   grid-column: 1;
 }
@@ -614,6 +615,137 @@ button {
   color: var(--muted);
   font-size: 13px;
   line-height: 1.5;
+}
+
+.reference-upload-panel {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 13px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: rgba(255, 255, 251, 0.72);
+}
+
+.reference-upload-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.reference-upload-head > div {
+  display: grid;
+  gap: 4px;
+}
+
+.reference-upload-head strong {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 760;
+}
+
+.reference-upload-head span,
+.reference-empty,
+.reference-upload-error {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.reference-upload-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 12px;
+  color: var(--ink);
+  background: var(--surface-muted);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 740;
+  cursor: pointer;
+}
+
+.reference-upload-button input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.reference-upload-button.disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.reference-upload-button.disabled input {
+  cursor: not-allowed;
+}
+
+.reference-upload-error {
+  color: var(--danger);
+}
+
+.reference-empty {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 9px 10px;
+  border: 1px dashed var(--hairline-strong);
+  border-radius: 8px;
+  background: var(--surface-muted);
+}
+
+.reference-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 9px;
+}
+
+.reference-preview-card {
+  border-radius: 8px;
+}
+
+.reference-preview-card img {
+  aspect-ratio: 4 / 3;
+}
+
+.reference-preview-card figcaption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 8px;
+}
+
+.reference-preview-card figcaption span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink-soft);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reference-preview-card button {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  padding: 3px;
+  border: 0;
+  color: var(--muted);
+  background: transparent;
+}
+
+.reference-preview-card button:hover {
+  color: var(--danger);
 }
 
 .example-panel {
@@ -1251,6 +1383,17 @@ figcaption {
 
 .job-record-images {
   display: grid;
+  gap: 12px;
+}
+
+.job-record-images > strong {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.job-record-image-grid {
+  display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 320px));
   gap: 12px;
 }
@@ -1291,6 +1434,7 @@ figcaption {
   .input-results > .section-head:not(.results-head),
   .input-results > .example-panel,
   .input-results > .input-options,
+  .input-results > .reference-upload-panel,
   .input-results > .input-copy,
   .input-results > .results-head,
   .input-results > .job-detail,
@@ -1384,7 +1528,7 @@ figcaption {
   .job-record-meta,
   .job-models,
   .job-prompts,
-  .job-record-images,
+  .job-record-image-grid,
   .admin-user-row {
     grid-template-columns: 1fr;
   }

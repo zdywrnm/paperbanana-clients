@@ -5,6 +5,7 @@ export const PROVIDERS = {
     keyPlaceholder: 'sk-or-v1-...',
     mainModel: 'openrouter/openai/gpt-5.5',
     imageModel: 'openrouter/openai/gpt-5.4-image-2',
+    visionModel: 'openrouter/google/gemini-3.5-flash',
     mainModels: [
       ['openrouter/openai/gpt-5.5', 'GPT-5.5', 'OpenAI'],
       ['openrouter/openai/gpt-5.5-pro', 'GPT-5.5 Pro', 'OpenAI'],
@@ -62,6 +63,16 @@ export const PROVIDERS = {
       ['openrouter/sourceful/riverflow-v2-pro', 'Riverflow V2 Pro', 'Sourceful'],
       ['openrouter/sourceful/riverflow-v2-fast', 'Riverflow V2 Fast', 'Sourceful'],
     ],
+    visionModels: [
+      ['openrouter/google/gemini-3.5-flash', 'Gemini 3.5 Flash', 'Google'],
+      ['openrouter/google/gemini-3.1-flash-lite', 'Gemini 3.1 Flash Lite', 'Google'],
+      ['openrouter/openai/gpt-chat-latest', 'GPT Chat Latest', 'OpenAI'],
+      ['openrouter/~openai/gpt-mini-latest', 'GPT Mini Latest', 'OpenAI'],
+      ['openrouter/~google/gemini-flash-latest', 'Gemini Flash Latest', 'Google'],
+      ['openrouter/qwen/qwen3.7-plus', 'Qwen3.7 Plus', 'Qwen'],
+      ['openrouter/anthropic/claude-opus-4.8', 'Claude Opus 4.8', 'Anthropic'],
+      ['openrouter/anthropic/claude-opus-4.8-fast', 'Claude Opus 4.8 Fast', 'Anthropic'],
+    ],
     guideUrl: 'https://openrouter.ai/settings/keys',
     guideSteps: [
       '登录 OpenRouter，进入 Keys 页面。',
@@ -75,6 +86,7 @@ export const PROVIDERS = {
     keyPlaceholder: 'AIza...',
     mainModel: 'gemini-3.5-flash',
     imageModel: 'gemini-3.1-flash-image',
+    visionModel: 'gemini-3.5-flash',
     mainModels: [
       ['gemini-3.5-flash', 'Gemini 3.5 Flash', 'Gemini 3.5'],
       ['gemini-3.1-pro-preview', 'Gemini 3.1 Pro Preview', 'Gemini 3.1'],
@@ -93,6 +105,14 @@ export const PROVIDERS = {
       ['gemini-3-pro-image', 'Nano Banana Pro / Gemini 3 Pro Image', 'Nano Banana'],
       ['gemini-2.5-flash-image', 'Nano Banana / Gemini 2.5 Flash Image', 'Nano Banana'],
     ],
+    visionModels: [
+      ['gemini-3.5-flash', 'Gemini 3.5 Flash', 'Gemini 3.5'],
+      ['gemini-3.1-pro', 'Gemini 3.1 Pro', 'Gemini 3.1'],
+      ['gemini-3.1-pro-preview', 'Gemini 3.1 Pro Preview', 'Gemini 3.1'],
+      ['gemini-2.5-pro', 'Gemini 2.5 Pro', 'Gemini 2.5'],
+      ['gemini-2.5-flash', 'Gemini 2.5 Flash', 'Gemini 2.5'],
+      ['gemini-2.5-flash-lite', 'Gemini 2.5 Flash-Lite', 'Gemini 2.5'],
+    ],
     guideUrl: 'https://aistudio.google.com/app/apikey',
     guideSteps: [
       '登录 Google AI Studio，进入 API Keys 页面。',
@@ -106,6 +126,7 @@ export const PROVIDERS = {
     keyPlaceholder: 'sk-...',
     mainModel: 'gpt-5.5',
     imageModel: 'gpt-image-2',
+    visionModel: 'gpt-4.1',
     mainModels: [
       ['gpt-5.5', 'GPT-5.5', 'GPT-5.5'],
       ['gpt-5.5-pro', 'GPT-5.5 Pro', 'GPT-5.5'],
@@ -127,6 +148,14 @@ export const PROVIDERS = {
       ['gpt-image-1', 'GPT Image 1', 'GPT Image'],
       ['gpt-image-1-mini', 'GPT Image 1 Mini', 'GPT Image'],
     ],
+    visionModels: [
+      ['gpt-4.1', 'GPT-4.1', 'GPT-4.1'],
+      ['gpt-4.1-mini', 'GPT-4.1 Mini', 'GPT-4.1'],
+      ['gpt-4o', 'GPT-4o', 'GPT-4o'],
+      ['gpt-4o-mini', 'GPT-4o Mini', 'GPT-4o'],
+      ['gpt-5.1', 'GPT-5.1', 'GPT-5'],
+      ['gpt-5-mini', 'GPT-5 Mini', 'GPT-5'],
+    ],
     guideUrl: 'https://platform.openai.com/api-keys',
     guideSteps: [
       '登录 OpenAI Platform，进入 API keys 页面。',
@@ -140,6 +169,7 @@ export const PROVIDERS = {
     keyPlaceholder: 'sk-...',
     mainModel: 'qwen3.7-max',
     imageModel: 'wan2.7-image-pro',
+    visionModel: 'qwen-vl-max-latest',
     mainModels: [
       ['qwen3.7-max', 'Qwen3.7 Max', '通义千问'],
       ['qwen3.7-max-2026-05-20', 'Qwen3.7 Max 2026-05-20', '通义千问'],
@@ -170,6 +200,16 @@ export const PROVIDERS = {
       ['qwen-image', 'Qwen Image', '通义千问 Image'],
       ['z-image-turbo', 'Z-Image Turbo', 'Z-Image'],
     ],
+    visionModels: [
+      ['qwen-vl-max-latest', 'Qwen-VL Max Latest', '通义千问 VL'],
+      ['qwen-vl-plus-latest', 'Qwen-VL Plus Latest', '通义千问 VL'],
+      ['qwen3-vl-max', 'Qwen3-VL Max', '通义千问 VL'],
+      ['qwen3-vl-plus', 'Qwen3-VL Plus', '通义千问 VL'],
+      ['qwen3-vl-flash', 'Qwen3-VL Flash', '通义千问 VL'],
+      ['qwen2.5-vl-72b-instruct', 'Qwen2.5-VL 72B', '通义千问 VL'],
+      ['qwen2.5-vl-32b-instruct', 'Qwen2.5-VL 32B', '通义千问 VL'],
+      ['qwen2.5-vl-7b-instruct', 'Qwen2.5-VL 7B', '通义千问 VL'],
+    ],
     guideUrl: 'https://help.aliyun.com/zh/model-studio/get-api-key',
     guideSteps: [
       '登录阿里云百炼控制台，确认已开通百炼模型服务。',
@@ -177,6 +217,13 @@ export const PROVIDERS = {
       '建议选择默认业务空间和全部权限，复制 sk- 开头密钥。',
     ],
   },
+};
+
+export const REFERENCE_IMAGE_LIMITS = {
+  maxCount: 3,
+  maxBytes: 5 * 1024 * 1024,
+  accept: 'image/png,image/jpeg,image/webp,image/svg+xml,.png,.jpg,.jpeg,.webp,.svg',
+  mimeTypes: ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'],
 };
 
 export const SAMPLE_METHOD = `我们提出一个用于学术图示生成的检索增强多智能体框架。检索器会先从参考库中选择相关图例，规划器再把论文方法部分和目标图注转换为详细的视觉规格。风格智能体会补充适合论文发表的版式与配色建议，生成器据此渲染多张候选图，评审器则迭代检查语义一致性与可读性。`;

@@ -12,7 +12,7 @@
 - 云函数名: `paperbanana-api`
 - 线上调用地址: `https://sdswgya641.sealoshzh.site/paperbanana-api`
 - 数据集合: `paperbanana_jobs`
-- 存储 bucket: `paperbanana`
+- 存储 bucket: 通过 `PAPERBANANA_BUCKET` 环境变量指定，生产环境使用 Sealaf 完整桶名。
 
 ## Deploy Manually
 

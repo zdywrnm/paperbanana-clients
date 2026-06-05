@@ -49,6 +49,10 @@ export default function JobTable({ jobs, showUser, apiBase }) {
               <strong>图像生成模型</strong>
               <span title={item.image_gen_model_name}>{item.image_gen_model_name || '未记录'}</span>
             </div>
+            <div>
+              <strong>参考图识别模型</strong>
+              <span title={item.reference_vision_model_name}>{item.reference_vision_model_name || '未使用'}</span>
+            </div>
           </div>
 
           <div className="job-prompts">
@@ -66,11 +70,30 @@ export default function JobTable({ jobs, showUser, apiBase }) {
             <div className="error-line"><AlertTriangle size={16} /> {formatErrorMessage(item.error)}</div>
           ) : null}
 
+          {(item.reference_images || []).some((image) => image.url) ? (
+            <div className="job-record-images">
+              <strong>参考图</strong>
+              <div className="job-record-image-grid">
+                {(item.reference_images || []).filter((image) => image.url).map((image, index) => (
+                  <ResultFigure
+                    key={image.object_key || image.filename || index}
+                    image={{ ...image, candidate_id: index }}
+                    apiBase={apiBase}
+                    labelPrefix="参考图"
+                  />
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           {item.status === 'succeeded' && (item.result_images || []).some((image) => image.url) ? (
             <div className="job-record-images">
-              {(item.result_images || []).filter((image) => image.url).map((image) => (
-                <ResultFigure key={image.filename} image={image} apiBase={apiBase} labelPrefix="结果图" outputFormat={item.output_format} />
-              ))}
+              <strong>结果图</strong>
+              <div className="job-record-image-grid">
+                {(item.result_images || []).filter((image) => image.url).map((image) => (
+                  <ResultFigure key={image.filename} image={image} apiBase={apiBase} labelPrefix="结果图" outputFormat={item.output_format} />
+                ))}
+              </div>
             </div>
           ) : null}
         </div>

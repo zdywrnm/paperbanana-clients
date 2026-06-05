@@ -7,7 +7,8 @@ export default function ResultFigure({ image, apiBase, labelPrefix = '候选图'
   const url = resolveImageUrl(apiBase, image.url);
   const candidateNumber = Number(image.candidate_id ?? 0) + 1;
   const format = inferFormat(image.mime_type, outputFormat);
-  const filename = `paperbanana-${labelPrefix === '结果图' ? 'result' : 'candidate'}-${candidateNumber}.${format}`;
+  const filenameKind = labelPrefix === '结果图' ? 'result' : labelPrefix === '参考图' ? 'reference' : 'candidate';
+  const filename = `paperbanana-${filenameKind}-${candidateNumber}.${format}`;
 
   async function downloadImage() {
     if (!url || isDownloading) return;

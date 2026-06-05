@@ -28,7 +28,7 @@ export async function fetchBackendHealth(apiBase) {
 }
 
 export async function createJobRequest(apiBase, health, payload) {
-  if (shouldUseLaf(apiBase, health)) {
+  if (shouldUsePaperbananaApi(apiBase, health)) {
     const data = await fetchJson(lafEndpoint(apiBase), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -43,6 +43,8 @@ export async function createJobRequest(apiBase, health, payload) {
         outputFormat: payload.outputFormat,
         mainModelName: payload.mainModelName,
         imageModelName: payload.imageGenModelName,
+        referenceVisionModelName: payload.referenceVisionModelName,
+        referenceImages: payload.referenceImages || [],
         pipelineMode: toLafPipeline(payload.pipelineMode),
         aspectRatio: payload.aspectRatio,
         numCandidates: payload.numCandidates,
@@ -66,6 +68,8 @@ export async function createJobRequest(apiBase, health, payload) {
       output_format: payload.outputFormat,
       main_model_name: payload.mainModelName,
       image_gen_model_name: payload.imageGenModelName,
+      reference_vision_model_name: payload.referenceVisionModelName,
+      reference_images: payload.referenceImages || [],
       pipeline_mode: payload.pipelineMode,
       retrieval_setting: payload.retrievalSetting,
       aspect_ratio: payload.aspectRatio,
@@ -74,6 +78,19 @@ export async function createJobRequest(apiBase, health, payload) {
       mock: payload.mock,
     }),
   });
+}
+
+export async function prepareReferenceUploadRequest(apiBase, health, files) {
+  if (shouldUsePaperbananaApi(apiBase, health)) {
+    const data = await fetchJson(lafEndpoint(apiBase), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'prepareReferenceUpload', files }),
+    });
+    return { uploads: data.uploads || [] };
+  }
+
+  throw new Error('参考图上传需要使用 Laf 或登录网关后端。');
 }
 
 export async function getJobRequest(apiBase, health, jobId, options = {}) {
@@ -136,9 +153,13 @@ export async function userJobsRequest(apiBase, health) {
 export async function hydrateRecordImages(apiBase, health, jobs, options = {}) {
   return Promise.all(jobs.map(async (job) => {
     const images = job.result_images || [];
+    const references = job.reference_images || [];
     const hasResult = job.result_image_count > 0 || images.length > 0;
-    const needsFreshDetail = images.some((image) => image.storage === 'bucket' || (image.url && !image.url.startsWith('data:')));
-    if (job.status !== 'succeeded' || (!hasResult && !needsFreshDetail)) return job;
+    const hasReference = job.reference_image_count > 0 || references.length > 0;
+    const allImages = [...images, ...references];
+    const needsFreshDetail = allImages.some((image) => image.storage === 'bucket' || (image.url && !image.url.startsWith('data:')));
+    if (job.status !== 'succeeded' && !hasReference) return job;
+    if (!hasResult && !hasReference && !needsFreshDetail) return job;
     try {
       const detail = await getJobRequest(apiBase, health, job.id, options);
       return { ...job, ...detail };
@@ -146,6 +167,10 @@ export async function hydrateRecordImages(apiBase, health, jobs, options = {}) {
       return job;
     }
   }));
+}
+
+function shouldUsePaperbananaApi(apiBase, health) {
+  return BACKEND_MODE === 'gateway' || health?.backendMode === 'gateway' || shouldUseLaf(apiBase, health);
 }
 
 function shouldUseLaf(apiBase, health) {
@@ -181,6 +206,7 @@ function normalizeJob(job = {}) {
     output_format: job.output_format || job.outputFormat || 'png',
     main_model_name: job.main_model_name || job.mainModelName || '',
     image_gen_model_name: job.image_gen_model_name || job.imageModelName || '',
+    reference_vision_model_name: job.reference_vision_model_name || job.referenceVisionModelName || '',
     pipeline_mode: job.pipeline_mode || job.pipelineMode || '',
     aspect_ratio: job.aspect_ratio || job.aspectRatio || '',
     num_candidates: job.num_candidates || job.numCandidates || 0,
@@ -193,6 +219,15 @@ function normalizeJob(job = {}) {
       storage: image.storage || '',
       candidate_id: image.candidate_id ?? image.candidateId ?? index,
       mime_type: image.mime_type || image.mimeType || '',
+    })),
+    reference_image_count: job.reference_image_count || job.referenceImageCount || (job.reference_images || job.referenceImages || []).length || 0,
+    reference_images: (job.reference_images || job.referenceImages || []).map((image, index) => ({
+      filename: image.filename || `reference-${index + 1}`,
+      object_key: image.object_key || image.objectKey || '',
+      url: image.url,
+      storage: image.storage || '',
+      mime_type: image.mime_type || image.mimeType || '',
+      size: Number(image.size || 0),
     })),
     logs_tail: job.logs_tail || (Array.isArray(job.logs) ? job.logs.slice(-10).join('\n') : ''),
     error: job.error || '',

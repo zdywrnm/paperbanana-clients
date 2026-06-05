@@ -80,6 +80,18 @@ app.post('/paperbanana-api', async (req, res) => {
       return sendLafResponse(res, data);
     }
 
+    if (action === 'prepareReferenceUpload') {
+      const session = await optionalSession(req);
+      const data = await callLaf(
+        withGatewayToken({
+          ...req.body,
+          userId: session?.user?.id || '',
+          userEmail: session?.user?.email || '',
+        }),
+      );
+      return sendLafResponse(res, data);
+    }
+
     if (action === 'adminUsers') {
       requireAdminToken(req.body?.adminToken);
       const data = await listAuthUsers(req.body);

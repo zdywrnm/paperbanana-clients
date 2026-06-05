@@ -1,8 +1,10 @@
 import cloud from '@lafjs/cloud'
+import * as crypto from 'crypto'
 
 type Provider = 'openrouter' | 'gemini' | 'openai' | 'bailian'
 type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed'
 type OutputFormat = 'png' | 'svg'
+type ReferenceImageRole = 'original' | 'analysis'
 
 type ApiKeys = {
   openrouter?: string
@@ -23,10 +25,50 @@ type CreateJobBody = {
   output_format?: OutputFormat
   mainModelName: string
   imageModelName: string
+  referenceVisionModelName?: string
+  referenceImages?: ReferenceImageInput[]
   pipelineMode?: 'planner_critic' | 'full' | 'vanilla'
   aspectRatio?: '16:9' | '21:9' | '3:2' | '1:1'
   numCandidates?: number
   maxCriticRounds?: number
+}
+
+type PrepareReferenceUploadBody = {
+  action: 'prepareReferenceUpload'
+  files?: ReferenceUploadDescriptor[]
+  userId?: string
+  userEmail?: string
+}
+
+type ReferenceUploadDescriptor = {
+  clientId?: string
+  role?: ReferenceImageRole
+  filename: string
+  mimeType: string
+  size: number
+}
+
+type ReferenceImageInput = {
+  filename: string
+  mimeType: string
+  size: number
+  objectKey: string
+  uploadToken?: string
+  analysisObjectKey?: string
+  analysisMimeType?: string
+  analysisSize?: number
+  analysisUploadToken?: string
+}
+
+type StoredReferenceImage = {
+  filename: string
+  mimeType: string
+  size: number
+  objectKey: string
+  storage: 'bucket'
+  analysisObjectKey?: string
+  analysisMimeType?: string
+  analysisSize?: number
 }
 
 type GetJobBody = {
@@ -51,11 +93,16 @@ type HealthBody = {
   action: 'health'
 }
 
-type RequestBody = CreateJobBody | GetJobBody | AdminJobsBody | UserJobsBody | HealthBody
+type RequestBody = CreateJobBody | PrepareReferenceUploadBody | GetJobBody | AdminJobsBody | UserJobsBody | HealthBody
 
 const db = cloud.mongo.db
 const jobs = db.collection('paperbanana_jobs')
 const bucketName = process.env.PAPERBANANA_BUCKET || 'paperbanana'
+const maxReferenceImages = Number(process.env.PAPERBANANA_MAX_REFERENCE_IMAGES || 3)
+const maxReferenceBytes = Number(process.env.PAPERBANANA_MAX_REFERENCE_BYTES || 5 * 1024 * 1024)
+const referenceUploadTtlSeconds = Number(process.env.PAPERBANANA_REFERENCE_UPLOAD_TTL_SECONDS || 900)
+const allowedReferenceMimeTypes = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'])
+const allowedAnalysisMimeTypes = new Set(['image/png', 'image/jpeg', 'image/webp'])
 
 export default async function (ctx: FunctionContext) {
   setCorsHeaders(ctx)
@@ -69,10 +116,13 @@ export default async function (ctx: FunctionContext) {
 
   try {
     if (action === 'health') {
-      return ok({ ok: true, runtime: 'laf', version: '0.1.10' })
+      return ok({ ok: true, runtime: 'laf', version: '0.1.11' })
     }
     if (action === 'createJob') {
       return await createJob(body as CreateJobBody, ctx)
+    }
+    if (action === 'prepareReferenceUpload') {
+      return await prepareReferenceUpload(body as PrepareReferenceUploadBody)
     }
     if (action === 'getJob') {
       return await getJob((body as GetJobBody).jobId)
@@ -96,12 +146,54 @@ function setCorsHeaders(ctx: FunctionContext) {
   ctx.response.setHeader('Access-Control-Max-Age', '86400')
 }
 
+async function prepareReferenceUpload(body: PrepareReferenceUploadBody) {
+  const files = Array.isArray(body.files) ? body.files : []
+  if (!files.length) return fail('files is required', 400)
+  const originalCount = files.filter((file) => file?.role !== 'analysis').length
+  if (originalCount > maxReferenceImages) return fail(`Reference image count exceeds ${maxReferenceImages}`, 400)
+  if (files.length > maxReferenceImages * 2) return fail('Too many reference upload files', 400)
+
+  const owner = sanitizePathPart(body.userId || body.userEmail || 'anon')
+  const bucket = cloud.storage.bucket(bucketName)
+  const uploads = []
+
+  for (const file of files) {
+    const descriptor = normalizeUploadDescriptor(file)
+    const ext = extensionForMimeType(descriptor.mimeType)
+    const role = descriptor.role === 'analysis' ? 'analysis' : 'original'
+    const objectKey = `references/${owner}/${randomId()}-${role}.${ext}`
+    const expiresAt = Date.now() + referenceUploadTtlSeconds * 1000
+    const uploadToken = signReferenceUpload(objectKey, descriptor.mimeType, descriptor.size, expiresAt)
+    const uploadResult = await bucket.getUploadUrl(objectKey, referenceUploadTtlSeconds)
+    const uploadUrl = typeof uploadResult === 'string'
+      ? uploadResult
+      : uploadResult?.url || uploadResult?.uploadUrl || uploadResult?.signedUrl || ''
+
+    if (!uploadUrl) throw new Error('Failed to create reference upload URL')
+    uploads.push({
+      clientId: file.clientId || '',
+      role,
+      filename: descriptor.filename,
+      mimeType: descriptor.mimeType,
+      size: descriptor.size,
+      objectKey,
+      uploadUrl,
+      uploadToken,
+      expiresAt,
+    })
+  }
+
+  return ok({ uploads })
+}
+
 async function createJob(body: CreateJobBody, ctx: FunctionContext) {
   validateCreateBody(body)
   const normalizedBody = {
     ...body,
     mainModelName: normalizeModelName(body.provider, body.mainModelName),
     imageModelName: normalizeModelName(body.provider, body.imageModelName),
+    referenceVisionModelName: normalizeModelName(body.provider, body.referenceVisionModelName || body.mainModelName),
+    referenceImages: normalizeReferenceImages(body.referenceImages || []),
     outputFormat: normalizeOutputFormat(body.outputFormat || body.output_format),
   }
   const apiKey = selectApiKey(normalizedBody.provider, normalizedBody.apiKeys)
@@ -124,6 +216,8 @@ async function createJob(body: CreateJobBody, ctx: FunctionContext) {
     caption: normalizedBody.caption,
     mainModelName: normalizedBody.mainModelName,
     imageModelName: normalizedBody.imageModelName,
+    referenceVisionModelName: normalizedBody.referenceVisionModelName,
+    referenceImages: normalizedBody.referenceImages,
     outputFormat: normalizedBody.outputFormat,
     pipelineMode: normalizedBody.pipelineMode || 'planner_critic',
     aspectRatio: normalizedBody.aspectRatio || '16:9',
@@ -192,10 +286,12 @@ async function runJob(
     { $set: { status: 'running', startedAt: new Date(), updatedAt: new Date() } },
   )
 
+  const referenceAnalysis = await analyzeReferenceImages(jobId, body, apiKey)
+
   const results = []
   for (let i = 0; i < numCandidates; i += 1) {
     await appendLog(jobId, `Candidate ${i + 1}: planning`)
-    const result = await runCandidate(body, apiKey, maxCriticRounds)
+    const result = await runCandidate(body, apiKey, maxCriticRounds, referenceAnalysis)
     const saved = await saveResult(jobId, i, result.content, result.mimeType, result.encoding)
     results.push({
       candidateId: i,
@@ -213,6 +309,7 @@ async function runJob(
       $set: {
         status: 'succeeded',
         resultImages: results,
+        referenceAnalysis,
         completedAt: new Date(),
         updatedAt: new Date(),
       },
@@ -220,28 +317,31 @@ async function runJob(
   )
 }
 
-async function runCandidate(body: CreateJobBody, apiKey: string, maxCriticRounds: number) {
+async function runCandidate(body: CreateJobBody, apiKey: string, maxCriticRounds: number, referenceAnalysis = '') {
   if (normalizeOutputFormat(body.outputFormat) === 'svg') {
-    const description = await planDiagramDescription(body, apiKey, maxCriticRounds)
+    const description = await planDiagramDescription(body, apiKey, maxCriticRounds, referenceAnalysis)
     const svg = await callSvgModel(body.provider, body.mainModelName, apiKey, description)
     return { content: svg, encoding: 'utf8' as const, mimeType: 'image/svg+xml', description }
   }
 
   if ((body.pipelineMode || 'planner_critic') === 'vanilla') {
-    const prompt = diagramPrompt(body.methodContent, body.caption)
+    const prompt = diagramPrompt(body.methodContent, body.caption, referenceAnalysis)
     const base64 = await callImageModel(body.provider, body.imageModelName, apiKey, prompt, body.aspectRatio || '16:9')
     return { content: base64, encoding: 'base64' as const, mimeType: 'image/png', description: prompt }
   }
 
-  const description = await planDiagramDescription(body, apiKey, maxCriticRounds)
+  const description = await planDiagramDescription(body, apiKey, maxCriticRounds, referenceAnalysis)
   const imagePrompt = diagramPromptFromDescription(description)
   const base64 = await callImageModel(body.provider, body.imageModelName, apiKey, imagePrompt, body.aspectRatio || '16:9')
   return { content: base64, encoding: 'base64' as const, mimeType: 'image/png', description }
 }
 
-async function planDiagramDescription(body: CreateJobBody, apiKey: string, maxCriticRounds: number) {
+async function planDiagramDescription(body: CreateJobBody, apiKey: string, maxCriticRounds: number, referenceAnalysis = '') {
   if ((body.pipelineMode || 'planner_critic') === 'vanilla') {
-    return `Create an academic method diagram for this methodology:\n${body.methodContent}\n\nVisual intent:\n${body.caption}`
+    return withReferenceAnalysis(
+      `Create an academic method diagram for this methodology:\n${body.methodContent}\n\nVisual intent:\n${body.caption}`,
+      referenceAnalysis,
+    )
   }
 
   const planner = await callTextModel(
@@ -249,7 +349,7 @@ async function planDiagramDescription(body: CreateJobBody, apiKey: string, maxCr
     body.mainModelName,
     apiKey,
     plannerSystemPrompt(),
-    plannerUserPrompt(body.methodContent, body.caption),
+    plannerUserPrompt(body.methodContent, body.caption, referenceAnalysis),
   )
 
   let description = planner
@@ -259,7 +359,7 @@ async function planDiagramDescription(body: CreateJobBody, apiKey: string, maxCr
       body.mainModelName,
       apiKey,
       stylistSystemPrompt(),
-      stylistUserPrompt(body.methodContent, body.caption, planner),
+      stylistUserPrompt(body.methodContent, body.caption, planner, referenceAnalysis),
     )
   }
 
@@ -269,13 +369,132 @@ async function planDiagramDescription(body: CreateJobBody, apiKey: string, maxCr
       body.mainModelName,
       apiKey,
       criticSystemPrompt(),
-      criticUserPrompt(body.methodContent, body.caption, description),
+      criticUserPrompt(body.methodContent, body.caption, description, referenceAnalysis),
     )
     if (/no changes needed/i.test(critique)) break
     description = critique
   }
 
   return description
+}
+
+async function analyzeReferenceImages(jobId: string, body: CreateJobBody, apiKey: string) {
+  const references = body.referenceImages || []
+  if (!references.length) return ''
+
+  if (!body.referenceVisionModelName) {
+    throw new Error('referenceVisionModelName is required when referenceImages are provided')
+  }
+
+  await appendLog(jobId, `Analyzing ${references.length} reference image${references.length > 1 ? 's' : ''}`)
+  const visionInputs = await buildVisionImageInputs(references)
+  const analysis = await callVisionModel(
+    body.provider,
+    body.referenceVisionModelName,
+    apiKey,
+    body.methodContent,
+    body.caption,
+    visionInputs,
+  )
+
+  const trimmed = analysis.trim()
+  if (!trimmed) throw new Error('Reference vision model returned empty analysis')
+  await jobs.updateOne(
+    { _id: jobId },
+    { $set: { referenceAnalysis: trimmed, updatedAt: new Date() } },
+  )
+  return trimmed
+}
+
+async function buildVisionImageInputs(referenceImages: ReferenceImageInput[]) {
+  const bucket = cloud.storage.bucket(bucketName)
+  const inputs = []
+
+  for (const image of referenceImages) {
+    const objectKey = image.analysisObjectKey || image.objectKey
+    const mimeType = image.analysisMimeType || image.mimeType
+    if (!objectKey) throw new Error(`Reference image ${image.filename || ''} is missing objectKey`)
+    if (!allowedAnalysisMimeTypes.has(mimeType)) {
+      throw new Error('SVG reference images require a rasterized PNG analysis upload')
+    }
+    const url = await bucket.getDownloadUrl(objectKey, 3600)
+    inputs.push({
+      filename: image.filename,
+      mimeType,
+      url,
+    })
+  }
+
+  return inputs
+}
+
+async function callVisionModel(
+  provider: Provider,
+  model: string,
+  apiKey: string,
+  methodContent: string,
+  caption: string,
+  images: Array<{ filename: string; mimeType: string; url: string }>,
+): Promise<string> {
+  if (!images.length) return ''
+  if (provider === 'gemini') {
+    return callGeminiVision(model, apiKey, methodContent, caption, images)
+  }
+
+  const baseUrl = textApiBaseUrl(provider)
+  const actualModel = provider === 'openrouter' ? toOpenRouterModel(model) : model
+  const content: any[] = [{ type: 'text', text: referenceVisionUserPrompt(methodContent, caption) }]
+  for (const image of images) {
+    content.push({ type: 'image_url', image_url: { url: image.url } })
+  }
+
+  const response = await fetch(`${baseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: actualModel,
+      messages: [
+        { role: 'system', content: referenceVisionSystemPrompt() },
+        { role: 'user', content },
+      ],
+      temperature: 0.2,
+    }),
+  })
+  const data = await parseModelResponse(response)
+  return data.choices?.[0]?.message?.content || ''
+}
+
+async function callGeminiVision(
+  model: string,
+  apiKey: string,
+  methodContent: string,
+  caption: string,
+  images: Array<{ filename: string; mimeType: string; url: string }>,
+): Promise<string> {
+  const parts: any[] = [{ text: referenceVisionUserPrompt(methodContent, caption) }]
+  for (const image of images) {
+    parts.push({
+      inlineData: {
+        mimeType: image.mimeType,
+        data: await fetchImageAsBase64(image.url),
+      },
+    })
+  }
+
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: referenceVisionSystemPrompt() }] },
+      contents: [{ role: 'user', parts }],
+      generationConfig: { temperature: 0.2 },
+    }),
+  })
+  const data = await parseModelResponse(response)
+  return data.candidates?.[0]?.content?.parts?.map((part: any) => part.text || '').join('') || ''
 }
 
 async function callTextModel(provider: Provider, model: string, apiKey: string, system: string, user: string): Promise<string> {
@@ -553,12 +772,16 @@ function plannerSystemPrompt() {
     'You are the Planner Agent for PaperBanana.',
     'Given a paper methodology section and figure caption, write a detailed visual specification for a publication-quality academic diagram.',
     'Describe semantic components, layout, arrows, labels, colors, background, spacing, and icon style.',
+    'If reference image analysis is provided, use it as structure and style guidance without copying irrelevant content.',
     'Do not include the figure title or caption text inside the image.',
   ].join('\n')
 }
 
-function plannerUserPrompt(method: string, caption: string) {
-  return `Methodology Section:\n${method}\n\nFigure Caption:\n${caption}\n\nDetailed description of the target figure:`
+function plannerUserPrompt(method: string, caption: string, referenceAnalysis = '') {
+  return withReferenceAnalysis(
+    `Methodology Section:\n${method}\n\nFigure Caption:\n${caption}\n\nDetailed description of the target figure:`,
+    referenceAnalysis,
+  )
 }
 
 function stylistSystemPrompt() {
@@ -566,11 +789,15 @@ function stylistSystemPrompt() {
     'You are the Stylist Agent for PaperBanana.',
     'Refine the visual specification for a clean NeurIPS-style academic diagram.',
     'Preserve semantics. Improve layout clarity, typography, color harmony, line thickness, and whitespace.',
+    'Use reference image analysis only for layout and style cues.',
   ].join('\n')
 }
 
-function stylistUserPrompt(method: string, caption: string, description: string) {
-  return `Initial Description:\n${description}\n\nMethodology Section:\n${method}\n\nFigure Caption:\n${caption}\n\nPolished detailed description:`
+function stylistUserPrompt(method: string, caption: string, description: string, referenceAnalysis = '') {
+  return withReferenceAnalysis(
+    `Initial Description:\n${description}\n\nMethodology Section:\n${method}\n\nFigure Caption:\n${caption}\n\nPolished detailed description:`,
+    referenceAnalysis,
+  )
 }
 
 function criticSystemPrompt() {
@@ -582,13 +809,19 @@ function criticSystemPrompt() {
   ].join('\n')
 }
 
-function criticUserPrompt(method: string, caption: string, description: string) {
-  return `Current Description:\n${description}\n\nMethodology Section:\n${method}\n\nFigure Caption:\n${caption}\n\nCritique or revised description:`
+function criticUserPrompt(method: string, caption: string, description: string, referenceAnalysis = '') {
+  return withReferenceAnalysis(
+    `Current Description:\n${description}\n\nMethodology Section:\n${method}\n\nFigure Caption:\n${caption}\n\nCritique or revised description:`,
+    referenceAnalysis,
+  )
 }
 
-function diagramPrompt(method: string, caption: string) {
+function diagramPrompt(method: string, caption: string, referenceAnalysis = '') {
   return diagramPromptFromDescription(
-    `Create an academic method diagram for this methodology:\n${method}\n\nVisual intent:\n${caption}`,
+    withReferenceAnalysis(
+      `Create an academic method diagram for this methodology:\n${method}\n\nVisual intent:\n${caption}`,
+      referenceAnalysis,
+    ),
   )
 }
 
@@ -620,6 +853,44 @@ function svgUserPrompt(description: string) {
     'Prefer simple geometric shapes, arrows, concise labels, and semantic grouping.',
     '',
     description,
+  ].join('\n')
+}
+
+function referenceVisionSystemPrompt() {
+  return [
+    'You are the Reference Image Analyst for PaperBanana.',
+    'Analyze uploaded reference diagrams for reusable academic visual structure and style.',
+    'Focus on layout, grouping, arrows, hierarchy, label placement, shape vocabulary, color palette, and visual density.',
+    'Do not transcribe private details. Do not ask the generator to copy the reference image pixel-for-pixel.',
+  ].join('\n')
+}
+
+function referenceVisionUserPrompt(method: string, caption: string) {
+  return [
+    'Analyze the attached reference image(s) for generating a new academic diagram.',
+    'The new figure must be based on the methodology and caption below, not on the reference content itself.',
+    '',
+    `Methodology Section:\n${method}`,
+    '',
+    `Figure Caption:\n${caption}`,
+    '',
+    'Return a concise but detailed reference analysis with these sections:',
+    '1. Layout structure to reuse',
+    '2. Visual style cues to reuse',
+    '3. Elements that should not be copied',
+    '4. Practical guidance for an SVG/PNG diagram generator',
+  ].join('\n')
+}
+
+function withReferenceAnalysis(text: string, referenceAnalysis = '') {
+  if (!referenceAnalysis.trim()) return text
+  return [
+    text,
+    '',
+    'Reference image analysis for structure/style guidance only:',
+    referenceAnalysis.trim(),
+    '',
+    'Use the reference to guide layout and style, but make the final diagram reflect the provided methodology and caption.',
   ].join('\n')
 }
 
@@ -671,6 +942,145 @@ function extractSvg(raw: string) {
   return text.slice(start, end + '</svg>'.length)
 }
 
+function normalizeUploadDescriptor(file: ReferenceUploadDescriptor) {
+  const filename = sanitizeFilename(file?.filename || 'reference')
+  const mimeType = normalizeReferenceMimeType(file?.mimeType, filename)
+  const size = Number(file?.size || 0)
+  const isAnalysis = file?.role === 'analysis'
+  const allowed = isAnalysis ? allowedAnalysisMimeTypes : allowedReferenceMimeTypes
+  if (!allowed.has(mimeType)) throw new Error(`Unsupported reference image type: ${mimeType || 'unknown'}`)
+  if (!size || size < 1) throw new Error('Reference image size is required')
+  if (size > maxReferenceBytes) throw new Error('Reference image exceeds 5MB limit')
+  return {
+    filename,
+    mimeType,
+    size,
+    role: isAnalysis ? 'analysis' as const : 'original' as const,
+  }
+}
+
+function normalizeReferenceImages(images: ReferenceImageInput[]): StoredReferenceImage[] {
+  if (!Array.isArray(images) || !images.length) return []
+  if (images.length > maxReferenceImages) throw new Error(`Reference image count exceeds ${maxReferenceImages}`)
+
+  return images.map((image) => {
+    const filename = sanitizeFilename(image.filename || 'reference')
+    const mimeType = normalizeReferenceMimeType(image.mimeType, filename)
+    const size = Number(image.size || 0)
+    validateReferenceFileMeta(mimeType, size, allowedReferenceMimeTypes)
+    validateObjectKey(image.objectKey)
+    verifyReferenceUploadToken(image.objectKey, mimeType, size, image.uploadToken || '')
+
+    const normalized: StoredReferenceImage = {
+      filename,
+      mimeType,
+      size,
+      objectKey: image.objectKey,
+      storage: 'bucket',
+    }
+
+    if (image.analysisObjectKey || image.analysisMimeType || image.analysisUploadToken) {
+      const analysisMimeType = normalizeReferenceMimeType(image.analysisMimeType || '', image.analysisObjectKey || 'analysis.png')
+      const analysisSize = Number(image.analysisSize || 0)
+      validateReferenceFileMeta(analysisMimeType, analysisSize, allowedAnalysisMimeTypes)
+      validateObjectKey(image.analysisObjectKey || '')
+      verifyReferenceUploadToken(image.analysisObjectKey || '', analysisMimeType, analysisSize, image.analysisUploadToken || '')
+      normalized.analysisObjectKey = image.analysisObjectKey
+      normalized.analysisMimeType = analysisMimeType
+      normalized.analysisSize = analysisSize
+    }
+
+    if (mimeType === 'image/svg+xml' && !normalized.analysisObjectKey) {
+      throw new Error('SVG reference images require a rasterized PNG analysis upload')
+    }
+
+    return normalized
+  })
+}
+
+function validateReferenceFileMeta(mimeType: string, size: number, allowedTypes: Set<string>) {
+  if (!allowedTypes.has(mimeType)) throw new Error(`Unsupported reference image type: ${mimeType || 'unknown'}`)
+  if (!size || size < 1) throw new Error('Reference image size is required')
+  if (size > maxReferenceBytes) throw new Error('Reference image exceeds 5MB limit')
+}
+
+function signReferenceUpload(objectKey: string, mimeType: string, size: number, expiresAt: number) {
+  const signature = referenceUploadSignature(objectKey, mimeType, size, expiresAt)
+  return `v1.${expiresAt}.${signature}`
+}
+
+function verifyReferenceUploadToken(objectKey: string, mimeType: string, size: number, token: string) {
+  const [version, expiresAtRaw, signature] = String(token || '').split('.')
+  const expiresAt = Number(expiresAtRaw)
+  if (version !== 'v1' || !expiresAt || !signature) throw new Error('Invalid reference upload token')
+  if (Date.now() > expiresAt) throw new Error('Reference upload token expired')
+  const expected = referenceUploadSignature(objectKey, mimeType, size, expiresAt)
+  if (!safeEqual(signature, expected)) throw new Error('Invalid reference upload token')
+}
+
+function referenceUploadSignature(objectKey: string, mimeType: string, size: number, expiresAt: number) {
+  return crypto
+    .createHmac('sha256', referenceUploadSecret())
+    .update([objectKey, mimeType, String(size), String(expiresAt)].join('\n'))
+    .digest('hex')
+}
+
+function referenceUploadSecret() {
+  return process.env.REFERENCE_UPLOAD_TOKEN_SECRET || process.env.ADMIN_TOKEN || 'paperbanana-reference-upload-dev-secret'
+}
+
+function safeEqual(left: string, right: string) {
+  const leftBuffer = Buffer.from(left)
+  const rightBuffer = Buffer.from(right)
+  if (leftBuffer.length !== rightBuffer.length) return false
+  return crypto.timingSafeEqual(leftBuffer, rightBuffer)
+}
+
+function validateObjectKey(objectKey: string) {
+  if (!/^references\/[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+\.(png|jpg|jpeg|webp|svg)$/i.test(objectKey || '')) {
+    throw new Error('Invalid reference object key')
+  }
+}
+
+function normalizeReferenceMimeType(mimeType: string, filename = '') {
+  const normalized = String(mimeType || '').toLowerCase().split(';', 1)[0].trim()
+  if (normalized === 'image/jpg') return 'image/jpeg'
+  if (normalized) return normalized
+  const lower = filename.toLowerCase()
+  if (lower.endsWith('.png')) return 'image/png'
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg'
+  if (lower.endsWith('.webp')) return 'image/webp'
+  if (lower.endsWith('.svg')) return 'image/svg+xml'
+  return ''
+}
+
+function extensionForMimeType(mimeType: string) {
+  if (mimeType === 'image/png') return 'png'
+  if (mimeType === 'image/jpeg') return 'jpg'
+  if (mimeType === 'image/webp') return 'webp'
+  if (mimeType === 'image/svg+xml') return 'svg'
+  throw new Error(`Unsupported reference image type: ${mimeType}`)
+}
+
+function sanitizeFilename(filename: string) {
+  const safe = String(filename || 'reference')
+    .split(/[\\/]/)
+    .pop()
+    ?.replace(/[^\w.\-\u4e00-\u9fa5 ]+/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return safe || 'reference'
+}
+
+function sanitizePathPart(value: string) {
+  return String(value || 'anon').replace(/[^A-Za-z0-9._-]+/g, '-').slice(0, 80) || 'anon'
+}
+
+function randomId() {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
+}
+
 function validateCreateBody(body: CreateJobBody) {
   if (!['openrouter', 'gemini', 'openai', 'bailian'].includes(body.provider)) throw new Error('Invalid provider')
   if (!body.methodContent || body.methodContent.trim().length < 20) throw new Error('methodContent is too short')
@@ -679,6 +1089,7 @@ function validateCreateBody(body: CreateJobBody) {
   if (requestedFormat && !['png', 'svg'].includes(requestedFormat)) throw new Error('Invalid outputFormat')
   if (!body.mainModelName) throw new Error('mainModelName is required')
   if (!body.imageModelName) throw new Error('imageModelName is required')
+  if ((body.referenceImages || []).length && !body.referenceVisionModelName) throw new Error('referenceVisionModelName is required when referenceImages are provided')
 }
 
 function selectApiKey(provider: Provider, apiKeys: ApiKeys) {
@@ -701,12 +1112,15 @@ async function publicJob(job: any) {
     outputFormat: job.outputFormat || 'png',
     mainModelName: job.mainModelName,
     imageModelName: job.imageModelName,
+    referenceVisionModelName: job.referenceVisionModelName || '',
     pipelineMode: job.pipelineMode,
     aspectRatio: job.aspectRatio,
     numCandidates: job.numCandidates,
     maxCriticRounds: job.maxCriticRounds,
     promptCharCount: job.promptCharCount,
-    resultImages: await refreshResultImageUrls(job.resultImages || []),
+    referenceImageCount: (job.referenceImages || []).length,
+    referenceImages: await refreshReferenceImageUrls(job.referenceImages || []),
+    resultImages: await refreshStoredImageUrls(job.resultImages || []),
     logs: job.logs || [],
     error: job.error || '',
     createdAt: job.createdAt,
@@ -716,15 +1130,29 @@ async function publicJob(job: any) {
   }
 }
 
-async function refreshResultImageUrls(images: any[]) {
+async function refreshReferenceImageUrls(images: any[]) {
+  if (!images.length) return []
+  const refreshed = await refreshStoredImageUrls(images)
+  return refreshed.map((image) => ({
+    filename: image.filename || '',
+    objectKey: image.objectKey || '',
+    url: image.url || '',
+    storage: image.storage || 'bucket',
+    mimeType: image.mimeType || '',
+    size: Number(image.size || 0),
+  }))
+}
+
+async function refreshStoredImageUrls(images: any[]) {
   if (!images.length) return []
   const bucket = cloud.storage.bucket(bucketName)
   return await Promise.all(images.map(async (image) => {
-    if (!image?.filename || String(image.url || '').startsWith('data:')) return image
+    const objectKey = image?.objectKey || image?.filename
+    if (!objectKey || String(image.url || '').startsWith('data:')) return image
     try {
       return {
         ...image,
-        url: await bucket.getDownloadUrl(image.filename, 3600 * 24 * 7),
+        url: await bucket.getDownloadUrl(objectKey, 3600 * 24 * 7),
       }
     } catch {
       return image
