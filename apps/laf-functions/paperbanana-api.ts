@@ -116,7 +116,7 @@ export default async function (ctx: FunctionContext) {
 
   try {
     if (action === 'health') {
-      return ok({ ok: true, runtime: 'laf', version: '0.1.11' })
+      return ok({ ok: true, runtime: 'laf', version: '0.1.12' })
     }
     if (action === 'createJob') {
       return await createJob(body as CreateJobBody, ctx)
@@ -290,8 +290,12 @@ async function runJob(
 
   const results = []
   for (let i = 0; i < numCandidates; i += 1) {
-    await appendLog(jobId, `Candidate ${i + 1}: planning`)
-    const result = await runCandidate(body, apiKey, maxCriticRounds, referenceAnalysis)
+    const candidateNo = i + 1
+    await appendLog(jobId, `Candidate ${candidateNo}: planning`)
+    const result = await runCandidate(body, apiKey, maxCriticRounds, referenceAnalysis, async (message) => {
+      await appendLog(jobId, `Candidate ${candidateNo}: ${message}`)
+    })
+    await appendLog(jobId, `Candidate ${candidateNo}: saving result`)
     const saved = await saveResult(jobId, i, result.content, result.mimeType, result.encoding)
     results.push({
       candidateId: i,
@@ -317,21 +321,32 @@ async function runJob(
   )
 }
 
-async function runCandidate(body: CreateJobBody, apiKey: string, maxCriticRounds: number, referenceAnalysis = '') {
+async function runCandidate(
+  body: CreateJobBody,
+  apiKey: string,
+  maxCriticRounds: number,
+  referenceAnalysis = '',
+  logStage: (message: string) => Promise<void> = async () => {},
+) {
   if (normalizeOutputFormat(body.outputFormat) === 'svg') {
     const description = await planDiagramDescription(body, apiKey, maxCriticRounds, referenceAnalysis)
+    await logStage('plan ready')
+    await logStage('rendering SVG')
     const svg = await callSvgModel(body.provider, body.mainModelName, apiKey, description)
     return { content: svg, encoding: 'utf8' as const, mimeType: 'image/svg+xml', description }
   }
 
   if ((body.pipelineMode || 'planner_critic') === 'vanilla') {
     const prompt = diagramPrompt(body.methodContent, body.caption, referenceAnalysis)
+    await logStage('rendering PNG')
     const base64 = await callImageModel(body.provider, body.imageModelName, apiKey, prompt, body.aspectRatio || '16:9')
     return { content: base64, encoding: 'base64' as const, mimeType: 'image/png', description: prompt }
   }
 
   const description = await planDiagramDescription(body, apiKey, maxCriticRounds, referenceAnalysis)
+  await logStage('plan ready')
   const imagePrompt = diagramPromptFromDescription(description)
+  await logStage('rendering PNG')
   const base64 = await callImageModel(body.provider, body.imageModelName, apiKey, imagePrompt, body.aspectRatio || '16:9')
   return { content: base64, encoding: 'base64' as const, mimeType: 'image/png', description }
 }
@@ -448,7 +463,7 @@ async function callVisionModel(
     content.push({ type: 'image_url', image_url: { url: image.url } })
   }
 
-  const response = await fetch(`${baseUrl}/chat/completions`, {
+  const response = await fetchWithRetry(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -462,7 +477,7 @@ async function callVisionModel(
       ],
       temperature: 0.2,
     }),
-  })
+  }, `${provider} vision model ${actualModel}`)
   const data = await parseModelResponse(response)
   return data.choices?.[0]?.message?.content || ''
 }
@@ -479,12 +494,12 @@ async function callGeminiVision(
     parts.push({
       inlineData: {
         mimeType: image.mimeType,
-        data: await fetchImageAsBase64(image.url),
+        data: await fetchImageAsBase64(image.url, 'Gemini reference image download'),
       },
     })
   }
 
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+  const response = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -492,7 +507,7 @@ async function callGeminiVision(
       contents: [{ role: 'user', parts }],
       generationConfig: { temperature: 0.2 },
     }),
-  })
+  }, `gemini vision model ${model}`)
   const data = await parseModelResponse(response)
   return data.candidates?.[0]?.content?.parts?.map((part: any) => part.text || '').join('') || ''
 }
@@ -503,7 +518,7 @@ async function callTextModel(provider: Provider, model: string, apiKey: string, 
   }
   const baseUrl = textApiBaseUrl(provider)
   const actualModel = provider === 'openrouter' ? toOpenRouterModel(model) : model
-  const response = await fetch(`${baseUrl}/chat/completions`, {
+  const response = await fetchWithRetry(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -517,7 +532,7 @@ async function callTextModel(provider: Provider, model: string, apiKey: string, 
       ],
       temperature: 1,
     }),
-  })
+  }, `${provider} text model ${actualModel}`)
   const data = await parseModelResponse(response)
   return data.choices?.[0]?.message?.content || ''
 }
@@ -535,7 +550,7 @@ async function callSvgModel(provider: Provider, model: string, apiKey: string, d
 
 async function callImageModel(provider: Provider, model: string, apiKey: string, prompt: string, aspectRatio: string): Promise<string> {
   if (provider === 'openai') {
-    const response = await fetch('https://api.openai.com/v1/images/generations', {
+    const response = await fetchWithRetry('https://api.openai.com/v1/images/generations', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -549,7 +564,7 @@ async function callImageModel(provider: Provider, model: string, apiKey: string,
         background: 'opaque',
         output_format: 'png',
       }),
-    })
+    }, `openai image model ${model}`)
     const data = await parseModelResponse(response)
     return data.data?.[0]?.b64_json
   }
@@ -562,7 +577,7 @@ async function callImageModel(provider: Provider, model: string, apiKey: string,
     return callBailianImage(model, apiKey, prompt, aspectRatio)
   }
 
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+  const response = await fetchWithRetry('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -577,7 +592,7 @@ async function callImageModel(provider: Provider, model: string, apiKey: string,
         image_size: '1k',
       },
     }),
-  })
+  }, `openrouter image model ${toOpenRouterModel(model)}`)
   const data = await parseModelResponse(response)
   const message = data.choices?.[0]?.message || {}
   const imageUrl = message.images?.[0]?.image_url?.url || ''
@@ -595,7 +610,7 @@ function textApiBaseUrl(provider: Provider) {
 }
 
 async function callGeminiText(model: string, apiKey: string, system: string, user: string): Promise<string> {
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+  const response = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -603,14 +618,14 @@ async function callGeminiText(model: string, apiKey: string, system: string, use
       contents: [{ role: 'user', parts: [{ text: user }] }],
       generationConfig: { temperature: 1 },
     }),
-  })
+  }, `gemini text model ${model}`)
   const data = await parseModelResponse(response)
   return data.candidates?.[0]?.content?.parts?.map((part: any) => part.text || '').join('') || ''
 }
 
 async function callGeminiImage(model: string, apiKey: string, prompt: string, aspectRatio: string): Promise<string> {
   const actualModel = normalizeModelName('gemini', model)
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/${actualModel}:generateContent?key=${apiKey}`, {
+  const response = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1/models/${actualModel}:generateContent?key=${apiKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -620,7 +635,7 @@ async function callGeminiImage(model: string, apiKey: string, prompt: string, as
         imageConfig: { aspectRatio, imageSize: '1K' },
       },
     }),
-  })
+  }, `gemini image model ${actualModel}`)
   const data = await parseModelResponse(response)
   for (const part of data.candidates?.[0]?.content?.parts || []) {
     if (part.inlineData?.data) return part.inlineData.data
@@ -630,7 +645,7 @@ async function callGeminiImage(model: string, apiKey: string, prompt: string, as
 }
 
 async function callBailianImage(model: string, apiKey: string, prompt: string, aspectRatio: string): Promise<string> {
-  const response = await fetch('https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation', {
+  const response = await fetchWithRetry('https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -652,11 +667,11 @@ async function callBailianImage(model: string, apiKey: string, prompt: string, a
         watermark: false,
       },
     }),
-  })
+  }, `bailian image model ${model}`)
   const data = await parseDashScopeResponse(response)
   const imageUrl = extractDashScopeImageUrl(data)
   if (!imageUrl) throw new Error('阿里百炼图片模型没有返回图片地址')
-  return await fetchImageAsBase64(imageUrl)
+  return await fetchImageAsBase64(imageUrl, 'Bailian generated image download')
 }
 
 function extractDashScopeImageUrl(data: any) {
@@ -675,9 +690,9 @@ function bailianImageSize(aspectRatio: string) {
   return '1536*864'
 }
 
-async function fetchImageAsBase64(url: string) {
-  const response = await fetch(url)
-  if (!response.ok) throw new Error(`下载阿里百炼生成图片失败：HTTP ${response.status}`)
+async function fetchImageAsBase64(url: string, label = 'image download') {
+  const response = await fetchWithRetry(url, undefined, label)
+  if (!response.ok) throw new Error(`${label} failed: HTTP ${response.status}`)
   const arrayBuffer = await response.arrayBuffer()
   return Buffer.from(arrayBuffer).toString('base64')
 }
@@ -740,6 +755,25 @@ async function appendLog(jobId: string, message: string) {
       $push: { logs: `${new Date().toISOString()} ${message}` },
     },
   )
+}
+
+async function fetchWithRetry(url: string, options: RequestInit | undefined, label: string, attempts = 2) {
+  let lastError: any
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await fetch(url, options)
+    } catch (error: any) {
+      lastError = error
+      if (attempt < attempts) {
+        await sleep(800 * attempt)
+      }
+    }
+  }
+  throw new Error(`${label} request failed: ${lastError?.message || String(lastError)}`)
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 async function parseModelResponse(response: Response) {
