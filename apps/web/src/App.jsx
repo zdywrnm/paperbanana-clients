@@ -24,6 +24,7 @@ import {
   createJobRequest,
   fetchBackendHealth,
   getJobRequest,
+  modelCapabilityRequest,
   prepareReferenceUploadRequest,
   userJobsRequest,
 } from '@paperbanana/api';
@@ -40,6 +41,7 @@ import {
   OUTPUT_FORMATS,
   PROVIDERS,
   QUICK_START_EXAMPLES,
+  REFERENCE_IMAGE_MODES,
   REFERENCE_IMAGE_LIMITS,
   SAMPLE_METHOD,
 } from './constants';
@@ -71,7 +73,9 @@ export default function App() {
   const [mainModelName, setMainModelName] = useState(PROVIDERS.bailian.mainModel);
   const [imageGenModelName, setImageGenModelName] = useState(PROVIDERS.bailian.imageModel);
   const [referenceVisionModelName, setReferenceVisionModelName] = useState(PROVIDERS.bailian.visionModel);
+  const [referenceImageMode, setReferenceImageMode] = useState('auto');
   const [referenceImages, setReferenceImages] = useState([]);
+  const [mainModelCapability, setMainModelCapability] = useState(null);
   const referenceImagesRef = useRef([]);
   const [referenceUploadError, setReferenceUploadError] = useState('');
   const [isUploadingReferences, setIsUploadingReferences] = useState(false);
@@ -105,6 +109,14 @@ export default function App() {
   const defaultMainModelLabel = findModelLabel(providerConfig.mainModels, providerConfig.mainModel);
   const defaultImageModelLabel = findModelLabel(providerConfig.imageModels, providerConfig.imageModel);
   const defaultVisionModelLabel = findModelLabel(providerConfig.visionModels || [], providerConfig.visionModel);
+  const activeMainModelName = isAdvancedMode ? mainModelName : providerConfig.mainModel;
+  const activeReferenceImageMode = isAdvancedMode ? referenceImageMode : 'auto';
+  const mainModelDirectUnsupported = referenceImages.length > 0
+    && activeReferenceImageMode === 'main_model'
+    && mainModelCapability?.status === 'unsupported';
+  const needsReferenceVisionModel = referenceImages.length > 0 && activeReferenceImageMode !== 'main_model';
+  const canSelectMainModelDirect = mainModelCapability?.status !== 'unsupported';
+  const referenceCapabilityNote = referenceImages.length ? describeReferenceCapability(mainModelCapability) : '';
 
   useEffect(() => {
     let cancelled = false;
@@ -124,7 +136,37 @@ export default function App() {
     setMainModelName(PROVIDERS[provider].mainModel);
     setImageGenModelName(PROVIDERS[provider].imageModel);
     setReferenceVisionModelName(PROVIDERS[provider].visionModel);
+    setReferenceImageMode('auto');
   }, [provider]);
+
+  useEffect(() => {
+    if (!referenceImages.length) {
+      setMainModelCapability(null);
+      return undefined;
+    }
+
+    let cancelled = false;
+    setMainModelCapability({ status: 'loading', reason: '正在检查主模型能力。' });
+    modelCapabilityRequest(apiBaseNormalized, health, provider, activeMainModelName)
+      .then((data) => {
+        if (!cancelled) setMainModelCapability(data);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setMainModelCapability({
+            status: 'unknown',
+            supportsReferenceImages: false,
+            reason: err.message || '模型能力暂时无法确认。',
+            source: 'client-error',
+            cached: false,
+          });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [apiBaseNormalized, health, provider, activeMainModelName, referenceImages.length]);
 
   useEffect(() => {
     referenceImagesRef.current = referenceImages;
@@ -162,9 +204,9 @@ export default function App() {
   const canSubmit = useMemo(() => {
     const hasKey = selectedKey.trim();
     const canMock = isAdvancedMode && mock && health?.mock_enabled;
-    const hasVisionModel = !referenceImages.length || Boolean((isAdvancedMode ? referenceVisionModelName : providerConfig.visionModel)?.trim());
-    return authReady && hasVisionModel && (hasKey || canMock) && methodContent.trim().length >= 20 && caption.trim().length >= 3 && !isSubmitting && !isUploadingReferences;
-  }, [authReady, selectedKey, methodContent, caption, isSubmitting, mock, health, isAdvancedMode, referenceImages.length, referenceVisionModelName, providerConfig.visionModel, isUploadingReferences]);
+    const hasVisionModel = !needsReferenceVisionModel || Boolean((isAdvancedMode ? referenceVisionModelName : providerConfig.visionModel)?.trim());
+    return authReady && hasVisionModel && !mainModelDirectUnsupported && (hasKey || canMock) && methodContent.trim().length >= 20 && caption.trim().length >= 3 && !isSubmitting && !isUploadingReferences;
+  }, [authReady, selectedKey, methodContent, caption, isSubmitting, mock, health, isAdvancedMode, needsReferenceVisionModel, referenceVisionModelName, providerConfig.visionModel, isUploadingReferences, mainModelDirectUnsupported]);
 
   useEffect(() => {
     if (!AUTH_ENABLED || !currentUser) return undefined;
@@ -327,6 +369,7 @@ export default function App() {
         mainModelName: isAdvancedMode ? mainModelName : providerConfig.mainModel,
         imageGenModelName: isAdvancedMode ? imageGenModelName : providerConfig.imageModel,
         referenceVisionModelName: isAdvancedMode ? referenceVisionModelName : providerConfig.visionModel,
+        referenceImageMode: uploadedReferenceImages.length ? (isAdvancedMode ? referenceImageMode : 'auto') : undefined,
         referenceImages: uploadedReferenceImages,
         pipelineMode: isAdvancedMode ? pipelineMode : 'demo_planner_critic',
         retrievalSetting: isAdvancedMode ? retrievalSetting : 'none',
@@ -593,8 +636,30 @@ export default function App() {
               <div className="model-grid">
                 <Select label="主模型" value={mainModelName} onChange={setMainModelName} options={providerConfig.mainModels} />
                 <Select label="图像生成模型" value={imageGenModelName} onChange={setImageGenModelName} options={providerConfig.imageModels} />
-                <Select label="参考图识别模型" value={referenceVisionModelName} onChange={setReferenceVisionModelName} options={providerConfig.visionModels || []} />
+                {referenceImages.length && referenceImageMode === 'main_model' ? null : (
+                  <Select label="参考图识别模型" value={referenceVisionModelName} onChange={setReferenceVisionModelName} options={providerConfig.visionModels || []} />
+                )}
               </div>
+
+              {referenceImages.length ? (
+                <div className="reference-mode-panel">
+                  <span>参考图处理方式</span>
+                  <div className="reference-mode-switch">
+                    {REFERENCE_IMAGE_MODES.map(([id, label]) => (
+                      <button
+                        type="button"
+                        key={id}
+                        className={referenceImageMode === id ? 'active' : ''}
+                        disabled={id === 'main_model' && !canSelectMainModelDirect}
+                        onClick={() => setReferenceImageMode(id)}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  {referenceCapabilityNote ? <p>{referenceCapabilityNote}</p> : null}
+                </div>
+              ) : null}
 
               {health?.mock_enabled ? (
                 <label className="mock-switch">
@@ -785,4 +850,11 @@ function clampCanvasSize(value) {
 function findModelLabel(options, value) {
   const option = options.find(([id]) => id === value);
   return option ? option[1] : value;
+}
+
+function describeReferenceCapability(capability) {
+  if (!capability || capability.status === 'loading') return '正在检查当前主模型是否支持直接理解参考图。';
+  if (capability.status === 'supported') return '当前主模型支持直接理解参考图，可使用主模型直读。';
+  if (capability.status === 'unsupported') return '当前主模型不支持直接理解参考图，请使用独立识别模型或更换主模型。';
+  return '当前主模型的参考图能力无法确认；可以尝试主模型直读，失败时请改用独立识别模型或更换主模型。';
 }

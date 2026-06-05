@@ -1,5 +1,5 @@
 import { AlertTriangle, Loader2, Settings2 } from 'lucide-react';
-import { formatConfigurationMode, formatErrorMessage, formatOutputFormat } from '../utils';
+import { formatConfigurationMode, formatErrorMessage, formatOutputFormat, formatReferenceImageMode } from '../utils';
 import ResultFigure from './ResultFigure';
 import StatusBadge from './StatusBadge';
 
@@ -21,6 +21,7 @@ export default function JobStatus({ job, apiBase }) {
         <span>{job.provider}</span>
         <span>{job.aspect_ratio}</span>
         <span>{formatOutputFormat(job.output_format)}</span>
+        <span>{formatReferenceImageMode(job.reference_image_mode_used)}</span>
         <span>{job.num_candidates} 张候选图</span>
       </div>
       {job.error ? <div className="error-line"><AlertTriangle size={16} /> {formatErrorMessage(job.error)}</div> : null}

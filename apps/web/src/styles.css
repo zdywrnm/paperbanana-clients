@@ -838,6 +838,58 @@ button {
   gap: 10px;
 }
 
+.reference-mode-panel {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--surface-muted);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+}
+
+.reference-mode-panel > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 780;
+}
+
+.reference-mode-panel p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.reference-mode-switch {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.reference-mode-switch button {
+  min-height: 36px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  color: var(--ink-soft);
+  background: var(--surface);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.reference-mode-switch button.active {
+  color: #ffffff;
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+.reference-mode-switch button:disabled {
+  cursor: not-allowed;
+  color: var(--muted);
+  background: rgba(226, 221, 211, 0.45);
+  border-color: var(--hairline);
+}
+
 .settings-grid {
   display: grid;
   grid-template-columns: 1fr;

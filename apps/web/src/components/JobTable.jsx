@@ -1,5 +1,5 @@
 import { AlertTriangle } from 'lucide-react';
-import { formatConfigurationMode, formatDate, formatErrorMessage, formatOutputFormat } from '../utils';
+import { formatConfigurationMode, formatDate, formatErrorMessage, formatOutputFormat, formatReferenceImageMode } from '../utils';
 import ResultFigure from './ResultFigure';
 import StatusBadge from './StatusBadge';
 
@@ -51,7 +51,13 @@ export default function JobTable({ jobs, showUser, apiBase }) {
             </div>
             <div>
               <strong>参考图识别模型</strong>
-              <span title={item.reference_vision_model_name}>{item.reference_vision_model_name || '未使用'}</span>
+              <span title={item.reference_image_mode_used === 'vision_model' ? item.reference_vision_model_name : ''}>
+                {item.reference_image_mode_used === 'vision_model' ? item.reference_vision_model_name || '未记录' : '未使用'}
+              </span>
+            </div>
+            <div>
+              <strong>参考图处理</strong>
+              <span title={item.reference_image_mode_used || item.reference_image_mode}>{formatReferenceImageMode(item.reference_image_mode_used || item.reference_image_mode)}</span>
             </div>
           </div>
 

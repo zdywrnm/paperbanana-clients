@@ -229,6 +229,12 @@ export const OUTPUT_FORMATS = [
   ['svg', 'SVG 矢量图'],
 ];
 
+export const REFERENCE_IMAGE_MODES = [
+  ['auto', '自动选择'],
+  ['main_model', '主模型直读'],
+  ['vision_model', '独立识别模型'],
+];
+
 export const QUICK_START_EXAMPLES = [
   {
     id: 'paper-framework',

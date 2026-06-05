@@ -5,6 +5,9 @@ type Provider = 'openrouter' | 'gemini' | 'openai' | 'bailian'
 type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed'
 type OutputFormat = 'png' | 'svg'
 type ReferenceImageRole = 'original' | 'analysis'
+type ReferenceImageMode = 'auto' | 'main_model' | 'vision_model'
+type ReferenceImageModeUsed = 'none' | 'main_model' | 'vision_model'
+type ModelCapabilityStatus = 'supported' | 'unsupported' | 'unknown'
 
 type ApiKeys = {
   openrouter?: string
@@ -26,6 +29,8 @@ type CreateJobBody = {
   mainModelName: string
   imageModelName: string
   referenceVisionModelName?: string
+  referenceImageMode?: ReferenceImageMode
+  referenceImageModeUsed?: ReferenceImageModeUsed
   referenceImages?: ReferenceImageInput[]
   pipelineMode?: 'planner_critic' | 'full' | 'vanilla'
   aspectRatio?: '16:9' | '21:9' | '3:2' | '1:1'
@@ -89,11 +94,31 @@ type UserJobsBody = {
   limit?: number
 }
 
+type ModelCapabilityBody = {
+  action: 'modelCapability'
+  provider: Provider
+  model: string
+}
+
 type HealthBody = {
   action: 'health'
 }
 
-type RequestBody = CreateJobBody | PrepareReferenceUploadBody | GetJobBody | AdminJobsBody | UserJobsBody | HealthBody
+type ModelCapabilityResult = {
+  status: ModelCapabilityStatus
+  supportsReferenceImages: boolean
+  reason: string
+  source: string
+  cached: boolean
+}
+
+type VisionImageInput = {
+  filename: string
+  mimeType: string
+  url: string
+}
+
+type RequestBody = CreateJobBody | PrepareReferenceUploadBody | GetJobBody | AdminJobsBody | UserJobsBody | ModelCapabilityBody | HealthBody
 
 const db = cloud.mongo.db
 const jobs = db.collection('paperbanana_jobs')
@@ -103,6 +128,40 @@ const maxReferenceBytes = Number(process.env.PAPERBANANA_MAX_REFERENCE_BYTES || 
 const referenceUploadTtlSeconds = Number(process.env.PAPERBANANA_REFERENCE_UPLOAD_TTL_SECONDS || 900)
 const allowedReferenceMimeTypes = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'])
 const allowedAnalysisMimeTypes = new Set(['image/png', 'image/jpeg', 'image/webp'])
+const openRouterModelCacheTtlMs = Number(process.env.OPENROUTER_MODEL_CACHE_TTL_MS || 3600 * 1000)
+let openRouterModelCache: { expiresAt: number; modalities: Map<string, string[]> } | null = null
+
+const openaiVisionMainModels = new Set([
+  'gpt-4.1',
+  'gpt-4.1-mini',
+  'gpt-4o',
+  'gpt-4o-mini',
+  'gpt-5.1',
+  'gpt-5-mini',
+  'gpt-5.2',
+  'gpt-5.3-chat',
+  'gpt-5.4',
+  'gpt-5.4-pro',
+  'gpt-5.4-mini',
+  'gpt-5.4-nano',
+  'gpt-5.5',
+  'gpt-5.5-pro',
+  'gpt-chat-latest',
+])
+
+const geminiVisionMainModels = new Set([
+  'gemini-2.5-pro',
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
+  'gemini-3-flash',
+  'gemini-3-flash-preview',
+  'gemini-3-pro-preview',
+  'gemini-3.1-pro',
+  'gemini-3.1-pro-preview',
+  'gemini-3.1-flash-lite',
+  'gemini-3.1-flash-lite-preview',
+  'gemini-3.5-flash',
+])
 
 export default async function (ctx: FunctionContext) {
   setCorsHeaders(ctx)
@@ -116,13 +175,16 @@ export default async function (ctx: FunctionContext) {
 
   try {
     if (action === 'health') {
-      return ok({ ok: true, runtime: 'laf', version: '0.1.12' })
+      return ok({ ok: true, runtime: 'laf', version: '0.1.13' })
     }
     if (action === 'createJob') {
       return await createJob(body as CreateJobBody, ctx)
     }
     if (action === 'prepareReferenceUpload') {
       return await prepareReferenceUpload(body as PrepareReferenceUploadBody)
+    }
+    if (action === 'modelCapability') {
+      return await modelCapability(body as ModelCapabilityBody)
     }
     if (action === 'getJob') {
       return await getJob((body as GetJobBody).jobId)
@@ -186,6 +248,12 @@ async function prepareReferenceUpload(body: PrepareReferenceUploadBody) {
   return ok({ uploads })
 }
 
+async function modelCapability(body: ModelCapabilityBody) {
+  if (!['openrouter', 'gemini', 'openai', 'bailian'].includes(body.provider)) return fail('Invalid provider', 400)
+  if (!body.model) return fail('model is required', 400)
+  return ok(await referenceModelCapability(body.provider, normalizeModelName(body.provider, body.model)))
+}
+
 async function createJob(body: CreateJobBody, ctx: FunctionContext) {
   validateCreateBody(body)
   const normalizedBody = {
@@ -193,12 +261,23 @@ async function createJob(body: CreateJobBody, ctx: FunctionContext) {
     mainModelName: normalizeModelName(body.provider, body.mainModelName),
     imageModelName: normalizeModelName(body.provider, body.imageModelName),
     referenceVisionModelName: normalizeModelName(body.provider, body.referenceVisionModelName || body.mainModelName),
+    referenceImageMode: normalizeReferenceImageMode(body.referenceImageMode),
     referenceImages: normalizeReferenceImages(body.referenceImages || []),
     outputFormat: normalizeOutputFormat(body.outputFormat || body.output_format),
   }
   const apiKey = selectApiKey(normalizedBody.provider, normalizedBody.apiKeys)
   if (!apiKey) {
     return fail(`Missing API key for provider ${normalizedBody.provider}`, 400)
+  }
+
+  const modeResolution = await resolveReferenceImageMode(normalizedBody)
+  if (modeResolution.error) {
+    return fail(modeResolution.error, 400)
+  }
+  const jobBody = {
+    ...normalizedBody,
+    referenceImageMode: modeResolution.referenceImageMode,
+    referenceImageModeUsed: modeResolution.referenceImageModeUsed,
   }
 
   const now = new Date()
@@ -217,6 +296,8 @@ async function createJob(body: CreateJobBody, ctx: FunctionContext) {
     mainModelName: normalizedBody.mainModelName,
     imageModelName: normalizedBody.imageModelName,
     referenceVisionModelName: normalizedBody.referenceVisionModelName,
+    referenceImageMode: jobBody.referenceImageMode,
+    referenceImageModeUsed: jobBody.referenceImageModeUsed,
     referenceImages: normalizedBody.referenceImages,
     outputFormat: normalizedBody.outputFormat,
     pipelineMode: normalizedBody.pipelineMode || 'planner_critic',
@@ -239,7 +320,7 @@ async function createJob(body: CreateJobBody, ctx: FunctionContext) {
 
   // Laf 云函数是常驻 Node.js Runtime。API key 只保留在本次闭包中，
   // 不写入数据库，不进入日志。
-  void runJob(jobId, normalizedBody, apiKey, safeNumCandidates, safeCriticRounds).catch(async (error) => {
+  void runJob(jobId, jobBody, apiKey, safeNumCandidates, safeCriticRounds).catch(async (error) => {
     await markFailed(jobId, error?.message || String(error))
   })
 
@@ -274,6 +355,48 @@ async function userJobs(body: UserJobsBody) {
   return ok({ jobs: await Promise.all(list.map(publicJob)) })
 }
 
+async function resolveReferenceImageMode(body: CreateJobBody & { referenceImageMode: ReferenceImageMode }) {
+  const requestedMode = body.referenceImageMode
+  const hasReferences = Boolean((body.referenceImages || []).length)
+  if (!hasReferences) {
+    return {
+      referenceImageMode: requestedMode,
+      referenceImageModeUsed: 'none' as ReferenceImageModeUsed,
+    }
+  }
+
+  if (requestedMode === 'vision_model') {
+    return {
+      referenceImageMode: requestedMode,
+      referenceImageModeUsed: 'vision_model' as ReferenceImageModeUsed,
+    }
+  }
+
+  const capability = await referenceModelCapability(body.provider, body.mainModelName)
+  if (requestedMode === 'auto') {
+    return {
+      referenceImageMode: requestedMode,
+      referenceImageModeUsed: capability.status === 'supported' ? 'main_model' as const : 'vision_model' as const,
+      capability,
+    }
+  }
+
+  if (capability.status === 'unsupported') {
+    return {
+      referenceImageMode: requestedMode,
+      referenceImageModeUsed: 'vision_model' as ReferenceImageModeUsed,
+      capability,
+      error: `当前主模型不支持直接理解参考图，请改用独立识别模型或更换主模型。${capability.reason ? `（${capability.reason}）` : ''}`,
+    }
+  }
+
+  return {
+    referenceImageMode: requestedMode,
+    referenceImageModeUsed: 'main_model' as ReferenceImageModeUsed,
+    capability,
+  }
+}
+
 async function runJob(
   jobId: string,
   body: CreateJobBody,
@@ -286,13 +409,27 @@ async function runJob(
     { $set: { status: 'running', startedAt: new Date(), updatedAt: new Date() } },
   )
 
-  const referenceAnalysis = await analyzeReferenceImages(jobId, body, apiKey)
+  let referenceAnalysis = ''
+  let sharedPlannerDescription = ''
+
+  if ((body.referenceImages || []).length) {
+    if (body.referenceImageModeUsed === 'main_model') {
+      await appendLog(jobId, 'Reference mode: main model direct')
+      await appendLog(jobId, 'Reference planner: planning with main model')
+      const visionInputs = await buildVisionImageInputs(body.referenceImages || [])
+      sharedPlannerDescription = await planDiagramDescription(body, apiKey, maxCriticRounds, '', visionInputs, true)
+      await appendLog(jobId, 'Reference planner: plan ready')
+    } else {
+      await appendLog(jobId, 'Reference mode: independent vision model')
+      referenceAnalysis = await analyzeReferenceImages(jobId, body, apiKey)
+    }
+  }
 
   const results = []
   for (let i = 0; i < numCandidates; i += 1) {
     const candidateNo = i + 1
-    await appendLog(jobId, `Candidate ${candidateNo}: planning`)
-    const result = await runCandidate(body, apiKey, maxCriticRounds, referenceAnalysis, async (message) => {
+    await appendLog(jobId, sharedPlannerDescription ? `Candidate ${candidateNo}: using shared plan` : `Candidate ${candidateNo}: planning`)
+    const result = await runCandidate(body, apiKey, maxCriticRounds, referenceAnalysis, sharedPlannerDescription, async (message) => {
       await appendLog(jobId, `Candidate ${candidateNo}: ${message}`)
     })
     await appendLog(jobId, `Candidate ${candidateNo}: saving result`)
@@ -314,6 +451,7 @@ async function runJob(
         status: 'succeeded',
         resultImages: results,
         referenceAnalysis,
+        referencePlannerDescription: sharedPlannerDescription,
         completedAt: new Date(),
         updatedAt: new Date(),
       },
@@ -326,10 +464,11 @@ async function runCandidate(
   apiKey: string,
   maxCriticRounds: number,
   referenceAnalysis = '',
+  sharedPlannerDescription = '',
   logStage: (message: string) => Promise<void> = async () => {},
 ) {
   if (normalizeOutputFormat(body.outputFormat) === 'svg') {
-    const description = await planDiagramDescription(body, apiKey, maxCriticRounds, referenceAnalysis)
+    const description = sharedPlannerDescription || await planDiagramDescription(body, apiKey, maxCriticRounds, referenceAnalysis)
     await logStage('plan ready')
     await logStage('rendering SVG')
     const svg = await callSvgModel(body.provider, body.mainModelName, apiKey, description)
@@ -337,13 +476,19 @@ async function runCandidate(
   }
 
   if ((body.pipelineMode || 'planner_critic') === 'vanilla') {
+    if (sharedPlannerDescription) {
+      await logStage('plan ready')
+      await logStage('rendering PNG')
+      const base64 = await callImageModel(body.provider, body.imageModelName, apiKey, diagramPromptFromDescription(sharedPlannerDescription), body.aspectRatio || '16:9')
+      return { content: base64, encoding: 'base64' as const, mimeType: 'image/png', description: sharedPlannerDescription }
+    }
     const prompt = diagramPrompt(body.methodContent, body.caption, referenceAnalysis)
     await logStage('rendering PNG')
     const base64 = await callImageModel(body.provider, body.imageModelName, apiKey, prompt, body.aspectRatio || '16:9')
     return { content: base64, encoding: 'base64' as const, mimeType: 'image/png', description: prompt }
   }
 
-  const description = await planDiagramDescription(body, apiKey, maxCriticRounds, referenceAnalysis)
+  const description = sharedPlannerDescription || await planDiagramDescription(body, apiKey, maxCriticRounds, referenceAnalysis)
   await logStage('plan ready')
   const imagePrompt = diagramPromptFromDescription(description)
   await logStage('rendering PNG')
@@ -351,8 +496,15 @@ async function runCandidate(
   return { content: base64, encoding: 'base64' as const, mimeType: 'image/png', description }
 }
 
-async function planDiagramDescription(body: CreateJobBody, apiKey: string, maxCriticRounds: number, referenceAnalysis = '') {
-  if ((body.pipelineMode || 'planner_critic') === 'vanilla') {
+async function planDiagramDescription(
+  body: CreateJobBody,
+  apiKey: string,
+  maxCriticRounds: number,
+  referenceAnalysis = '',
+  referenceImages: VisionImageInput[] = [],
+  forcePlanner = false,
+) {
+  if ((body.pipelineMode || 'planner_critic') === 'vanilla' && !forcePlanner) {
     return withReferenceAnalysis(
       `Create an academic method diagram for this methodology:\n${body.methodContent}\n\nVisual intent:\n${body.caption}`,
       referenceAnalysis,
@@ -365,9 +517,14 @@ async function planDiagramDescription(body: CreateJobBody, apiKey: string, maxCr
     apiKey,
     plannerSystemPrompt(),
     plannerUserPrompt(body.methodContent, body.caption, referenceAnalysis),
+    referenceImages,
   )
 
   let description = planner
+  if (forcePlanner && (body.pipelineMode || 'planner_critic') === 'vanilla') {
+    return description
+  }
+
   if ((body.pipelineMode || 'planner_critic') === 'full') {
     description = await callTextModel(
       body.provider,
@@ -449,7 +606,7 @@ async function callVisionModel(
   apiKey: string,
   methodContent: string,
   caption: string,
-  images: Array<{ filename: string; mimeType: string; url: string }>,
+  images: VisionImageInput[],
 ): Promise<string> {
   if (!images.length) return ''
   if (provider === 'gemini') {
@@ -487,7 +644,7 @@ async function callGeminiVision(
   apiKey: string,
   methodContent: string,
   caption: string,
-  images: Array<{ filename: string; mimeType: string; url: string }>,
+  images: VisionImageInput[],
 ): Promise<string> {
   const parts: any[] = [{ text: referenceVisionUserPrompt(methodContent, caption) }]
   for (const image of images) {
@@ -512,29 +669,46 @@ async function callGeminiVision(
   return data.candidates?.[0]?.content?.parts?.map((part: any) => part.text || '').join('') || ''
 }
 
-async function callTextModel(provider: Provider, model: string, apiKey: string, system: string, user: string): Promise<string> {
+async function callTextModel(
+  provider: Provider,
+  model: string,
+  apiKey: string,
+  system: string,
+  user: string,
+  images: VisionImageInput[] = [],
+): Promise<string> {
   if (provider === 'gemini') {
-    return callGeminiText(model, apiKey, system, user)
+    try {
+      return await callGeminiText(model, apiKey, system, user, images)
+    } catch (error: any) {
+      if (images.length) throw new Error(mainModelReferenceError(provider, model, error))
+      throw error
+    }
   }
   const baseUrl = textApiBaseUrl(provider)
   const actualModel = provider === 'openrouter' ? toOpenRouterModel(model) : model
-  const response = await fetchWithRetry(`${baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: actualModel,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
-      temperature: 1,
-    }),
-  }, `${provider} text model ${actualModel}`)
-  const data = await parseModelResponse(response)
-  return data.choices?.[0]?.message?.content || ''
+  try {
+    const response = await fetchWithRetry(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: actualModel,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: chatUserContent(user, images) },
+        ],
+        temperature: 1,
+      }),
+    }, `${provider} text model ${actualModel}`)
+    const data = await parseModelResponse(response)
+    return data.choices?.[0]?.message?.content || ''
+  } catch (error: any) {
+    if (images.length) throw new Error(mainModelReferenceError(provider, actualModel, error))
+    throw error
+  }
 }
 
 async function callSvgModel(provider: Provider, model: string, apiKey: string, description: string): Promise<string> {
@@ -609,13 +783,29 @@ function textApiBaseUrl(provider: Provider) {
   return 'https://api.openai.com/v1'
 }
 
-async function callGeminiText(model: string, apiKey: string, system: string, user: string): Promise<string> {
+async function callGeminiText(
+  model: string,
+  apiKey: string,
+  system: string,
+  user: string,
+  images: VisionImageInput[] = [],
+): Promise<string> {
+  const parts: any[] = [{ text: user }]
+  for (const image of images) {
+    parts.push({
+      inlineData: {
+        mimeType: image.mimeType,
+        data: await fetchImageAsBase64(image.url, 'Gemini main model reference image download'),
+      },
+    })
+  }
+
   const response = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: system }] },
-      contents: [{ role: 'user', parts: [{ text: user }] }],
+      contents: [{ role: 'user', parts }],
       generationConfig: { temperature: 1 },
     }),
   }, `gemini text model ${model}`)
@@ -774,6 +964,121 @@ async function fetchWithRetry(url: string, options: RequestInit | undefined, lab
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function chatUserContent(user: string, images: VisionImageInput[]) {
+  if (!images.length) return user
+  return [
+    { type: 'text', text: user },
+    ...images.map((image) => ({
+      type: 'image_url',
+      image_url: { url: image.url },
+    })),
+  ]
+}
+
+function mainModelReferenceError(provider: Provider, model: string, error: any) {
+  const message = error?.message || String(error)
+  const hint = '请改用独立识别模型或更换主模型。'
+  if (message.includes(hint)) return message
+  return `主模型 ${provider}/${model} 直读参考图失败：${message}。${hint}`
+}
+
+async function referenceModelCapability(provider: Provider, model: string): Promise<ModelCapabilityResult> {
+  const normalizedModel = normalizeModelName(provider, model)
+  if (provider === 'bailian') {
+    return {
+      status: 'unsupported',
+      supportsReferenceImages: false,
+      reason: '阿里百炼主模型直读参考图本轮暂未启用',
+      source: 'paperbanana-static',
+      cached: true,
+    }
+  }
+
+  if (provider === 'openai') {
+    const supported = openaiVisionMainModels.has(normalizedModel)
+    return {
+      status: supported ? 'supported' : 'unknown',
+      supportsReferenceImages: supported,
+      reason: supported ? 'OpenAI static vision-capable model list' : '模型不在当前 OpenAI 静态白名单内，能力未知',
+      source: 'paperbanana-static',
+      cached: true,
+    }
+  }
+
+  if (provider === 'gemini') {
+    const supported = geminiVisionMainModels.has(normalizedModel)
+    return {
+      status: supported ? 'supported' : 'unknown',
+      supportsReferenceImages: supported,
+      reason: supported ? 'Gemini static vision-capable model list' : '模型不在当前 Gemini 静态白名单内，能力未知',
+      source: 'paperbanana-static',
+      cached: true,
+    }
+  }
+
+  return await openRouterReferenceCapability(normalizedModel)
+}
+
+async function openRouterReferenceCapability(model: string): Promise<ModelCapabilityResult> {
+  const actualModel = toOpenRouterModel(model)
+  try {
+    const { modalities, cached } = await fetchOpenRouterModelModalities()
+    if (!modalities.has(actualModel)) {
+      return {
+        status: 'unknown',
+        supportsReferenceImages: false,
+        reason: 'OpenRouter metadata did not include this model id',
+        source: 'openrouter-models',
+        cached,
+      }
+    }
+    const inputModalities = modalities.get(actualModel) || []
+    const supported = inputModalities.includes('image')
+    return {
+      status: supported ? 'supported' : 'unsupported',
+      supportsReferenceImages: supported,
+      reason: supported
+        ? 'OpenRouter input_modalities includes image'
+        : `OpenRouter input_modalities: ${inputModalities.join(', ') || 'none'}`,
+      source: 'openrouter-models',
+      cached,
+    }
+  } catch (error: any) {
+    return {
+      status: 'unknown',
+      supportsReferenceImages: false,
+      reason: `OpenRouter metadata unavailable: ${error?.message || String(error)}`,
+      source: 'openrouter-models',
+      cached: false,
+    }
+  }
+}
+
+async function fetchOpenRouterModelModalities() {
+  const now = Date.now()
+  if (openRouterModelCache && openRouterModelCache.expiresAt > now) {
+    return { modalities: openRouterModelCache.modalities, cached: true }
+  }
+
+  const response = await fetchWithRetry('https://openrouter.ai/api/v1/models', {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
+  }, 'OpenRouter model metadata')
+  const data = await parseModelResponse(response)
+  const modalities = new Map<string, string[]>()
+  for (const model of data?.data || []) {
+    if (!model?.id) continue
+    modalities.set(String(model.id), Array.isArray(model?.architecture?.input_modalities)
+      ? model.architecture.input_modalities.map((item: any) => String(item))
+      : [])
+  }
+  openRouterModelCache = {
+    expiresAt: now + openRouterModelCacheTtlMs,
+    modalities,
+  }
+  return { modalities, cached: false }
 }
 
 async function parseModelResponse(response: Response) {
@@ -1123,7 +1428,7 @@ function validateCreateBody(body: CreateJobBody) {
   if (requestedFormat && !['png', 'svg'].includes(requestedFormat)) throw new Error('Invalid outputFormat')
   if (!body.mainModelName) throw new Error('mainModelName is required')
   if (!body.imageModelName) throw new Error('imageModelName is required')
-  if ((body.referenceImages || []).length && !body.referenceVisionModelName) throw new Error('referenceVisionModelName is required when referenceImages are provided')
+  if (body.referenceImageMode && !['auto', 'main_model', 'vision_model'].includes(body.referenceImageMode)) throw new Error('Invalid referenceImageMode')
 }
 
 function selectApiKey(provider: Provider, apiKeys: ApiKeys) {
@@ -1147,6 +1452,8 @@ async function publicJob(job: any) {
     mainModelName: job.mainModelName,
     imageModelName: job.imageModelName,
     referenceVisionModelName: job.referenceVisionModelName || '',
+    referenceImageMode: job.referenceImageMode || 'vision_model',
+    referenceImageModeUsed: job.referenceImageModeUsed || ((job.referenceImages || []).length ? 'vision_model' : 'none'),
     pipelineMode: job.pipelineMode,
     aspectRatio: job.aspectRatio,
     numCandidates: job.numCandidates,
@@ -1233,6 +1540,11 @@ function normalizeModelName(provider: string, model: string) {
 
 function normalizeOutputFormat(format?: string): OutputFormat {
   return format === 'svg' ? 'svg' : 'png'
+}
+
+function normalizeReferenceImageMode(mode?: string): ReferenceImageMode {
+  if (mode === 'auto' || mode === 'main_model' || mode === 'vision_model') return mode
+  return 'vision_model'
 }
 
 function clamp(value: number, min: number, max: number) {

@@ -92,6 +92,11 @@ app.post('/paperbanana-api', async (req, res) => {
       return sendLafResponse(res, data);
     }
 
+    if (action === 'modelCapability') {
+      const data = await callLaf(withGatewayToken(req.body));
+      return sendLafResponse(res, data);
+    }
+
     if (action === 'adminUsers') {
       requireAdminToken(req.body?.adminToken);
       const data = await listAuthUsers(req.body);

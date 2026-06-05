@@ -26,6 +26,14 @@ export function formatOutputFormat(format) {
   return 'PNG 图片';
 }
 
+export function formatReferenceImageMode(mode) {
+  if (mode === 'main_model') return '主模型直读';
+  if (mode === 'vision_model') return '独立识别';
+  if (mode === 'auto') return '自动选择';
+  if (mode === 'none') return '未使用参考图';
+  return '未记录';
+}
+
 export function formatDate(value) {
   if (!value) return '';
   return new Intl.DateTimeFormat('zh-CN', {

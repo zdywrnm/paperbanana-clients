@@ -44,6 +44,7 @@ export async function createJobRequest(apiBase, health, payload) {
         mainModelName: payload.mainModelName,
         imageModelName: payload.imageGenModelName,
         referenceVisionModelName: payload.referenceVisionModelName,
+        referenceImageMode: payload.referenceImageMode,
         referenceImages: payload.referenceImages || [],
         pipelineMode: toLafPipeline(payload.pipelineMode),
         aspectRatio: payload.aspectRatio,
@@ -69,6 +70,7 @@ export async function createJobRequest(apiBase, health, payload) {
       main_model_name: payload.mainModelName,
       image_gen_model_name: payload.imageGenModelName,
       reference_vision_model_name: payload.referenceVisionModelName,
+      reference_image_mode: payload.referenceImageMode,
       reference_images: payload.referenceImages || [],
       pipeline_mode: payload.pipelineMode,
       retrieval_setting: payload.retrievalSetting,
@@ -91,6 +93,24 @@ export async function prepareReferenceUploadRequest(apiBase, health, files) {
   }
 
   throw new Error('参考图上传需要使用 Laf 或登录网关后端。');
+}
+
+export async function modelCapabilityRequest(apiBase, health, provider, model) {
+  if (shouldUsePaperbananaApi(apiBase, health)) {
+    return fetchJson(lafEndpoint(apiBase), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'modelCapability', provider, model }),
+    });
+  }
+
+  return {
+    status: 'unknown',
+    supportsReferenceImages: false,
+    reason: '当前后端不支持模型能力查询',
+    source: 'client-fallback',
+    cached: false,
+  };
 }
 
 export async function getJobRequest(apiBase, health, jobId, options = {}) {
@@ -193,6 +213,7 @@ function toLafPipeline(mode) {
 }
 
 function normalizeJob(job = {}) {
+  const rawReferenceImages = job.reference_images || job.referenceImages || [];
   return {
     id: job.id || job._id,
     status: job.status,
@@ -207,6 +228,8 @@ function normalizeJob(job = {}) {
     main_model_name: job.main_model_name || job.mainModelName || '',
     image_gen_model_name: job.image_gen_model_name || job.imageModelName || '',
     reference_vision_model_name: job.reference_vision_model_name || job.referenceVisionModelName || '',
+    reference_image_mode: job.reference_image_mode || job.referenceImageMode || (rawReferenceImages.length ? 'vision_model' : ''),
+    reference_image_mode_used: job.reference_image_mode_used || job.referenceImageModeUsed || (rawReferenceImages.length ? 'vision_model' : 'none'),
     pipeline_mode: job.pipeline_mode || job.pipelineMode || '',
     aspect_ratio: job.aspect_ratio || job.aspectRatio || '',
     num_candidates: job.num_candidates || job.numCandidates || 0,
@@ -220,8 +243,8 @@ function normalizeJob(job = {}) {
       candidate_id: image.candidate_id ?? image.candidateId ?? index,
       mime_type: image.mime_type || image.mimeType || '',
     })),
-    reference_image_count: job.reference_image_count || job.referenceImageCount || (job.reference_images || job.referenceImages || []).length || 0,
-    reference_images: (job.reference_images || job.referenceImages || []).map((image, index) => ({
+    reference_image_count: job.reference_image_count || job.referenceImageCount || rawReferenceImages.length || 0,
+    reference_images: rawReferenceImages.map((image, index) => ({
       filename: image.filename || `reference-${index + 1}`,
       object_key: image.object_key || image.objectKey || '',
       url: image.url,
