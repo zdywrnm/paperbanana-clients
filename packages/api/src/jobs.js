@@ -125,27 +125,37 @@ export async function getJobRequest(apiBase, health, jobId, options = {}) {
   return fetchJson(`${apiBase}/api/jobs/${jobId}`);
 }
 
-export async function adminJobsRequest(apiBase, health, adminToken) {
-  if (shouldUseLaf(apiBase, health)) {
-    const data = await fetchJson(lafEndpoint(apiBase), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'adminJobs', adminToken, limit: 50 }),
-    });
-    const jobs = (data.jobs || []).map(normalizeJob);
-    return { jobs: await hydrateRecordImages(apiBase, health, jobs, { adminToken }) };
-  }
-  return fetchJson(`${apiBase}/api/admin/jobs?limit=50`, {
-    headers: { 'x-admin-token': adminToken },
-  });
-}
-
-export async function adminUsersRequest(apiBase, health, adminToken) {
+export async function adminStatusRequest(apiBase, health) {
   if (BACKEND_MODE === 'gateway' || health?.backendMode === 'gateway') {
     const data = await fetchJson(lafEndpoint(apiBase), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'adminUsers', adminToken, limit: 100 }),
+      body: JSON.stringify({ action: 'adminStatus' }),
+    });
+    return { isAdmin: Boolean(data.isAdmin) };
+  }
+  return { isAdmin: false };
+}
+
+export async function adminJobsRequest(apiBase, health) {
+  if (BACKEND_MODE === 'gateway' || health?.backendMode === 'gateway') {
+    const data = await fetchJson(lafEndpoint(apiBase), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'adminJobs', limit: 50 }),
+    });
+    const jobs = (data.jobs || []).map(normalizeJob);
+    return { jobs: await hydrateRecordImages(apiBase, health, jobs) };
+  }
+  throw new Error('站长后台需要先启用登录网关。');
+}
+
+export async function adminUsersRequest(apiBase, health) {
+  if (BACKEND_MODE === 'gateway' || health?.backendMode === 'gateway') {
+    const data = await fetchJson(lafEndpoint(apiBase), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'adminUsers', limit: 100 }),
     });
     return { users: (data.users || []).map(normalizeAuthUser) };
   }
@@ -172,14 +182,13 @@ export async function submitFeedbackRequest(apiBase, health, payload = {}) {
   throw new Error('意见反馈需要使用 Laf 或登录网关后端。');
 }
 
-export async function adminFeedbackRequest(apiBase, health, adminToken, opts = {}) {
-  if (shouldUseLaf(apiBase, health)) {
+export async function adminFeedbackRequest(apiBase, health, opts = {}) {
+  if (BACKEND_MODE === 'gateway' || health?.backendMode === 'gateway') {
     const data = await fetchJson(lafEndpoint(apiBase), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         action: 'adminFeedback',
-        adminToken,
         limit: opts.limit || 50,
         status: opts.status || undefined,
       }),

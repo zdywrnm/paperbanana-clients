@@ -24,6 +24,16 @@
 
 ## 条目（最新在上）
 
+### [2026-06-07] 管理员改为账号制(邮箱白名单) — by Codex
+变更：admin 鉴权从手填 `ADMIN_TOKEN` 改为“登录邮箱 ∈ `ADMIN_EMAILS`”；新增 `adminStatus`；前端去掉 token 框、按 `adminStatus` 显示站长入口。
+契约：网关新增 env `ADMIN_EMAILS` + `adminStatus` 动作；admin 动作不再接收用户 `adminToken`（网关内部注入）；`ADMIN_TOKEN` 仅网关内部保留。
+各端待办：
+- [x] auth-gateway
+- [x] web
+- [x] packages/api
+- [ ] miniprogram（如有 admin 入口）
+- [ ] 其它端无 admin UI 暂不涉及
+
 ### [2026-06-07] 用户意见反馈 submitFeedback — by Codex
 变更：新增意见反馈（匿名可提，登录后由网关自动附身份）。
 契约：新 action `submitFeedback` + `adminFeedback`；新集合 `paperbanana_feedback`；网关放行这两个 action；任务无关；不读取/存储 `apiKeys`。

@@ -53,7 +53,7 @@ button {
 .app-shell {
   width: min(1460px, calc(100% - 48px));
   margin: 0 auto;
-  padding: 28px 0 56px;
+  padding: 28px 0 104px;
 }
 
 .paper-header {
@@ -147,8 +147,7 @@ button {
 }
 
 .header-links a,
-.auth-entry-button,
-.feedback-entry-button {
+.auth-entry-button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -167,13 +166,8 @@ button {
   cursor: pointer;
 }
 
-.feedback-entry-button {
-  cursor: pointer;
-}
-
 .header-links a:hover,
-.auth-entry-button:hover,
-.feedback-entry-button:hover {
+.auth-entry-button:hover {
   border-color: var(--hairline-strong);
   background: #ffffff;
   color: var(--ink);
@@ -360,6 +354,36 @@ button {
   border: 1px solid var(--hairline);
   border-radius: var(--radius-panel);
   box-shadow: 0 24px 72px rgba(23, 21, 19, 0.22);
+}
+
+.feedback-fab {
+  position: fixed;
+  right: calc(22px + env(safe-area-inset-right));
+  bottom: calc(22px + env(safe-area-inset-bottom));
+  z-index: 12;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 18px;
+  color: #ffffff;
+  background: var(--sage);
+  border: 1px solid rgba(22, 72, 56, 0.84);
+  border-radius: 999px;
+  box-shadow: 0 16px 38px rgba(23, 21, 19, 0.24);
+  font-size: 14px;
+  font-weight: 780;
+}
+
+.feedback-fab:hover {
+  background: #264f43;
+  transform: translateY(-1px);
+}
+
+.feedback-fab:focus-visible {
+  outline: 3px solid rgba(185, 133, 24, 0.32);
+  outline-offset: 3px;
 }
 
 .feedback-dialog-head {
@@ -1289,9 +1313,18 @@ figcaption {
   margin-bottom: 14px;
 }
 
+.admin-controls.admin-controls-single {
+  grid-template-columns: auto;
+  justify-content: start;
+}
+
 .admin-controls button {
   padding: 0 16px;
   background: var(--ink);
+}
+
+.admin-controls.admin-controls-single button {
+  min-width: 112px;
 }
 
 .admin-section {
@@ -1662,6 +1695,7 @@ figcaption {
   .app-shell {
     width: min(100% - 24px, 1440px);
     padding-top: 18px;
+    padding-bottom: 96px;
   }
 
   .paper-header,
@@ -1694,6 +1728,13 @@ figcaption {
 
   .auth-user {
     max-width: 100%;
+  }
+
+  .feedback-fab {
+    right: calc(14px + env(safe-area-inset-right));
+    bottom: calc(14px + env(safe-area-inset-bottom));
+    min-height: 46px;
+    padding: 0 15px;
   }
 
   .two-col,

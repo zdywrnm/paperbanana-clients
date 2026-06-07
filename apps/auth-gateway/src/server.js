@@ -10,6 +10,7 @@ const port = Number(process.env.PORT || 3005);
 const lafApiUrl = process.env.LAF_API_URL || 'https://sdswgya641.sealoshzh.site/paperbanana-api';
 const gatewayToken = process.env.PAPERBANANA_GATEWAY_TOKEN || '';
 const adminToken = process.env.ADMIN_TOKEN || '';
+const adminEmails = new Set(parseList(process.env.ADMIN_EMAILS).map((email) => email.toLowerCase()));
 const allowedOrigins = new Set(
   parseList(
     process.env.FRONTEND_ORIGINS ||
@@ -75,8 +76,13 @@ app.post('/paperbanana-api', async (req, res) => {
       return res.json({ code: 0, ok: true, runtime: 'gateway', auth: 'better-auth', laf });
     }
 
+    if (action === 'adminStatus') {
+      return res.json({ code: 0, isAdmin: await isAdminSession(req) });
+    }
+
     if (action === 'adminJobs' || action === 'adminFeedback' || action === 'initDatabase') {
-      const data = await callLaf(withGatewayToken(req.body), req);
+      await requireAdminSessionOrToken(req);
+      const data = await callLaf(withGatewayToken(withInternalAdminToken(req.body)), req);
       return sendLafResponse(res, data);
     }
 
@@ -99,7 +105,7 @@ app.post('/paperbanana-api', async (req, res) => {
     }
 
     if (action === 'adminUsers') {
-      requireAdminToken(req.body?.adminToken);
+      await requireAdminSessionOrToken(req);
       const data = await listAuthUsers(req.body);
       return res.json({ code: 0, ...data });
     }
@@ -135,7 +141,7 @@ app.post('/paperbanana-api', async (req, res) => {
       const session = await optionalSession(req);
       const data = await callLaf(withGatewayToken(req.body), req);
       const ownerId = data?.job?.userId || data?.job?.user_id || '';
-      const isAdmin = isValidAdminToken(req.body?.adminToken);
+      const isAdmin = isAdminUser(session?.user) || isValidAdminToken(req.body?.adminToken);
       if (ownerId && !isAdmin && ownerId !== session?.user?.id) {
         return res.status(403).json({ code: 403, error: 'Forbidden' });
       }
@@ -182,6 +188,26 @@ async function requireSession(req) {
     throw error;
   }
   return session;
+}
+
+async function requireAdminSessionOrToken(req) {
+  const session = await optionalSession(req);
+  if (isAdminUser(session?.user)) return session;
+  if (isValidAdminToken(req.body?.adminToken)) return session;
+
+  const error = new Error(session?.user ? 'Forbidden' : '请先登录管理员账号。');
+  error.status = session?.user ? 403 : 401;
+  throw error;
+}
+
+async function isAdminSession(req) {
+  const session = await optionalSession(req);
+  return isAdminUser(session?.user);
+}
+
+function isAdminUser(user) {
+  const email = String(user?.email || '').trim().toLowerCase();
+  return Boolean(email && adminEmails.has(email));
 }
 
 async function optionalSession(req) {
@@ -244,6 +270,18 @@ function withGatewayToken(body) {
   };
 }
 
+function withInternalAdminToken(body) {
+  if (!adminToken) {
+    const error = new Error('Admin API disabled: ADMIN_TOKEN is not configured');
+    error.status = 503;
+    throw error;
+  }
+  return {
+    ...body,
+    adminToken,
+  };
+}
+
 function normalizeCreateJobBody(body) {
   return {
     ...body,
@@ -269,19 +307,6 @@ function normalizeModelName(provider, model) {
     return 'gemini-3.1-flash-image';
   }
   return model;
-}
-
-function requireAdminToken(token) {
-  if (!adminToken) {
-    const error = new Error('Admin API disabled: ADMIN_TOKEN is not configured');
-    error.status = 503;
-    throw error;
-  }
-  if (token !== adminToken) {
-    const error = new Error('Invalid admin token');
-    error.status = 401;
-    throw error;
-  }
 }
 
 function isValidAdminToken(token) {

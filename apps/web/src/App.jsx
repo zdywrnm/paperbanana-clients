@@ -22,6 +22,7 @@ import {
 import {
   adminFeedbackRequest,
   adminJobsRequest,
+  adminStatusRequest,
   adminUsersRequest,
   createJobRequest,
   fetchBackendHealth,
@@ -97,7 +98,7 @@ export default function App() {
   const latestJobRef = useRef(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [adminToken, setAdminToken] = useState('');
+  const [isAdmin, setIsAdmin] = useState(false);
   const [adminJobs, setAdminJobs] = useState([]);
   const [adminUsers, setAdminUsers] = useState([]);
   const [adminFeedback, setAdminFeedback] = useState([]);
@@ -228,6 +229,39 @@ export default function App() {
       cancelled = true;
     };
   }, [apiBaseNormalized, currentUser?.id, health]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!AUTH_ENABLED || authSession.isPending || !currentUser) {
+      setIsAdmin(false);
+      return undefined;
+    }
+
+    adminStatusRequest(apiBaseNormalized, health)
+      .then((data) => {
+        if (!cancelled) setIsAdmin(Boolean(data.isAdmin));
+      })
+      .catch(() => {
+        if (!cancelled) setIsAdmin(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [apiBaseNormalized, authSession.isPending, currentUser?.id, currentUser?.email, health]);
+
+  useEffect(() => {
+    if (!isAdmin && activeTab === 'admin') setActiveTab('generate');
+  }, [activeTab, isAdmin]);
+
+  useEffect(() => {
+    if (!isAdmin) return undefined;
+    let cancelled = false;
+    loadAdminOverview({ silent: true, cancelledRef: () => cancelled });
+    return () => {
+      cancelled = true;
+    };
+  }, [apiBaseNormalized, health, isAdmin]);
 
   function addReferenceFiles(files) {
     setReferenceUploadError('');
@@ -400,15 +434,20 @@ export default function App() {
     }
   }
 
-  async function loadAdminOverview() {
-    setAdminError('');
-    setAdminUsersError('');
-    setAdminFeedbackError('');
+  async function loadAdminOverview(options = {}) {
+    if (!isAdmin) return;
+    if (!options.silent) {
+      setAdminError('');
+      setAdminUsersError('');
+      setAdminFeedbackError('');
+    }
     const [jobsResult, usersResult, feedbackResult] = await Promise.allSettled([
-      adminJobsRequest(apiBaseNormalized, health, adminToken),
-      adminUsersRequest(apiBaseNormalized, health, adminToken),
-      adminFeedbackRequest(apiBaseNormalized, health, adminToken, { limit: 50 }),
+      adminJobsRequest(apiBaseNormalized, health),
+      adminUsersRequest(apiBaseNormalized, health),
+      adminFeedbackRequest(apiBaseNormalized, health, { limit: 50 }),
     ]);
+
+    if (options.cancelledRef?.()) return;
 
     if (jobsResult.status === 'fulfilled') {
       setAdminJobs(jobsResult.value.jobs || []);
@@ -452,6 +491,8 @@ export default function App() {
     await authClient.signOut();
     await authSession.refresh();
     setShowAuthPanel(false);
+    setIsAdmin(false);
+    setActiveTab('generate');
     setCurrentJobId('');
     setJob(null);
     setUserJobs([]);
@@ -524,9 +565,6 @@ export default function App() {
           <a href="https://github.com/zdywrnm/PaperBanana-clients/tree/main/apps/miniprogram" target="_blank" rel="noreferrer">
             <MessageCircle size={16} /> 微信小程序
           </a>
-          <button type="button" className="feedback-entry-button" onClick={openFeedbackDialog}>
-            <MessageSquare size={16} /> 意见反馈
-          </button>
           {AUTH_UI_ENABLED ? (
             currentUser ? (
               <div className="auth-user">
@@ -552,9 +590,17 @@ export default function App() {
         onSubmit={handleSubmitFeedback}
       />
 
+      <button type="button" className="feedback-fab" onClick={openFeedbackDialog}>
+        <MessageSquare size={18} />
+        <span>意见反馈</span>
+      </button>
+
       <nav className="paper-tabs">
         <button type="button" className={activeTab === 'generate' ? 'active' : ''} onClick={() => setActiveTab('generate')}>生成候选图</button>
         <button type="button" className={activeTab === 'records' ? 'active' : ''} onClick={() => setActiveTab('records')}>任务记录</button>
+        {isAdmin ? (
+          <button type="button" className={activeTab === 'admin' ? 'active' : ''} onClick={() => setActiveTab('admin')}>站长</button>
+        ) : null}
       </nav>
 
       {AUTH_REQUIRED && authSession.isPending ? (
@@ -582,8 +628,7 @@ export default function App() {
       ) : null}
 
       {activeTab === 'generate' ? (
-        <>
-      <section className="workspace">
+        <section className="workspace">
         <form className="generator" onSubmit={submitJob}>
           <div className="section-head">
             <Settings2 size={20} />
@@ -795,49 +840,47 @@ export default function App() {
           </div>
           <JobStatus job={job} apiBase={apiBaseNormalized} />
         </section>
-      </section>
-
-      <section className="admin-panel">
-        <div className="section-head">
-          <Eye size={20} />
-          <div>
-            <h2>站长观察面板</h2>
-            <p>输入 ADMIN_TOKEN 查看账号记录、最近任务、模型选择和失败原因。</p>
+        </section>
+      ) : activeTab === 'admin' && isAdmin ? (
+        <section className="admin-panel">
+          <div className="section-head">
+            <Eye size={20} />
+            <div>
+              <h2>站长观察面板</h2>
+              <p>已通过登录账号识别管理员身份，可查看账号、反馈和最近任务。</p>
+            </div>
           </div>
-        </div>
-        <div className="admin-controls">
-          <input type="password" value={adminToken} onChange={(event) => setAdminToken(event.target.value)} placeholder="ADMIN_TOKEN" />
-          <button type="button" onClick={loadAdminOverview}><RefreshCcw size={17} />刷新</button>
-        </div>
-        <div className="admin-section">
-          <div className="admin-section-title">
-            <Users size={17} />
-            <strong>账号记录</strong>
-            <span>{adminUsers.length ? `${adminUsers.length} 个账号` : '注册/登录后会出现在这里'}</span>
+          <div className="admin-controls admin-controls-single">
+            <button type="button" onClick={() => loadAdminOverview()}><RefreshCcw size={17} />刷新</button>
           </div>
-          {adminUsersError ? <div className="error-line"><AlertTriangle size={16} /> {formatErrorMessage(adminUsersError)}</div> : null}
-          <AdminUsersTable users={adminUsers} />
-        </div>
-        <div className="admin-section">
-          <div className="admin-section-title">
-            <MessageSquare size={17} />
-            <strong>用户反馈</strong>
-            <span>{adminFeedback.length ? `${adminFeedback.length} 条反馈` : '暂无反馈数据'}</span>
+          <div className="admin-section">
+            <div className="admin-section-title">
+              <Users size={17} />
+              <strong>账号记录</strong>
+              <span>{adminUsers.length ? `${adminUsers.length} 个账号` : '注册/登录后会出现在这里'}</span>
+            </div>
+            {adminUsersError ? <div className="error-line"><AlertTriangle size={16} /> {formatErrorMessage(adminUsersError)}</div> : null}
+            <AdminUsersTable users={adminUsers} />
           </div>
-          {adminFeedbackError ? <div className="error-line"><AlertTriangle size={16} /> {formatErrorMessage(adminFeedbackError)}</div> : null}
-          <AdminFeedbackTable feedback={adminFeedback} />
-        </div>
-        <div className="admin-section">
-          <div className="admin-section-title">
-            <FileText size={17} />
-            <strong>最近任务</strong>
-            <span>{adminJobs.length ? `${adminJobs.length} 条任务` : '暂无任务数据'}</span>
+          <div className="admin-section">
+            <div className="admin-section-title">
+              <MessageSquare size={17} />
+              <strong>用户反馈</strong>
+              <span>{adminFeedback.length ? `${adminFeedback.length} 条反馈` : '暂无反馈数据'}</span>
+            </div>
+            {adminFeedbackError ? <div className="error-line"><AlertTriangle size={16} /> {formatErrorMessage(adminFeedbackError)}</div> : null}
+            <AdminFeedbackTable feedback={adminFeedback} />
           </div>
-          {adminError ? <div className="error-line"><AlertTriangle size={16} /> {formatErrorMessage(adminError)}</div> : null}
-          <JobTable jobs={adminJobs} showUser apiBase={apiBaseNormalized} />
-        </div>
-      </section>
-        </>
+          <div className="admin-section">
+            <div className="admin-section-title">
+              <FileText size={17} />
+              <strong>最近任务</strong>
+              <span>{adminJobs.length ? `${adminJobs.length} 条任务` : '暂无任务数据'}</span>
+            </div>
+            {adminError ? <div className="error-line"><AlertTriangle size={16} /> {formatErrorMessage(adminError)}</div> : null}
+            <JobTable jobs={adminJobs} showUser apiBase={apiBaseNormalized} />
+          </div>
+        </section>
       ) : (
         <TaskRecordsPanel
           authEnabled={AUTH_ENABLED}
