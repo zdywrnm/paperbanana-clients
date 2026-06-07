@@ -195,6 +195,9 @@ export default async function (ctx: FunctionContext) {
     if (action === 'userJobs') {
       return await userJobs(body as UserJobsBody)
     }
+    if (action === '__spikeSvg') {
+      return await spikeSvg(body as any)
+    }
     return fail(`Unknown action: ${action}`, 400)
   } catch (error: any) {
     return fail(error?.message || String(error), 500)
@@ -206,6 +209,38 @@ function setCorsHeaders(ctx: FunctionContext) {
   ctx.response.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
   ctx.response.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Admin-Token')
   ctx.response.setHeader('Access-Control-Max-Age', '86400')
+}
+
+// TEMP SPIKE: 验证 Sealaf 运行时能否用 @resvg/resvg-wasm 把 SVG 渲染成 PNG。用完即删。
+async function spikeSvg(body: any) {
+  if (body?.spikeKey !== 'spike-7f3a9c2e-refimg') return fail('forbidden', 403)
+  const out: any = {}
+  try {
+    const req: any = (globalThis as any).require || require
+    const fs: any = req('fs')
+    const path: any = req('path')
+    const mod: any = req('@resvg/resvg-wasm')
+    out.exports = Object.keys(mod)
+    const candidates: string[] = []
+    try { candidates.push(req.resolve('@resvg/resvg-wasm/index_bg.wasm')) } catch (e: any) { out.resolveWasmErr = String(e?.message || e) }
+    try { candidates.push(path.join(path.dirname(req.resolve('@resvg/resvg-wasm')), 'index_bg.wasm')) } catch (e: any) { out.resolvePkgErr = String(e?.message || e) }
+    out.candidates = candidates
+    let wasm: Buffer | null = null
+    for (const c of candidates) { try { wasm = fs.readFileSync(c); out.wasmFrom = c; out.wasmBytes = wasm.length; break } catch (e: any) {} }
+    if (!wasm) { out.error = 'cannot locate index_bg.wasm'; return ok(out) }
+    try { await mod.initWasm(wasm) } catch (e: any) { out.initWasmErr = String(e?.message || e); return ok(out) }
+    out.initWasm = 'OK'
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="60"><rect width="120" height="60" fill="#4f46e5"/><circle cx="30" cy="30" r="18" fill="#ffffff"/><text x="60" y="36" font-size="14" fill="#ffffff">hi</text></svg>'
+    const r = new mod.Resvg(svg, { fitTo: { mode: 'width', value: 256 } })
+    const png = r.render().asPng()
+    out.pngBytes = png.length
+    out.pngHeader = Array.from(png.slice(0, 8))
+    out.ok = true
+  } catch (e: any) {
+    out.error = String(e?.message || e)
+    out.stack = String(e?.stack || '').split('\n').slice(0, 4)
+  }
+  return ok(out)
 }
 
 async function prepareReferenceUpload(body: PrepareReferenceUploadBody) {
