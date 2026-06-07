@@ -75,8 +75,8 @@ app.post('/paperbanana-api', async (req, res) => {
       return res.json({ code: 0, ok: true, runtime: 'gateway', auth: 'better-auth', laf });
     }
 
-    if (action === 'adminJobs' || action === 'initDatabase') {
-      const data = await callLaf(withGatewayToken(req.body));
+    if (action === 'adminJobs' || action === 'adminFeedback' || action === 'initDatabase') {
+      const data = await callLaf(withGatewayToken(req.body), req);
       return sendLafResponse(res, data);
     }
 
@@ -88,12 +88,13 @@ app.post('/paperbanana-api', async (req, res) => {
           userId: session?.user?.id || '',
           userEmail: session?.user?.email || '',
         }),
+        req,
       );
       return sendLafResponse(res, data);
     }
 
     if (action === 'modelCapability') {
-      const data = await callLaf(withGatewayToken(req.body));
+      const data = await callLaf(withGatewayToken(req.body), req);
       return sendLafResponse(res, data);
     }
 
@@ -101,6 +102,19 @@ app.post('/paperbanana-api', async (req, res) => {
       requireAdminToken(req.body?.adminToken);
       const data = await listAuthUsers(req.body);
       return res.json({ code: 0, ...data });
+    }
+
+    if (action === 'submitFeedback') {
+      const session = await optionalSession(req);
+      const data = await callLaf(
+        withGatewayToken({
+          ...normalizeFeedbackBody(req.body),
+          userId: session?.user?.id || '',
+          userEmail: session?.user?.email || '',
+        }),
+        req,
+      );
+      return sendLafResponse(res, data);
     }
 
     if (action === 'createJob') {
@@ -112,13 +126,14 @@ app.post('/paperbanana-api', async (req, res) => {
           userId: session?.user?.id || '',
           userEmail: session?.user?.email || '',
         }),
+        req,
       );
       return sendLafResponse(res, data);
     }
 
     if (action === 'getJob') {
       const session = await optionalSession(req);
-      const data = await callLaf(withGatewayToken(req.body));
+      const data = await callLaf(withGatewayToken(req.body), req);
       const ownerId = data?.job?.userId || data?.job?.user_id || '';
       const isAdmin = isValidAdminToken(req.body?.adminToken);
       if (ownerId && !isAdmin && ownerId !== session?.user?.id) {
@@ -135,6 +150,7 @@ app.post('/paperbanana-api', async (req, res) => {
           userId: session.user.id,
           limit: req.body?.limit || 50,
         }),
+        req,
       );
       return sendLafResponse(res, data);
     }
@@ -175,10 +191,10 @@ async function optionalSession(req) {
   return session;
 }
 
-async function callLaf(body) {
+async function callLaf(body, req) {
   const response = await fetch(lafApiUrl, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: lafHeaders(req),
     body: JSON.stringify(body),
   });
   const text = await response.text();
@@ -192,6 +208,24 @@ async function callLaf(body) {
     throw new Error(data.error || data.detail || `Laf HTTP ${response.status}`);
   }
   return data;
+}
+
+function lafHeaders(req) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (!req) return headers;
+
+  const forwarded = headerValue(req.headers['x-forwarded-for']) || req.ip || req.socket?.remoteAddress || '';
+  const realIp = headerValue(req.headers['x-real-ip']) || req.ip || '';
+  const userAgent = headerValue(req.headers['user-agent']);
+  if (forwarded) headers['X-Forwarded-For'] = forwarded;
+  if (realIp) headers['X-Real-IP'] = realIp;
+  if (userAgent) headers['User-Agent'] = userAgent;
+  return headers;
+}
+
+function headerValue(value) {
+  if (Array.isArray(value)) return value.filter(Boolean).join(',');
+  return value || '';
 }
 
 function sendLafResponse(res, data) {
@@ -215,6 +249,18 @@ function normalizeCreateJobBody(body) {
     ...body,
     mainModelName: normalizeModelName(body?.provider, body?.mainModelName),
     imageModelName: normalizeModelName(body?.provider, body?.imageModelName),
+  };
+}
+
+function normalizeFeedbackBody(body) {
+  return {
+    action: 'submitFeedback',
+    message: body?.message,
+    category: body?.category,
+    jobId: body?.jobId,
+    platform: body?.platform,
+    clientVersion: body?.clientVersion,
+    contact: body?.contact,
   };
 }
 

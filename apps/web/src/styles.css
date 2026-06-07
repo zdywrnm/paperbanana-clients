@@ -147,7 +147,8 @@ button {
 }
 
 .header-links a,
-.auth-entry-button {
+.auth-entry-button,
+.feedback-entry-button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -166,8 +167,13 @@ button {
   cursor: pointer;
 }
 
+.feedback-entry-button {
+  cursor: pointer;
+}
+
 .header-links a:hover,
-.auth-entry-button:hover {
+.auth-entry-button:hover,
+.feedback-entry-button:hover {
   border-color: var(--hairline-strong);
   background: #ffffff;
   color: var(--ink);
@@ -332,6 +338,70 @@ button {
 
 .auth-form {
   display: grid;
+}
+
+.feedback-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(23, 21, 19, 0.36);
+  backdrop-filter: blur(6px);
+}
+
+.feedback-dialog {
+  width: min(560px, 100%);
+  max-height: min(760px, calc(100vh - 40px));
+  overflow: auto;
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-panel);
+  box-shadow: 0 24px 72px rgba(23, 21, 19, 0.22);
+}
+
+.feedback-dialog-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.feedback-dialog-head .section-head {
+  margin-bottom: 14px;
+}
+
+.feedback-close-button {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  color: var(--muted);
+  background: var(--surface-muted);
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+}
+
+.feedback-close-button:hover {
+  color: var(--ink);
+  background: #ffffff;
+}
+
+.feedback-form {
+  display: grid;
+}
+
+.feedback-category-switch {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.field-help {
+  justify-self: end;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .user-jobs-panel {
@@ -1089,6 +1159,7 @@ figcaption {
 }
 
 .running-line,
+.success-line,
 .error-line {
   display: flex;
   align-items: center;
@@ -1102,6 +1173,12 @@ figcaption {
 .running-line {
   color: #315f74;
   background: #e7f0f1;
+}
+
+.success-line {
+  margin-top: 12px;
+  color: #315f51;
+  background: #e8f3ec;
 }
 
 .error-line {
@@ -1329,6 +1406,82 @@ figcaption {
 .job-table {
   display: grid;
   gap: 12px;
+}
+
+.feedback-table {
+  display: grid;
+  gap: 10px;
+}
+
+.feedback-record-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  color: var(--ink-soft);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+}
+
+.feedback-record-meta {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.feedback-record-meta > span {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.feedback-record-meta strong {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.feedback-record-meta span span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feedback-message {
+  max-height: 180px;
+  overflow: auto;
+  margin: 0;
+  padding: 12px;
+  color: var(--ink);
+  background: var(--surface-muted);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.feedback-context {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.feedback-context span {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 5px 8px;
+  color: var(--muted);
+  background: rgba(243, 242, 236, 0.78);
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .job-empty {
@@ -1581,8 +1734,13 @@ figcaption {
   .job-models,
   .job-prompts,
   .job-record-image-grid,
+  .feedback-record-meta,
   .admin-user-row {
     grid-template-columns: 1fr;
+  }
+
+  .feedback-category-switch {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .admin-users-head {

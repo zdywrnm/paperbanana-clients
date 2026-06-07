@@ -9,6 +9,7 @@ import {
   KeyRound,
   Loader2,
   MessageCircle,
+  MessageSquare,
   MonitorDown,
   RefreshCcw,
   Send,
@@ -19,6 +20,7 @@ import {
   Users,
 } from 'lucide-react';
 import {
+  adminFeedbackRequest,
   adminJobsRequest,
   adminUsersRequest,
   createJobRequest,
@@ -26,6 +28,7 @@ import {
   getJobRequest,
   modelCapabilityRequest,
   prepareReferenceUploadRequest,
+  submitFeedbackRequest,
   userJobsRequest,
 } from '@paperbanana/api';
 import {
@@ -33,6 +36,7 @@ import {
   AUTH_ENABLED,
   AUTH_REQUIRED,
   AUTH_UI_ENABLED,
+  CLIENT_VERSION,
   authClient,
   logoUrl,
 } from './config';
@@ -46,10 +50,12 @@ import {
   SAMPLE_METHOD,
 } from './constants';
 import ApiKeyGuide from './components/ApiKeyGuide';
+import AdminFeedbackTable from './components/AdminFeedbackTable';
 import AdminUsersTable from './components/AdminUsersTable';
 import AuthPanel from './components/AuthPanel';
 import AuthUnavailablePanel from './components/AuthUnavailablePanel';
 import ExampleTemplates from './components/ExampleTemplates';
+import FeedbackDialog from './components/FeedbackDialog';
 import JobStatus from './components/JobStatus';
 import JobTable from './components/JobTable';
 import ReferenceUploadPanel from './components/ReferenceUploadPanel';
@@ -94,10 +100,16 @@ export default function App() {
   const [adminToken, setAdminToken] = useState('');
   const [adminJobs, setAdminJobs] = useState([]);
   const [adminUsers, setAdminUsers] = useState([]);
+  const [adminFeedback, setAdminFeedback] = useState([]);
   const [adminError, setAdminError] = useState('');
   const [adminUsersError, setAdminUsersError] = useState('');
+  const [adminFeedbackError, setAdminFeedbackError] = useState('');
   const [userJobs, setUserJobs] = useState([]);
   const [userJobsError, setUserJobsError] = useState('');
+  const [showFeedbackDialog, setShowFeedbackDialog] = useState(false);
+  const [feedbackError, setFeedbackError] = useState('');
+  const [feedbackSuccess, setFeedbackSuccess] = useState(false);
+  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
 
   const currentUser = AUTH_ENABLED ? authSession.session?.user : null;
   const authReady = !AUTH_REQUIRED || Boolean(!authSession.isPending && currentUser);
@@ -391,9 +403,11 @@ export default function App() {
   async function loadAdminOverview() {
     setAdminError('');
     setAdminUsersError('');
-    const [jobsResult, usersResult] = await Promise.allSettled([
+    setAdminFeedbackError('');
+    const [jobsResult, usersResult, feedbackResult] = await Promise.allSettled([
       adminJobsRequest(apiBaseNormalized, health, adminToken),
       adminUsersRequest(apiBaseNormalized, health, adminToken),
+      adminFeedbackRequest(apiBaseNormalized, health, adminToken, { limit: 50 }),
     ]);
 
     if (jobsResult.status === 'fulfilled') {
@@ -406,6 +420,12 @@ export default function App() {
       setAdminUsers(usersResult.value.users || []);
     } else {
       setAdminUsersError(usersResult.reason?.message || String(usersResult.reason));
+    }
+
+    if (feedbackResult.status === 'fulfilled') {
+      setAdminFeedback(feedbackResult.value.feedback || []);
+    } else {
+      setAdminFeedbackError(feedbackResult.reason?.message || String(feedbackResult.reason));
     }
   }
 
@@ -435,6 +455,41 @@ export default function App() {
     setCurrentJobId('');
     setJob(null);
     setUserJobs([]);
+  }
+
+  function openFeedbackDialog() {
+    setFeedbackError('');
+    setFeedbackSuccess(false);
+    setShowFeedbackDialog(true);
+  }
+
+  function closeFeedbackDialog() {
+    setShowFeedbackDialog(false);
+    setFeedbackError('');
+    setFeedbackSuccess(false);
+  }
+
+  async function handleSubmitFeedback(payload) {
+    setFeedbackError('');
+    setFeedbackSuccess(false);
+    setIsSubmittingFeedback(true);
+    try {
+      await submitFeedbackRequest(apiBaseNormalized, health, {
+        message: payload.message,
+        category: payload.category,
+        contact: payload.contact,
+        platform: 'web',
+        clientVersion: CLIENT_VERSION,
+        jobId: currentJobId || latestJobRef.current?.id || '',
+      });
+      setFeedbackSuccess(true);
+      return true;
+    } catch (err) {
+      setFeedbackError(err.message);
+      return false;
+    } finally {
+      setIsSubmittingFeedback(false);
+    }
   }
 
   return (
@@ -469,6 +524,9 @@ export default function App() {
           <a href="https://github.com/zdywrnm/PaperBanana-clients/tree/main/apps/miniprogram" target="_blank" rel="noreferrer">
             <MessageCircle size={16} /> 微信小程序
           </a>
+          <button type="button" className="feedback-entry-button" onClick={openFeedbackDialog}>
+            <MessageSquare size={16} /> 意见反馈
+          </button>
           {AUTH_UI_ENABLED ? (
             currentUser ? (
               <div className="auth-user">
@@ -484,6 +542,15 @@ export default function App() {
           ) : null}
         </div>
       </header>
+
+      <FeedbackDialog
+        open={showFeedbackDialog}
+        isSubmitting={isSubmittingFeedback}
+        error={feedbackError}
+        success={feedbackSuccess}
+        onClose={closeFeedbackDialog}
+        onSubmit={handleSubmitFeedback}
+      />
 
       <nav className="paper-tabs">
         <button type="button" className={activeTab === 'generate' ? 'active' : ''} onClick={() => setActiveTab('generate')}>生成候选图</button>
@@ -750,6 +817,15 @@ export default function App() {
           </div>
           {adminUsersError ? <div className="error-line"><AlertTriangle size={16} /> {formatErrorMessage(adminUsersError)}</div> : null}
           <AdminUsersTable users={adminUsers} />
+        </div>
+        <div className="admin-section">
+          <div className="admin-section-title">
+            <MessageSquare size={17} />
+            <strong>用户反馈</strong>
+            <span>{adminFeedback.length ? `${adminFeedback.length} 条反馈` : '暂无反馈数据'}</span>
+          </div>
+          {adminFeedbackError ? <div className="error-line"><AlertTriangle size={16} /> {formatErrorMessage(adminFeedbackError)}</div> : null}
+          <AdminFeedbackTable feedback={adminFeedback} />
         </div>
         <div className="admin-section">
           <div className="admin-section-title">

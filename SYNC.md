@@ -24,6 +24,18 @@
 
 ## 条目（最新在上）
 
+### [2026-06-07] 用户意见反馈 submitFeedback — by Codex
+变更：新增意见反馈（匿名可提，登录后由网关自动附身份）。
+契约：新 action `submitFeedback` + `adminFeedback`；新集合 `paperbanana_feedback`；网关放行这两个 action；任务无关；不读取/存储 `apiKeys`。
+各端待办：
+- [x] laf-functions
+- [x] auth-gateway
+- [x] web（含 admin 反馈页）
+- [ ] miniprogram
+- [ ] android
+- [ ] windows
+- [ ] macos
+
 ### [2026-06-07] 参考图上传 + 主模型直读 — by Codex
 **变更**：新增参考图上传，以及「主模型直读 / 独立识别模型」两种参考图理解模式。
 **契约**：

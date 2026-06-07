@@ -12,6 +12,9 @@ export function formatErrorMessage(message) {
   if (message.includes('password')) return '密码至少需要 8 位。';
   if (message.includes('ADMIN_TOKEN is not configured')) return '管理接口未启用：还没有配置 ADMIN_TOKEN。';
   if (message.includes('Admin API disabled')) return '管理接口未启用。';
+  if (message.includes('Feedback rate limit exceeded')) return '反馈提交太频繁，请稍后再试。';
+  if (message.includes('message exceeds 2000')) return '反馈内容不能超过 2000 字。';
+  if (message.includes('message is required')) return '请先填写反馈内容。';
   if (message.includes('Backend is unavailable')) return '后端暂时不可用。';
   if (message.includes('HTTP 503')) return '服务暂时不可用，请稍后重试。';
   return message;
@@ -32,6 +35,13 @@ export function formatReferenceImageMode(mode) {
   if (mode === 'auto') return '自动选择';
   if (mode === 'none') return '未使用参考图';
   return '未记录';
+}
+
+export function formatFeedbackCategory(category) {
+  if (category === 'bug') return '问题反馈';
+  if (category === 'feature') return '功能建议';
+  if (category === 'experience') return '体验意见';
+  return '其他';
 }
 
 export function formatDate(value) {

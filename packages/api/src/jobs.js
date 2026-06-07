@@ -152,6 +152,43 @@ export async function adminUsersRequest(apiBase, health, adminToken) {
   throw new Error('账号后台需要先启用登录网关。');
 }
 
+export async function submitFeedbackRequest(apiBase, health, payload = {}) {
+  if (shouldUsePaperbananaApi(apiBase, health)) {
+    const data = await fetchJson(lafEndpoint(apiBase), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'submitFeedback',
+        message: payload.message,
+        category: payload.category,
+        jobId: payload.jobId,
+        platform: payload.platform,
+        clientVersion: payload.clientVersion,
+        contact: payload.contact,
+      }),
+    });
+    return { ok: data.ok !== false, id: data.id };
+  }
+  throw new Error('意见反馈需要使用 Laf 或登录网关后端。');
+}
+
+export async function adminFeedbackRequest(apiBase, health, adminToken, opts = {}) {
+  if (shouldUseLaf(apiBase, health)) {
+    const data = await fetchJson(lafEndpoint(apiBase), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'adminFeedback',
+        adminToken,
+        limit: opts.limit || 50,
+        status: opts.status || undefined,
+      }),
+    });
+    return { feedback: (data.feedback || []).map(normalizeFeedback) };
+  }
+  throw new Error('反馈后台需要使用 Laf 或登录网关后端。');
+}
+
 export async function userJobsRequest(apiBase, health) {
   if (BACKEND_MODE === 'gateway' || health?.backendMode === 'gateway') {
     const data = await fetchJson(lafEndpoint(apiBase), {
@@ -274,5 +311,23 @@ function normalizeAuthUser(user = {}) {
     session_count: Number(user.session_count ?? user.sessionCount ?? 0),
     last_ip_address: user.last_ip_address || user.lastIpAddress || '',
     last_user_agent: user.last_user_agent || user.lastUserAgent || '',
+  };
+}
+
+function normalizeFeedback(item = {}) {
+  return {
+    id: item.id || item._id || '',
+    message: item.message || '',
+    category: item.category || 'other',
+    job_id: item.job_id || item.jobId || '',
+    platform: item.platform || '',
+    client_version: item.client_version || item.clientVersion || '',
+    contact: item.contact || '',
+    user_id: item.user_id || item.userId || '',
+    user_email: item.user_email || item.userEmail || '',
+    client_ip: item.client_ip || item.clientIp || '',
+    user_agent: item.user_agent || item.userAgent || '',
+    status: item.status || 'new',
+    created_at: item.created_at || item.createdAt,
   };
 }

@@ -3,6 +3,7 @@ import { createAuthClient } from 'better-auth/react';
 export const logoUrl = '/logo.svg';
 export const API_BASE_DEFAULT = import.meta.env.VITE_API_BASE || '';
 export const BACKEND_MODE = import.meta.env.VITE_BACKEND_MODE || '';
+export const CLIENT_VERSION = import.meta.env.VITE_CLIENT_VERSION || 'web-0.1.0';
 export const AUTH_REQUIRED = import.meta.env.VITE_AUTH_REQUIRED === 'true';
 export const AUTH_BASE_DEFAULT = import.meta.env.VITE_AUTH_BASE || (BACKEND_MODE === 'gateway' ? API_BASE_DEFAULT : '');
 export const AUTH_ENABLED = AUTH_REQUIRED || import.meta.env.VITE_AUTH_ENABLED === 'true' || Boolean(import.meta.env.VITE_AUTH_BASE);

@@ -8,6 +8,8 @@ type ReferenceImageRole = 'original' | 'analysis'
 type ReferenceImageMode = 'auto' | 'main_model' | 'vision_model'
 type ReferenceImageModeUsed = 'none' | 'main_model' | 'vision_model'
 type ModelCapabilityStatus = 'supported' | 'unsupported' | 'unknown'
+type FeedbackCategory = 'bug' | 'feature' | 'experience' | 'other'
+type FeedbackPlatform = 'web' | 'miniprogram' | 'android' | 'windows' | 'macos'
 
 type ApiKeys = {
   openrouter?: string
@@ -87,6 +89,25 @@ type AdminJobsBody = {
   limit?: number
 }
 
+type SubmitFeedbackBody = {
+  action: 'submitFeedback'
+  message: string
+  category?: FeedbackCategory
+  jobId?: string
+  platform: FeedbackPlatform
+  clientVersion?: string
+  contact?: string
+  userId?: string
+  userEmail?: string
+}
+
+type AdminFeedbackBody = {
+  action: 'adminFeedback'
+  adminToken: string
+  limit?: number
+  status?: string
+}
+
 type UserJobsBody = {
   action: 'userJobs'
   userId: string
@@ -118,10 +139,20 @@ type VisionImageInput = {
   url: string
 }
 
-type RequestBody = CreateJobBody | PrepareReferenceUploadBody | GetJobBody | AdminJobsBody | UserJobsBody | ModelCapabilityBody | HealthBody
+type RequestBody =
+  | CreateJobBody
+  | PrepareReferenceUploadBody
+  | GetJobBody
+  | AdminJobsBody
+  | SubmitFeedbackBody
+  | AdminFeedbackBody
+  | UserJobsBody
+  | ModelCapabilityBody
+  | HealthBody
 
 const db = cloud.mongo.db
 const jobs = db.collection('paperbanana_jobs')
+const feedback = db.collection('paperbanana_feedback')
 const bucketName = process.env.PAPERBANANA_BUCKET || 'paperbanana'
 const maxReferenceImages = Number(process.env.PAPERBANANA_MAX_REFERENCE_IMAGES || 3)
 const maxReferenceBytes = Number(process.env.PAPERBANANA_MAX_REFERENCE_BYTES || 5 * 1024 * 1024)
@@ -129,6 +160,10 @@ const referenceUploadTtlSeconds = Number(process.env.PAPERBANANA_REFERENCE_UPLOA
 const allowedReferenceMimeTypes = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'])
 const allowedAnalysisMimeTypes = new Set(['image/png', 'image/jpeg', 'image/webp'])
 const openRouterModelCacheTtlMs = Number(process.env.OPENROUTER_MODEL_CACHE_TTL_MS || 3600 * 1000)
+const feedbackRateLimitWindowMs = 10 * 60 * 1000
+const feedbackRateLimitMax = 5
+const allowedFeedbackCategories = new Set<FeedbackCategory>(['bug', 'feature', 'experience', 'other'])
+const allowedFeedbackPlatforms = new Set<FeedbackPlatform>(['web', 'miniprogram', 'android', 'windows', 'macos'])
 let openRouterModelCache: { expiresAt: number; modalities: Map<string, string[]> } | null = null
 
 const openaiVisionMainModels = new Set([
@@ -175,7 +210,7 @@ export default async function (ctx: FunctionContext) {
 
   try {
     if (action === 'health') {
-      return ok({ ok: true, runtime: 'laf', version: '0.1.13' })
+      return ok({ ok: true, runtime: 'laf', version: '0.1.14' })
     }
     if (action === 'createJob') {
       return await createJob(body as CreateJobBody, ctx)
@@ -191,6 +226,12 @@ export default async function (ctx: FunctionContext) {
     }
     if (action === 'adminJobs') {
       return await adminJobs(body as AdminJobsBody)
+    }
+    if (action === 'submitFeedback') {
+      return await submitFeedback(body as SubmitFeedbackBody, ctx)
+    }
+    if (action === 'adminFeedback') {
+      return await adminFeedback(body as AdminFeedbackBody)
     }
     if (action === 'userJobs') {
       return await userJobs(body as UserJobsBody)
@@ -341,6 +382,54 @@ async function adminJobs(body: AdminJobsBody) {
   const limit = clamp(Number(body.limit || 50), 1, 200)
   const list = await jobs.find({}).sort({ createdAt: -1 }).limit(limit).toArray()
   return ok({ jobs: await Promise.all(list.map(publicJob)) })
+}
+
+async function submitFeedback(body: SubmitFeedbackBody, ctx: FunctionContext) {
+  const message = String(body.message || '').trim()
+  if (!message) return fail('message is required', 400)
+  if (message.length > 2000) return fail('message exceeds 2000 characters', 400)
+
+  const platform = normalizeFeedbackPlatform(body.platform)
+  if (!platform) return fail('platform is required', 400)
+
+  const clientIp = getClientIp(ctx) || 'unknown'
+  const recentSince = new Date(Date.now() - feedbackRateLimitWindowMs)
+  const recent = await feedback.find({ clientIp, createdAt: { $gte: recentSince } }).limit(feedbackRateLimitMax).toArray()
+  if (recent.length >= feedbackRateLimitMax) {
+    return fail('Feedback rate limit exceeded. Please try again later.', 429)
+  }
+
+  const now = new Date()
+  const id = `feedback-${randomId()}`
+  const record = {
+    _id: id,
+    message,
+    category: normalizeFeedbackCategory(body.category),
+    jobId: limitText(body.jobId, 120),
+    platform,
+    clientVersion: limitText(body.clientVersion, 80),
+    contact: limitText(body.contact, 300),
+    userId: limitText(body.userId, 120),
+    userEmail: limitText(body.userEmail, 160),
+    clientIp,
+    userAgent: limitText(ctx.headers?.['user-agent'], 300),
+    status: 'new',
+    createdAt: now,
+  }
+
+  await feedback.insertOne(record)
+  return ok({ ok: true, id })
+}
+
+async function adminFeedback(body: AdminFeedbackBody) {
+  const expected = process.env.ADMIN_TOKEN || ''
+  if (!expected) return fail('Admin API disabled: ADMIN_TOKEN is not configured', 503)
+  if (body.adminToken !== expected) return fail('Invalid admin token', 401)
+  const limit = clamp(Number(body.limit || 50), 1, 200)
+  const status = limitText(body.status, 32)
+  const query = status && status !== 'all' ? { status } : {}
+  const list = await feedback.find(query).sort({ createdAt: -1 }).limit(limit).toArray()
+  return ok({ feedback: list.map(publicFeedback) })
 }
 
 async function userJobs(body: UserJobsBody) {
@@ -1522,8 +1611,9 @@ function normalizeBody(body: any) {
 
 function getClientIp(ctx: FunctionContext) {
   const forwarded = ctx.headers?.['x-forwarded-for']
-  if (Array.isArray(forwarded)) return forwarded[0] || ''
-  return forwarded || ctx.headers?.['x-real-ip'] || ''
+  if (Array.isArray(forwarded)) return String(forwarded[0] || '').split(',')[0].trim()
+  if (forwarded) return String(forwarded).split(',')[0].trim()
+  return String(ctx.headers?.['x-real-ip'] || '').split(',')[0].trim()
 }
 
 function toOpenRouterModel(model: string) {
@@ -1545,6 +1635,50 @@ function normalizeOutputFormat(format?: string): OutputFormat {
 function normalizeReferenceImageMode(mode?: string): ReferenceImageMode {
   if (mode === 'auto' || mode === 'main_model' || mode === 'vision_model') return mode
   return 'vision_model'
+}
+
+function normalizeFeedbackCategory(category?: string): FeedbackCategory {
+  return allowedFeedbackCategories.has(category as FeedbackCategory) ? category as FeedbackCategory : 'other'
+}
+
+function normalizeFeedbackPlatform(platform?: string): FeedbackPlatform | '' {
+  return allowedFeedbackPlatforms.has(platform as FeedbackPlatform) ? platform as FeedbackPlatform : ''
+}
+
+function limitText(value: any, maxLength: number) {
+  return String(value || '').trim().slice(0, maxLength)
+}
+
+function publicFeedback(item: any) {
+  return {
+    _id: item._id,
+    id: item._id,
+    message: item.message || '',
+    category: item.category || 'other',
+    jobId: item.jobId || '',
+    platform: item.platform || '',
+    clientVersion: item.clientVersion || '',
+    contact: item.contact || '',
+    userId: item.userId || '',
+    userEmail: item.userEmail || '',
+    clientIp: redactClientIp(item.clientIp || ''),
+    userAgent: limitText(item.userAgent, 160),
+    status: item.status || 'new',
+    createdAt: item.createdAt,
+  }
+}
+
+function redactClientIp(ip: string) {
+  const value = String(ip || '')
+  if (!value || value === 'unknown') return value
+  if (value.includes(':')) {
+    const parts = value.split(':').filter(Boolean)
+    if (parts.length <= 2) return `${parts[0] || ''}:*`
+    return `${parts.slice(0, 3).join(':')}:*`
+  }
+  const parts = value.split('.')
+  if (parts.length === 4) return `${parts[0]}.${parts[1]}.${parts[2]}.*`
+  return value.replace(/.{3}$/, '***')
 }
 
 function clamp(value: number, min: number, max: number) {
