@@ -453,6 +453,125 @@ page {
   background: rgba(246, 242, 232, 0.62);
 }
 
+.reference-upload-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.reference-upload-head > view {
+  min-width: 0;
+}
+
+.reference-preview-grid {
+  display: grid;
+  gap: 14rpx;
+  margin-top: 16rpx;
+}
+
+.reference-card {
+  display: grid;
+  grid-template-columns: 116rpx minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14rpx;
+  padding: 14rpx;
+  border: 1rpx solid #d9d6cc;
+  border-radius: 14rpx;
+  background: #fffffb;
+}
+
+.reference-thumb {
+  width: 116rpx;
+  height: 86rpx;
+  border: 1rpx solid #d9d6cc;
+  border-radius: 10rpx;
+  background: #f3f2ec;
+}
+
+.reference-info {
+  display: grid;
+  gap: 6rpx;
+  min-width: 0;
+}
+
+.reference-info text:first-child {
+  overflow: hidden;
+  color: #343230;
+  font-size: 22rpx;
+  font-weight: 720;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reference-info text:last-child {
+  color: #68706d;
+  font-size: 20rpx;
+}
+
+.reference-remove {
+  margin: 0;
+  padding: 0 12rpx;
+  min-width: 76rpx;
+  height: 50rpx;
+  border: 1rpx solid #d9d6cc;
+  border-radius: 10rpx;
+  background: #f3f2ec;
+  color: #8b5d08;
+  font-size: 21rpx;
+  line-height: 50rpx;
+}
+
+.reference-mode-panel {
+  margin-top: 18rpx;
+  padding: 16rpx;
+  border: 1rpx solid #d9d6cc;
+  border-radius: 14rpx;
+  background: rgba(246, 242, 232, 0.62);
+}
+
+.reference-mode-switch {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8rpx;
+}
+
+.reference-mode-switch button {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  min-width: 0;
+  min-height: 66rpx;
+  margin: 0;
+  padding: 0 18rpx;
+  border: 1rpx solid #d9d6cc;
+  border-radius: 12rpx;
+  background: #fffffb;
+  color: #343230;
+  font-size: 23rpx;
+  font-weight: 720;
+  line-height: 1.25;
+  text-align: left;
+  box-sizing: border-box;
+}
+
+.reference-mode-switch button::after,
+.reference-remove::after {
+  border: 0;
+}
+
+.reference-mode-switch button.active {
+  border-color: #315f51;
+  background: #edf6ef;
+  color: #315f51;
+}
+
+.reference-mode-switch button.disabled {
+  color: #a89f91;
+  background: #ede9df;
+}
+
 .guide-step {
   margin-top: 8rpx;
   color: #68706d;
@@ -580,12 +699,117 @@ page {
   margin-top: 20rpx;
 }
 
+.asset-card,
+.record-asset-card {
+  display: grid;
+  gap: 10rpx;
+  padding: 12rpx;
+  border: 1rpx solid #d9d6cc;
+  border-radius: 16rpx;
+  background: #fffffb;
+}
+
 .result-image,
 .record-images image {
   width: 100%;
   border-radius: 14rpx;
   background: #f3f2ec;
   border: 1rpx solid #d9d6cc;
+}
+
+.record-reference-image {
+  height: 156rpx;
+}
+
+.record-result-image {
+  min-height: 120rpx;
+}
+
+.file-asset {
+  display: grid;
+  align-content: center;
+  gap: 10rpx;
+  min-height: 180rpx;
+  padding: 22rpx;
+  border: 1rpx dashed #c8c2b6;
+  border-radius: 14rpx;
+  background: #f3f2ec;
+  box-sizing: border-box;
+}
+
+.file-asset.compact {
+  min-height: 132rpx;
+  padding: 18rpx;
+}
+
+.file-asset-format {
+  justify-self: start;
+  padding: 5rpx 12rpx;
+  border-radius: 8rpx;
+  background: #edf6ef;
+  color: #315f51;
+  font-size: 20rpx;
+  font-weight: 760;
+}
+
+.file-asset-name {
+  color: #343230;
+  font-size: 23rpx;
+  font-weight: 720;
+  line-height: 1.35;
+  word-break: break-all;
+}
+
+.asset-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+}
+
+.asset-actions text {
+  min-width: 0;
+  color: #68706d;
+  font-size: 21rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-actions button,
+.record-asset-card button {
+  flex: none;
+  margin: 0;
+  padding: 0 14rpx;
+  min-width: 118rpx;
+  height: 52rpx;
+  border: 1rpx solid #c8ddcd;
+  border-radius: 10rpx;
+  background: #edf6ef;
+  color: #315f51;
+  font-size: 21rpx;
+  font-weight: 720;
+  line-height: 52rpx;
+}
+
+.asset-actions button::after,
+.record-asset-card button::after {
+  border: 0;
+}
+
+.record-asset-section {
+  display: grid;
+  gap: 10rpx;
+}
+
+.record-asset-title {
+  color: #343230;
+  font-size: 23rpx;
+  font-weight: 760;
+}
+
+.record-asset-card.result {
+  margin-top: 0;
 }
 
 .empty-state {

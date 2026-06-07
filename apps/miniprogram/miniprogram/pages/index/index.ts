@@ -1,3 +1,20 @@
+import {
+  buildReferenceModeState,
+  formatReferenceImageModeUsed,
+  normalizeCapabilityStatus,
+  normalizeReferenceImageMode,
+  type CapabilityStatus,
+  type ReferenceImageMode,
+  type ReferenceImageModeUsed,
+} from './reference-mode'
+import {
+  formatImageAsset,
+  formatOutputFormat,
+  normalizeOutputFormat,
+  type ImageAsset,
+  type OutputFormat,
+} from './job-assets'
+
 type ProviderId = 'bailian' | 'openrouter' | 'gemini' | 'openai'
 type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | string
 type ActiveTab = 'generate' | 'records'
@@ -10,8 +27,10 @@ interface ProviderConfig {
   keyPlaceholder: string
   mainModel: string
   imageModel: string
+  visionModel: string
   mainModels: ModelOption[]
   imageModels: ModelOption[]
+  visionModels: ModelOption[]
   guideSteps: string[]
 }
 
@@ -36,11 +55,41 @@ interface InfographicCategory {
   description: string
 }
 
-interface ResultImage {
+type ResultImage = ImageAsset
+type RecordReferenceImage = ImageAsset
+
+interface ReferenceImage {
+  id: string
+  path: string
   filename: string
-  url: string
-  candidate_id: number
-  mime_type: string
+  mimeType: string
+  size: number
+  sizeText: string
+}
+
+interface ReferenceUpload {
+  clientId: string
+  objectKey: string
+  uploadUrl: string
+  uploadToken: string
+  mimeType: string
+  size: number
+}
+
+interface UploadedReferenceImage {
+  filename: string
+  mimeType: string
+  size: number
+  objectKey: string
+  uploadToken: string
+}
+
+interface ModelCapability {
+  status?: CapabilityStatus
+  supportsReferenceImages?: boolean
+  reason?: string
+  source?: string
+  cached?: boolean
 }
 
 interface Job {
@@ -49,12 +98,21 @@ interface Job {
   provider: string
   user_email: string
   configuration_mode: string
+  output_format: OutputFormat
+  output_format_text: string
   method_content: string
   method_preview: string
   caption: string
   infographic_category: string
   main_model_name: string
   image_gen_model_name: string
+  reference_vision_model_name: string
+  reference_vision_model_text: string
+  reference_image_mode: string
+  reference_image_mode_used: ReferenceImageModeUsed
+  reference_image_mode_text: string
+  reference_image_count: number
+  reference_images: RecordReferenceImage[]
   aspect_ratio: string
   num_candidates: number
   result_image_count: number
@@ -100,35 +158,31 @@ const PROVIDERS: ProviderConfig[] = [
     keyPlaceholder: 'sk-...',
     mainModel: 'qwen3.7-max',
     imageModel: 'wan2.7-image-pro',
+    visionModel: 'qwen3.6-plus',
     mainModels: [
       { label: '通义千问 / Qwen3.7 Max', value: 'qwen3.7-max' },
-      { label: '通义千问 / Qwen3.7 Max 2026-05-20', value: 'qwen3.7-max-2026-05-20' },
       { label: '通义千问 / Qwen3.6 Plus', value: 'qwen3.6-plus' },
       { label: '通义千问 / Qwen3.6 Flash', value: 'qwen3.6-flash' },
-      { label: '通义千问 / Qwen Plus Latest', value: 'qwen-plus-latest' },
-      { label: '通义千问 / Qwen Max Latest', value: 'qwen-max-latest' },
-      { label: '通义千问 / Qwen Flash', value: 'qwen-flash' },
       { label: '百炼第三方 / DeepSeek V4 Pro', value: 'deepseek-v4-pro' },
       { label: '百炼第三方 / DeepSeek V4 Flash', value: 'deepseek-v4-flash' },
+      { label: '百炼第三方 / DeepSeek V3.2', value: 'deepseek-v3.2' },
       { label: '百炼第三方 / Kimi K2.6', value: 'kimi-k2.6' },
+      { label: '百炼第三方 / Kimi K2.5', value: 'kimi-k2.5' },
       { label: '百炼第三方 / GLM 5.1', value: 'glm-5.1' },
-      { label: '百炼第三方 / MiniMax M2.7', value: 'MiniMax-M2.7' },
-      { label: '百炼第三方 / MiMo V2.5 Pro', value: 'mimo-v2.5-pro' },
+      { label: '百炼第三方 / GLM 5', value: 'glm-5' },
+      { label: '百炼第三方 / MiniMax M2.5', value: 'MiniMax-M2.5' },
     ],
     imageModels: [
       { label: '通义万相 / Wan 2.7 Image Pro', value: 'wan2.7-image-pro' },
       { label: '通义万相 / Wan 2.7 Image', value: 'wan2.7-image' },
-      { label: '通义万相 / Wan 2.6 Image', value: 'wan2.6-image' },
-      { label: '通义万相 / Wan 2.6 T2I', value: 'wan2.6-t2i' },
-      { label: '通义万相 / Wan 2.5 T2I Preview', value: 'wan2.5-t2i-preview' },
-      { label: '通义万相 / Wan 2.2 T2I Plus', value: 'wan2.2-t2i-plus' },
-      { label: '通义万相 / Wan 2.2 T2I Flash', value: 'wan2.2-t2i-flash' },
       { label: '通义千问 Image / Qwen Image 2.0 Pro', value: 'qwen-image-2.0-pro' },
       { label: '通义千问 Image / Qwen Image 2.0', value: 'qwen-image-2.0' },
-      { label: '通义千问 Image / Qwen Image Max', value: 'qwen-image-max' },
-      { label: '通义千问 Image / Qwen Image Plus', value: 'qwen-image-plus' },
-      { label: '通义千问 Image / Qwen Image', value: 'qwen-image' },
-      { label: 'Z-Image / Z-Image Turbo', value: 'z-image-turbo' },
+    ],
+    visionModels: [
+      { label: '通义千问 / Qwen3.6 Plus', value: 'qwen3.6-plus' },
+      { label: '通义千问 / Qwen3.6 Flash', value: 'qwen3.6-flash' },
+      { label: '百炼第三方 / Kimi K2.6', value: 'kimi-k2.6' },
+      { label: '百炼第三方 / Kimi K2.5', value: 'kimi-k2.5' },
     ],
     guideSteps: ['打开阿里云百炼控制台', '进入 API Key 页面创建密钥', '复制 sk- 开头密钥到小程序'],
   },
@@ -138,6 +192,7 @@ const PROVIDERS: ProviderConfig[] = [
     keyPlaceholder: 'sk-or-v1-...',
     mainModel: 'openrouter/openai/gpt-5.5',
     imageModel: 'openrouter/openai/gpt-5.4-image-2',
+    visionModel: 'openrouter/google/gemini-3.5-flash',
     mainModels: [
       { label: 'OpenAI / GPT-5.5', value: 'openrouter/openai/gpt-5.5' },
       { label: 'OpenAI / GPT-5.5 Pro', value: 'openrouter/openai/gpt-5.5-pro' },
@@ -195,6 +250,16 @@ const PROVIDERS: ProviderConfig[] = [
       { label: 'Sourceful / Riverflow V2 Pro', value: 'openrouter/sourceful/riverflow-v2-pro' },
       { label: 'Sourceful / Riverflow V2 Fast', value: 'openrouter/sourceful/riverflow-v2-fast' },
     ],
+    visionModels: [
+      { label: 'Google / Gemini 3.5 Flash', value: 'openrouter/google/gemini-3.5-flash' },
+      { label: 'Google / Gemini 3.1 Flash Lite', value: 'openrouter/google/gemini-3.1-flash-lite' },
+      { label: 'OpenAI / GPT Chat Latest', value: 'openrouter/openai/gpt-chat-latest' },
+      { label: 'OpenAI / GPT Mini Latest', value: 'openrouter/~openai/gpt-mini-latest' },
+      { label: 'Google / Gemini Flash Latest', value: 'openrouter/~google/gemini-flash-latest' },
+      { label: 'Qwen / Qwen3.7 Plus', value: 'openrouter/qwen/qwen3.7-plus' },
+      { label: 'Anthropic / Claude Opus 4.8', value: 'openrouter/anthropic/claude-opus-4.8' },
+      { label: 'Anthropic / Claude Opus 4.8 Fast', value: 'openrouter/anthropic/claude-opus-4.8-fast' },
+    ],
     guideSteps: ['登录 OpenRouter', '进入 Keys 页面创建 API Key', '复制 sk-or-v1- 开头密钥'],
   },
   {
@@ -203,6 +268,7 @@ const PROVIDERS: ProviderConfig[] = [
     keyPlaceholder: 'AIza...',
     mainModel: 'gemini-3.5-flash',
     imageModel: 'gemini-3.1-flash-image',
+    visionModel: 'gemini-3.5-flash',
     mainModels: [
       { label: 'Gemini 3.5 / Flash', value: 'gemini-3.5-flash' },
       { label: 'Gemini 3.1 / Pro Preview', value: 'gemini-3.1-pro-preview' },
@@ -221,6 +287,14 @@ const PROVIDERS: ProviderConfig[] = [
       { label: 'Nano Banana Pro / Gemini 3 Pro Image', value: 'gemini-3-pro-image' },
       { label: 'Nano Banana / Gemini 2.5 Flash Image', value: 'gemini-2.5-flash-image' },
     ],
+    visionModels: [
+      { label: 'Gemini 3.5 / Flash', value: 'gemini-3.5-flash' },
+      { label: 'Gemini 3.1 / Pro', value: 'gemini-3.1-pro' },
+      { label: 'Gemini 3.1 / Pro Preview', value: 'gemini-3.1-pro-preview' },
+      { label: 'Gemini 2.5 / Pro', value: 'gemini-2.5-pro' },
+      { label: 'Gemini 2.5 / Flash', value: 'gemini-2.5-flash' },
+      { label: 'Gemini 2.5 / Flash-Lite', value: 'gemini-2.5-flash-lite' },
+    ],
     guideSteps: ['登录 Google AI Studio', '创建 API key', '复制 AIza 开头密钥'],
   },
   {
@@ -229,6 +303,7 @@ const PROVIDERS: ProviderConfig[] = [
     keyPlaceholder: 'sk-...',
     mainModel: 'gpt-5.5',
     imageModel: 'gpt-image-2',
+    visionModel: 'gpt-4.1',
     mainModels: [
       { label: 'GPT-5.5 / GPT-5.5', value: 'gpt-5.5' },
       { label: 'GPT-5.5 / GPT-5.5 Pro', value: 'gpt-5.5-pro' },
@@ -249,6 +324,14 @@ const PROVIDERS: ProviderConfig[] = [
       { label: 'GPT Image / GPT Image 1.5', value: 'gpt-image-1.5' },
       { label: 'GPT Image / GPT Image 1', value: 'gpt-image-1' },
       { label: 'GPT Image / GPT Image 1 Mini', value: 'gpt-image-1-mini' },
+    ],
+    visionModels: [
+      { label: 'GPT-4.1 / GPT-4.1', value: 'gpt-4.1' },
+      { label: 'GPT-4.1 / GPT-4.1 Mini', value: 'gpt-4.1-mini' },
+      { label: 'GPT-4o / GPT-4o', value: 'gpt-4o' },
+      { label: 'GPT-4o / GPT-4o Mini', value: 'gpt-4o-mini' },
+      { label: 'GPT-5 / GPT-5.1', value: 'gpt-5.1' },
+      { label: 'GPT-5 / GPT-5 Mini', value: 'gpt-5-mini' },
     ],
     guideSteps: ['登录 OpenAI Platform', '创建 secret key', '复制 sk- 开头密钥'],
   },
@@ -278,6 +361,23 @@ const CRITIC_ROUND_OPTIONS = [
   { label: '1 轮', value: 1 },
   { label: '2 轮', value: 2 },
 ] as const
+
+const OUTPUT_FORMATS: { label: string; value: OutputFormat }[] = [
+  { label: 'PNG 图片', value: 'png' },
+  { label: 'SVG 矢量图', value: 'svg' },
+]
+
+const REFERENCE_IMAGE_MODES: { label: string; value: ReferenceImageMode }[] = [
+  { label: '自动选择', value: 'auto' },
+  { label: '主模型直读', value: 'main_model' },
+  { label: '独立识别模型', value: 'vision_model' },
+]
+
+const REFERENCE_IMAGE_LIMITS = {
+  maxCount: 3,
+  maxBytes: 5 * 1024 * 1024,
+  mimeTypes: ['image/png', 'image/jpeg', 'image/webp'],
+}
 
 const INFOGRAPHIC_CATEGORIES: InfographicCategory[] = [
   { id: 'method_framework', label: '方法框架图', description: '突出模块、智能体、输入输出和整体系统结构。' },
@@ -334,6 +434,9 @@ Component({
     imageModelOptions: PROVIDERS[0].imageModels,
     imageModelIndex: getModelIndex(PROVIDERS[0].imageModels, PROVIDERS[0].imageModel),
     imageModelLabel: getModelLabel(PROVIDERS[0].imageModels, PROVIDERS[0].imageModel),
+    referenceVisionModelOptions: PROVIDERS[0].visionModels,
+    referenceVisionModelIndex: getModelIndex(PROVIDERS[0].visionModels, PROVIDERS[0].visionModel),
+    referenceVisionModelLabel: getModelLabel(PROVIDERS[0].visionModels, PROVIDERS[0].visionModel),
     configurationMode: 'simple' as ConfigurationMode,
     isAdvancedMode: false,
     modeLabel: '普通模式',
@@ -349,8 +452,28 @@ Component({
     criticRoundOptions: CRITIC_ROUND_OPTIONS,
     criticRoundIndex: 1,
     criticRoundLabel: String(CRITIC_ROUND_OPTIONS[1].label),
+    outputFormatOptions: OUTPUT_FORMATS,
+    outputFormat: 'png' as OutputFormat,
+    outputFormatIndex: 0,
+    outputFormatLabel: OUTPUT_FORMATS[0].label,
+    referenceImageModeOptions: REFERENCE_IMAGE_MODES,
+    referenceImageMode: 'auto' as ReferenceImageMode,
+    referenceImageModeIndex: 0,
+    referenceImageModeLabel: REFERENCE_IMAGE_MODES[0].label,
+    referenceImages: [] as ReferenceImage[],
+    referenceImageCount: 0,
+    referenceCanAddImage: true,
+    referenceCapabilityStatus: 'unknown' as CapabilityStatus,
+    referenceCapabilityReason: '',
+    referenceModeNote: '',
+    referenceModeCanSubmit: true,
+    referenceNeedsVisionModel: false,
+    shouldShowReferenceModeSelector: false,
+    referenceUploadError: '',
+    isUploadingReferences: false,
     mainModelName: PROVIDERS[0].mainModel,
     imageModelName: PROVIDERS[0].imageModel,
+    referenceVisionModelName: PROVIDERS[0].visionModel,
     apiKey: '',
     apiKeyPlaceholder: PROVIDERS[0].keyPlaceholder,
     categories: INFOGRAPHIC_CATEGORIES,
@@ -435,10 +558,19 @@ Component({
         imageModelOptions: provider.imageModels,
         imageModelIndex: getModelIndex(provider.imageModels, provider.imageModel),
         imageModelLabel: getModelLabel(provider.imageModels, provider.imageModel),
+        referenceVisionModelOptions: provider.visionModels,
+        referenceVisionModelIndex: getModelIndex(provider.visionModels, provider.visionModel),
+        referenceVisionModelLabel: getModelLabel(provider.visionModels, provider.visionModel),
         mainModelName: provider.mainModel,
         imageModelName: provider.imageModel,
+        referenceVisionModelName: provider.visionModel,
+        referenceImageMode: 'auto',
+        referenceImageModeIndex: 0,
+        referenceImageModeLabel: REFERENCE_IMAGE_MODES[0].label,
         apiKeyPlaceholder: provider.keyPlaceholder,
       })
+      this.refreshReferenceModeState()
+      this.refreshReferenceCapability()
       this.refreshCanSubmit()
     },
 
@@ -451,6 +583,7 @@ Component({
         isAdvancedMode,
         modeLabel: isAdvancedMode ? '专业模式' : '普通模式',
       })
+      this.refreshReferenceModeState()
       this.refreshCanSubmit()
     },
 
@@ -490,6 +623,16 @@ Component({
       })
     },
 
+    onOutputFormatChange(event: WechatMiniprogram.PickerChange) {
+      const outputFormatIndex = readPickerIndex(event.detail.value, OUTPUT_FORMATS.length)
+      const option = OUTPUT_FORMATS[outputFormatIndex] || OUTPUT_FORMATS[0]
+      this.setData({
+        outputFormatIndex,
+        outputFormat: option.value,
+        outputFormatLabel: option.label,
+      })
+    },
+
     onMainModelChange(event: WechatMiniprogram.PickerChange) {
       const provider = PROVIDERS[this.data.providerIndex] || PROVIDERS[0]
       const mainModelIndex = readPickerIndex(event.detail.value, provider.mainModels.length)
@@ -499,6 +642,7 @@ Component({
         mainModelLabel: option.label,
         mainModelName: option.value,
       })
+      this.refreshReferenceCapability()
       this.refreshCanSubmit()
     },
 
@@ -510,6 +654,18 @@ Component({
         imageModelIndex,
         imageModelLabel: option.label,
         imageModelName: option.value,
+      })
+      this.refreshCanSubmit()
+    },
+
+    onReferenceVisionModelChange(event: WechatMiniprogram.PickerChange) {
+      const provider = PROVIDERS[this.data.providerIndex] || PROVIDERS[0]
+      const referenceVisionModelIndex = readPickerIndex(event.detail.value, provider.visionModels.length)
+      const option = provider.visionModels[referenceVisionModelIndex] || provider.visionModels[0]
+      this.setData({
+        referenceVisionModelIndex,
+        referenceVisionModelLabel: option.label,
+        referenceVisionModelName: option.value,
       })
       this.refreshCanSubmit()
     },
@@ -558,6 +714,211 @@ Component({
       wx.showToast({ title: '已填入案例', icon: 'success' })
     },
 
+    chooseReferenceImages() {
+      const remaining = REFERENCE_IMAGE_LIMITS.maxCount - this.data.referenceImages.length
+      if (remaining <= 0) {
+        this.setData({ referenceUploadError: `最多只能上传 ${REFERENCE_IMAGE_LIMITS.maxCount} 张参考图。` })
+        return
+      }
+
+      wx.chooseMedia({
+        count: remaining,
+        mediaType: ['image'],
+        sourceType: ['album', 'camera'],
+        sizeType: ['compressed'],
+        success: (res) => {
+          const accepted: ReferenceImage[] = []
+          let error = ''
+          res.tempFiles.forEach((file, index) => {
+            const path = file.tempFilePath
+            const size = Number(file.size || 0)
+            const mimeType = mimeTypeFromPath(path)
+            if (!REFERENCE_IMAGE_LIMITS.mimeTypes.includes(mimeType)) {
+              error = '参考图仅支持 PNG、JPG 或 WebP。'
+              return
+            }
+            if (!size || size > REFERENCE_IMAGE_LIMITS.maxBytes) {
+              error = '单张参考图不能超过 5MB。'
+              return
+            }
+            accepted.push({
+              id: `${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`,
+              path,
+              filename: filenameFromPath(path, accepted.length + this.data.referenceImages.length + 1, mimeType),
+              mimeType,
+              size,
+              sizeText: formatBytes(size),
+            })
+          })
+
+          if (accepted.length) {
+            const referenceImages = [...this.data.referenceImages, ...accepted].slice(0, REFERENCE_IMAGE_LIMITS.maxCount)
+            this.setData({
+              referenceImages,
+              referenceImageCount: referenceImages.length,
+              referenceCanAddImage: referenceImages.length < REFERENCE_IMAGE_LIMITS.maxCount,
+              referenceUploadError: error,
+            })
+            this.refreshReferenceModeState()
+            this.refreshReferenceCapability()
+            this.refreshCanSubmit()
+          } else if (error) {
+            this.setData({ referenceUploadError: error })
+          }
+        },
+      })
+    },
+
+    removeReferenceImage(event: WechatMiniprogram.TouchEvent) {
+      const id = String(event.currentTarget.dataset.id || '')
+      const referenceImages = this.data.referenceImages.filter((image) => image.id !== id)
+      this.setData({
+        referenceImages,
+        referenceImageCount: referenceImages.length,
+        referenceCanAddImage: referenceImages.length < REFERENCE_IMAGE_LIMITS.maxCount,
+        referenceUploadError: '',
+      })
+      this.refreshReferenceModeState()
+      this.refreshReferenceCapability()
+      this.refreshCanSubmit()
+    },
+
+    previewReferenceImage(event: WechatMiniprogram.TouchEvent) {
+      const path = String(event.currentTarget.dataset.path || '')
+      if (!path) return
+      const urls = this.data.referenceImages.map((image) => image.path)
+      wx.previewImage({ current: path, urls: urls.length ? urls : [path] })
+    },
+
+    onReferenceModeTap(event: WechatMiniprogram.TouchEvent) {
+      const mode = normalizeReferenceImageMode(String(event.currentTarget.dataset.mode || 'auto'))
+      if (mode === 'main_model' && this.data.referenceCapabilityStatus === 'unsupported') {
+        wx.showToast({ title: '当前主模型不支持', icon: 'none' })
+        return
+      }
+      const index = REFERENCE_IMAGE_MODES.findIndex((item) => item.value === mode)
+      const option = REFERENCE_IMAGE_MODES[index >= 0 ? index : 0]
+      this.setData({
+        referenceImageMode: option.value,
+        referenceImageModeIndex: index >= 0 ? index : 0,
+        referenceImageModeLabel: option.label,
+      })
+      this.refreshReferenceModeState()
+      this.refreshCanSubmit()
+    },
+
+    async refreshReferenceCapability() {
+      if (!this.data.referenceImages.length) {
+        ;(this as any).referenceCapabilityRequestKey = ''
+        this.setData({
+          referenceCapabilityStatus: 'unknown',
+          referenceCapabilityReason: '',
+        })
+        this.refreshReferenceModeState()
+        return
+      }
+
+      const provider = PROVIDERS[this.data.providerIndex] || PROVIDERS[0]
+      const model = this.data.isAdvancedMode ? this.data.mainModelName.trim() || provider.mainModel : provider.mainModel
+      const requestKey = `${provider.id}:${model}:${Date.now()}`
+      ;(this as any).referenceCapabilityRequestKey = requestKey
+      this.setData({
+        referenceCapabilityStatus: 'loading',
+        referenceCapabilityReason: '',
+      })
+      this.refreshReferenceModeState()
+
+      try {
+        const capability = await requestJson<ModelCapability>({
+          action: 'modelCapability',
+          provider: provider.id,
+          model,
+        })
+        if ((this as any).referenceCapabilityRequestKey !== requestKey) return
+        const status = normalizeCapabilityStatus(capability)
+        this.setData({
+          referenceCapabilityStatus: status,
+          referenceCapabilityReason: String(capability.reason || ''),
+        })
+      } catch (error) {
+        if ((this as any).referenceCapabilityRequestKey !== requestKey) return
+        this.setData({
+          referenceCapabilityStatus: 'unknown',
+          referenceCapabilityReason: formatError(error),
+        })
+      }
+      this.refreshReferenceModeState()
+      this.refreshCanSubmit()
+    },
+
+    refreshReferenceModeState() {
+      const modeState = buildReferenceModeState({
+        hasReferenceImages: this.data.referenceImages.length > 0,
+        isAdvancedMode: this.data.isAdvancedMode,
+        requestedMode: this.data.referenceImageMode,
+        capability: {
+          status: this.data.referenceCapabilityStatus,
+          reason: this.data.referenceCapabilityReason,
+        },
+      })
+      this.setData({
+        referenceModeCanSubmit: modeState.referenceModeCanSubmit,
+        referenceModeNote: modeState.referenceModeNote,
+        shouldShowReferenceModeSelector: modeState.shouldShowReferenceModeSelector,
+        referenceNeedsVisionModel: this.data.referenceImages.length > 0 && modeState.resolvedRequestMode !== 'main_model',
+      })
+    },
+
+    async uploadReferencesForJob(): Promise<UploadedReferenceImage[]> {
+      if (!this.data.referenceImages.length) return []
+
+      this.setData({
+        isUploadingReferences: true,
+        referenceUploadError: '',
+      })
+      this.refreshCanSubmit()
+
+      try {
+        const files = this.data.referenceImages.map((image) => ({
+          clientId: `${image.id}:original`,
+          role: 'original',
+          filename: image.filename,
+          mimeType: image.mimeType,
+          size: image.size,
+        }))
+        const prepared = await requestJson<{ uploads?: ReferenceUpload[] }>({
+          action: 'prepareReferenceUpload',
+          files,
+        })
+        const uploadMap = new Map((prepared.uploads || []).map((upload) => [upload.clientId, upload]))
+
+        for (const image of this.data.referenceImages) {
+          const upload = uploadMap.get(`${image.id}:original`)
+          if (!upload || !upload.uploadUrl) throw new Error('参考图上传地址创建失败。')
+          await uploadReferenceFile(image.path, upload.uploadUrl, image.mimeType)
+        }
+
+        return this.data.referenceImages.map((image) => {
+          const upload = uploadMap.get(`${image.id}:original`)
+          if (!upload) throw new Error('参考图上传结果缺少原图记录。')
+          return {
+            filename: image.filename,
+            mimeType: image.mimeType,
+            size: image.size,
+            objectKey: upload.objectKey,
+            uploadToken: upload.uploadToken,
+          }
+        })
+      } catch (error) {
+        const message = formatError(error)
+        this.setData({ referenceUploadError: message })
+        throw new Error(message)
+      } finally {
+        this.setData({ isUploadingReferences: false })
+        this.refreshCanSubmit()
+      }
+    },
+
     async checkHealth() {
       try {
         const data = await requestJson<{ code?: number; ok?: boolean; runtime?: string; laf?: { ok?: boolean } }>({
@@ -589,6 +950,7 @@ Component({
       const criticRounds = CRITIC_ROUND_OPTIONS[this.data.criticRoundIndex] || CRITIC_ROUND_OPTIONS[1]
       const mainModelName = isAdvancedMode ? this.data.mainModelName.trim() || provider.mainModel : provider.mainModel
       const imageModelName = isAdvancedMode ? this.data.imageModelName.trim() || provider.imageModel : provider.imageModel
+      const referenceVisionModelName = isAdvancedMode ? this.data.referenceVisionModelName.trim() || provider.visionModel : provider.visionModel
       this.setData({
         isSubmitting: true,
         error: '',
@@ -599,6 +961,7 @@ Component({
 
       wx.showLoading({ title: '提交中' })
       try {
+        const uploadedReferenceImages = await this.uploadReferencesForJob()
         const apiKeys = {
           openrouter: '',
           gemini: '',
@@ -612,11 +975,15 @@ Component({
           configurationMode: this.data.configurationMode,
           provider: provider.id,
           apiKeys,
+          outputFormat: this.data.outputFormat,
           methodContent: this.data.methodContent.trim(),
           caption: this.data.caption.trim(),
           infographicCategory: category.label,
           mainModelName,
           imageModelName,
+          referenceVisionModelName,
+          referenceImageMode: uploadedReferenceImages.length ? (isAdvancedMode ? this.data.referenceImageMode : 'auto') : undefined,
+          referenceImages: uploadedReferenceImages,
           pipelineMode: isAdvancedMode ? pipeline.value : 'planner_critic',
           aspectRatio: isAdvancedMode ? aspectRatio.value : '16:9',
           numCandidates: isAdvancedMode ? candidateCount.value : 1,
@@ -693,8 +1060,13 @@ Component({
 
     previewImage(event: WechatMiniprogram.TouchEvent) {
       const url = String(event.currentTarget.dataset.url || '')
+      const canPreview = readDatasetBoolean(event.currentTarget.dataset.canPreview, true)
       if (!url) return
-      const urls = this.data.resultImages.map((image) => image.url).filter(Boolean)
+      if (!canPreview) {
+        copyImageUrl(url)
+        return
+      }
+      const urls = this.data.resultImages.filter((image) => image.can_preview).map((image) => image.url).filter(Boolean)
       wx.previewImage({
         current: url,
         urls: urls.length ? urls : [url],
@@ -703,8 +1075,24 @@ Component({
 
     previewRecordImage(event: WechatMiniprogram.TouchEvent) {
       const url = String(event.currentTarget.dataset.url || '')
+      const canPreview = readDatasetBoolean(event.currentTarget.dataset.canPreview, true)
       if (!url) return
+      if (!canPreview) {
+        copyImageUrl(url)
+        return
+      }
       wx.previewImage({ current: url, urls: [url] })
+    },
+
+    handleImageAction(event: WechatMiniprogram.TouchEvent) {
+      const url = String(event.currentTarget.dataset.url || '')
+      const canPreview = readDatasetBoolean(event.currentTarget.dataset.canPreview, true)
+      if (!url) return
+      if (!canPreview) {
+        copyImageUrl(url)
+        return
+      }
+      saveImageToAlbum(url)
     },
 
     copyJobId() {
@@ -747,12 +1135,18 @@ Component({
 
     refreshCanSubmit() {
       const hasRequiredModels =
-        !this.data.isAdvancedMode || Boolean(this.data.mainModelName.trim() && this.data.imageModelName.trim())
+        !this.data.isAdvancedMode || Boolean(
+          this.data.mainModelName.trim() &&
+            this.data.imageModelName.trim() &&
+            (!this.data.referenceNeedsVisionModel || this.data.referenceVisionModelName.trim()),
+        )
       const canSubmit = Boolean(
         this.data.apiKey.trim() &&
           this.data.methodContent.trim().length >= 20 &&
           this.data.caption.trim().length >= 3 &&
           hasRequiredModels &&
+          this.data.referenceModeCanSubmit &&
+          !this.data.isUploadingReferences &&
           !this.data.isSubmitting,
       )
       this.setData({ canSubmit })
@@ -937,6 +1331,12 @@ function readPickerIndex(value: unknown, optionCount: number): number {
   return index
 }
 
+function readDatasetBoolean(value: unknown, fallback: boolean): boolean {
+  if (value === true || value === 'true') return true
+  if (value === false || value === 'false') return false
+  return fallback
+}
+
 function requestJson<T>(body: WechatMiniprogram.IAnyObject, options: RequestOptions = {}): Promise<T> {
   return postJson<T>(API_ENDPOINT, body, options)
 }
@@ -988,6 +1388,80 @@ function postJson<T>(url: string, body: WechatMiniprogram.IAnyObject, options: R
         reject(new Error(error.errMsg || '网络请求失败'))
       },
     })
+  })
+}
+
+function uploadReferenceFile(filePath: string, uploadUrl: string, mimeType: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    wx.getFileSystemManager().readFile({
+      filePath,
+      success(readResult) {
+        wx.request({
+          url: uploadUrl,
+          method: 'PUT',
+          timeout: 60000,
+          header: {
+            'Content-Type': mimeType,
+          },
+          data: readResult.data,
+          success(res) {
+            if (res.statusCode >= 200 && res.statusCode < 300) {
+              resolve()
+              return
+            }
+            reject(new Error(`参考图上传失败：HTTP ${res.statusCode}`))
+          },
+          fail(error) {
+            reject(new Error(error.errMsg || '参考图上传失败'))
+          },
+        })
+      },
+      fail(error) {
+        reject(new Error(error.errMsg || '读取参考图失败'))
+      },
+    })
+  })
+}
+
+function copyImageUrl(url: string) {
+  wx.setClipboardData({
+    data: url,
+    success() {
+      wx.showToast({ title: '链接已复制', icon: 'success' })
+    },
+  })
+}
+
+function saveImageToAlbum(url: string) {
+  if (!/^https?:\/\//i.test(url)) {
+    saveLocalImageToAlbum(url)
+    return
+  }
+
+  wx.downloadFile({
+    url,
+    success(result) {
+      if (result.statusCode < 200 || result.statusCode >= 300 || !result.tempFilePath) {
+        wx.showToast({ title: '下载失败', icon: 'none' })
+        return
+      }
+      saveLocalImageToAlbum(result.tempFilePath)
+    },
+    fail(error) {
+      wx.showToast({ title: error.errMsg || '下载失败', icon: 'none' })
+    },
+  })
+}
+
+function saveLocalImageToAlbum(filePath: string) {
+  wx.saveImageToPhotosAlbum({
+    filePath,
+    success() {
+      wx.showToast({ title: '已保存到相册', icon: 'success' })
+    },
+    fail(error) {
+      wx.showToast({ title: error.errMsg || '保存失败', icon: 'none' })
+    },
   })
 }
 
@@ -1059,7 +1533,9 @@ async function hydrateRecordJobs(jobs: Job[]): Promise<Job[]> {
   const hydrated = await Promise.all(jobs.map(async (job) => {
     const hasImage = job.result_images.some((image) => image.url)
     const hasResult = job.result_image_count > 0 || job.result_images.length > 0
-    if (job.status !== 'succeeded' || hasImage || !hasResult) return job
+    const hasReferenceImage = job.reference_images.some((image) => image.url)
+    const hasReference = job.reference_image_count > 0 || job.reference_images.length > 0
+    if ((!hasResult || hasImage) && (!hasReference || hasReferenceImage)) return job
     try {
       const detail = await requestJson<{ job?: unknown }>({ action: 'getJob', jobId: job.id })
       return normalizeJob(detail.job)
@@ -1074,13 +1550,34 @@ function normalizeJob(input: unknown): Job {
   const job = (input || {}) as Record<string, any>
   const jobId = String(job.id || job._id || '')
   const methodContent = String(job.method_content || job.methodContent || '')
+  const outputFormat = normalizeOutputFormat(job.output_format || job.outputFormat)
   const resultImages = (job.result_images || job.resultImages || []).map((image: Record<string, any>, index: number) => ({
-    filename: String(image.filename || `candidate-${index + 1}`),
-    url: resolveImageUrl(String(image.url || ''), jobId, index),
+    ...formatImageAsset(
+      {
+        ...image,
+        url: resolveImageUrl(String(image.url || ''), jobId, index, image.mime_type || image.mimeType || '', outputFormat),
+      },
+      {
+        fallbackFilename: `candidate-${index + 1}.${outputFormat}`,
+        fallbackFormat: outputFormat,
+      },
+    ),
     candidate_id: Number(image.candidate_id != null ? image.candidate_id : image.candidateId != null ? image.candidateId : index),
-    mime_type: image.mime_type || image.mimeType || '',
   }))
+  const referenceImages = (job.reference_images || job.referenceImages || []).map((image: Record<string, any>, index: number) => formatImageAsset(
+    {
+      ...image,
+      url: resolveImageUrl(String(image.url || ''), jobId, index, image.mime_type || image.mimeType || '', image.mime_type || image.mimeType || ''),
+    },
+    {
+      fallbackFilename: String(image.filename || `reference-${index + 1}`),
+      fallbackFormat: image.mime_type || image.mimeType || '',
+    },
+  ))
   const status = String(job.status || 'queued')
+  const referenceModeUsed = normalizeReferenceImageModeUsed(job.reference_image_mode_used || job.referenceImageModeUsed)
+  const referenceVisionModelName = String(job.reference_vision_model_name || job.referenceVisionModelName || '')
+  const referenceImageCount = Number(job.reference_image_count || job.referenceImageCount || referenceImages.length || 0)
 
   return {
     id: jobId,
@@ -1088,12 +1585,21 @@ function normalizeJob(input: unknown): Job {
     provider: String(job.provider || ''),
     user_email: String(job.user_email || job.userEmail || ''),
     configuration_mode: String(job.configuration_mode || job.configurationMode || 'simple'),
+    output_format: outputFormat,
+    output_format_text: formatOutputFormat(outputFormat),
     method_content: methodContent,
     method_preview: methodContent.length > 86 ? `${methodContent.slice(0, 86)}...` : methodContent,
     caption: String(job.caption || ''),
     infographic_category: String(job.infographic_category || job.infographicCategory || '方法框架图'),
     main_model_name: String(job.main_model_name || job.mainModelName || ''),
     image_gen_model_name: String(job.image_gen_model_name || job.imageModelName || ''),
+    reference_vision_model_name: referenceVisionModelName,
+    reference_vision_model_text: referenceModeUsed === 'vision_model' ? referenceVisionModelName || '未记录' : '未使用',
+    reference_image_mode: String(job.reference_image_mode || job.referenceImageMode || ''),
+    reference_image_mode_used: referenceModeUsed,
+    reference_image_mode_text: formatReferenceImageModeUsed(referenceModeUsed),
+    reference_image_count: referenceImageCount,
+    reference_images: referenceImages,
     aspect_ratio: String(job.aspect_ratio || job.aspectRatio || '16:9'),
     num_candidates: Number(job.num_candidates || job.numCandidates || 0),
     result_image_count: Number(job.result_image_count || job.resultImageCount || resultImages.length || 0),
@@ -1108,24 +1614,29 @@ function normalizeJob(input: unknown): Job {
   }
 }
 
-function resolveImageUrl(url: string, jobId = 'image', index = 0): string {
+function resolveImageUrl(url: string, jobId = 'image', index = 0, mimeType = '', fallbackFormat: unknown = ''): string {
   if (!url) return ''
   if (/^https?:\/\//i.test(url)) return url
-  if (/^data:image\//i.test(url)) return cacheDataImage(url, jobId, index)
+  if (/^data:image\//i.test(url)) return cacheDataImage(url, jobId, index, mimeType, fallbackFormat)
   return `${API_BASE}${url}`
 }
 
-function cacheDataImage(dataUrl: string, jobId: string, index: number): string {
-  const match = dataUrl.match(DATA_IMAGE_PATTERN)
-  if (!match) return ''
+function cacheDataImage(dataUrl: string, jobId: string, index: number, hintedMimeType = '', fallbackFormat: unknown = ''): string {
+  const base64Match = dataUrl.match(DATA_IMAGE_PATTERN)
+  const utf8Match = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+)(?:;charset=[^;,]+)?(?:;utf8|;utf-8)?,(.*)$/i)
+  if (!base64Match && !utf8Match) return ''
 
-  const [, mimeType, base64Data] = match
-  const extension = imageExtension(mimeType)
+  const mimeType = base64Match ? base64Match[1] : (utf8Match ? utf8Match[1] : hintedMimeType)
+  const extension = imageExtension(mimeType || hintedMimeType || String(fallbackFormat || ''))
   const safeJobId = jobId.replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 80) || 'image'
   const filePath = `${(wx as any).env.USER_DATA_PATH}/paperbanana-${safeJobId}-${index}.${extension}`
 
   try {
-    wx.getFileSystemManager().writeFileSync(filePath, base64Data, 'base64')
+    if (base64Match) {
+      wx.getFileSystemManager().writeFileSync(filePath, base64Match[2], 'base64')
+    } else if (utf8Match) {
+      wx.getFileSystemManager().writeFileSync(filePath, decodeURIComponent(utf8Match[2]), 'utf8')
+    }
     return filePath
   } catch (error) {
     console.warn('Failed to cache generated image', error)
@@ -1134,9 +1645,36 @@ function cacheDataImage(dataUrl: string, jobId: string, index: number): string {
 }
 
 function imageExtension(mimeType: string): string {
+  if (mimeType.includes('svg')) return 'svg'
   if (mimeType.includes('jpeg') || mimeType.includes('jpg')) return 'jpg'
   if (mimeType.includes('webp')) return 'webp'
   return 'png'
+}
+
+function normalizeReferenceImageModeUsed(value: unknown): ReferenceImageModeUsed {
+  if (value === 'main_model' || value === 'vision_model' || value === 'none' || value === 'auto') return value
+  return ''
+}
+
+function mimeTypeFromPath(path: string): string {
+  const lower = path.split('?')[0].toLowerCase()
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg'
+  if (lower.endsWith('.webp')) return 'image/webp'
+  if (lower.endsWith('.png')) return 'image/png'
+  return 'image/jpeg'
+}
+
+function filenameFromPath(path: string, index: number, mimeType: string): string {
+  const cleanPath = path.split('?')[0]
+  const rawName = cleanPath.split('/').pop() || ''
+  if (rawName.includes('.')) return rawName
+  return `reference-${index}.${imageExtension(mimeType)}`
+}
+
+function formatBytes(size: number): string {
+  if (size >= 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)}MB`
+  if (size >= 1024) return `${Math.max(1, Math.round(size / 1024))}KB`
+  return `${size}B`
 }
 
 function getModelIndex(options: ModelOption[], value: string): number {
