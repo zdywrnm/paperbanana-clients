@@ -195,9 +195,6 @@ export default async function (ctx: FunctionContext) {
     if (action === 'userJobs') {
       return await userJobs(body as UserJobsBody)
     }
-    if (action === '__spikeSvg') {
-      return await spikeSvg(body as any)
-    }
     return fail(`Unknown action: ${action}`, 400)
   } catch (error: any) {
     return fail(error?.message || String(error), 500)
@@ -209,55 +206,6 @@ function setCorsHeaders(ctx: FunctionContext) {
   ctx.response.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
   ctx.response.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Admin-Token')
   ctx.response.setHeader('Access-Control-Max-Age', '86400')
-}
-
-// TEMP SPIKE: 验证 Sealaf 运行时能否用 @resvg/resvg-wasm 把 SVG 渲染成 PNG。用完即删。
-async function spikeSvg(body: any) {
-  if (body?.spikeKey !== 'spike-7f3a9c2e-refimg') return fail('forbidden', 403)
-  const out: any = {}
-  try {
-    const req: any = (globalThis as any).require || require
-    const fs: any = req('fs')
-    const path: any = req('path')
-    const mod: any = req('@resvg/resvg-wasm')
-    out.exports = Object.keys(mod)
-    const base = process.env.CUSTOM_DEPENDENCY_BASE_PATH || ''
-    out.customDepBase = base
-    out.cwd = process.cwd()
-    // 1) 找本地 wasm
-    const tries = [
-      base && path.join(base, 'node_modules/@resvg/resvg-wasm/index_bg.wasm'),
-      path.join(process.cwd(), 'node_modules/@resvg/resvg-wasm/index_bg.wasm'),
-    ].filter(Boolean)
-    out.tries = tries
-    let wasm: Buffer | null = null
-    for (const t of tries) { try { wasm = fs.readFileSync(t); out.wasmFrom = t; out.wasmBytes = wasm.length; break } catch (e: any) {} }
-    if (!wasm && base) { try { out.resvgDir = fs.readdirSync(path.join(base, 'node_modules/@resvg/resvg-wasm')) } catch (e: any) { out.resvgDirErr = String(e?.message || e) } }
-    // 2) 初始化：本地优先，CDN 兜底
-    if (wasm) {
-      try { await mod.initWasm(wasm); out.initWasm = 'OK(local)' } catch (e: any) { out.initWasmLocalErr = String(e?.message || e) }
-    }
-    if (out.initWasm !== 'OK(local)') {
-      let ver = ''
-      try { ver = req('@resvg/resvg-wasm/package.json').version } catch (e: any) { out.verErr = String(e?.message || e) }
-      out.installedVersion = ver
-      const u = ver ? `https://unpkg.com/@resvg/resvg-wasm@${ver}/index_bg.wasm` : 'https://unpkg.com/@resvg/resvg-wasm/index_bg.wasm'
-      out.cdn = u
-      try { await mod.initWasm(fetch(u)); out.initWasm = 'OK(cdn)' } catch (e: any) { out.initWasmCdnErr = String(e?.message || e) }
-    }
-    if (!out.initWasm) { out.error = 'initWasm failed (no local wasm, cdn failed)'; return ok(out) }
-    // 3) 真渲染
-    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="60"><rect width="120" height="60" fill="#4f46e5"/><circle cx="30" cy="30" r="18" fill="#ffffff"/><text x="60" y="36" font-size="14" fill="#ffffff">hi</text></svg>'
-    const r = new mod.Resvg(svg, { fitTo: { mode: 'width', value: 256 } })
-    const png = r.render().asPng()
-    out.pngBytes = png.length
-    out.pngHeader = Array.from(png.slice(0, 8))
-    out.ok = true
-  } catch (e: any) {
-    out.error = String(e?.message || e)
-    out.stack = String(e?.stack || '').split('\n').slice(0, 4)
-  }
-  return ok(out)
 }
 
 async function prepareReferenceUpload(body: PrepareReferenceUploadBody) {
