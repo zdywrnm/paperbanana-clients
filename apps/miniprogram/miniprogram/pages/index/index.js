@@ -226,8 +226,14 @@ const REFERENCE_IMAGE_MODES = [
 const REFERENCE_IMAGE_LIMITS = {
     maxCount: 3,
     maxBytes: 5 * 1024 * 1024,
-    mimeTypes: ['image/png', 'image/jpeg', 'image/webp'],
+    mimeTypes: ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'],
 };
+const FEEDBACK_CATEGORIES = [
+    { label: '问题反馈', value: 'bug' },
+    { label: '功能建议', value: 'feature' },
+    { label: '体验问题', value: 'experience' },
+    { label: '其他', value: 'other' },
+];
 const INFOGRAPHIC_CATEGORIES = [
     { id: 'method_framework', label: '方法框架图', description: '突出模块、智能体、输入输出和整体系统结构。' },
     { id: 'workflow', label: '流程图', description: '突出步骤顺序、决策节点、循环和执行路径。' },
@@ -361,6 +367,16 @@ Component({
         authError: '',
         authSubmitting: false,
         authCanSubmit: false,
+        showFeedbackPanel: false,
+        feedbackCategoryOptions: FEEDBACK_CATEGORIES,
+        feedbackCategoryIndex: 0,
+        feedbackCategoryLabel: FEEDBACK_CATEGORIES[0].label,
+        feedbackMessage: '',
+        feedbackContact: '',
+        feedbackError: '',
+        feedbackSubmitted: false,
+        feedbackCanSubmit: false,
+        isFeedbackSubmitting: false,
     },
     lifetimes: {
         attached() {
@@ -542,6 +558,22 @@ Component({
             this.refreshCanSubmit();
             wx.showToast({ title: '已填入案例', icon: 'success' });
         },
+        chooseReferenceFile() {
+            if (!this.data.referenceCanAddImage || this.data.isSubmitting || this.data.isUploadingReferences)
+                return;
+            wx.showActionSheet({
+                itemList: ['图片 / 相册 / 拍照', 'SVG 文件'],
+                success: (res) => {
+                    if (res.tapIndex === 0) {
+                        this.chooseReferenceImages();
+                        return;
+                    }
+                    if (res.tapIndex === 1) {
+                        this.chooseReferenceSvgFile();
+                    }
+                },
+            });
+        },
         chooseReferenceImages() {
             const remaining = REFERENCE_IMAGE_LIMITS.maxCount - this.data.referenceImages.length;
             if (remaining <= 0) {
@@ -561,21 +593,72 @@ Component({
                         const size = Number(file.size || 0);
                         const mimeType = mimeTypeFromPath(path);
                         if (!REFERENCE_IMAGE_LIMITS.mimeTypes.includes(mimeType)) {
-                            error = '参考图仅支持 PNG、JPG 或 WebP。';
+                            error = '参考图仅支持 PNG、JPG、WebP 或 SVG。';
                             return;
                         }
                         if (!size || size > REFERENCE_IMAGE_LIMITS.maxBytes) {
                             error = '单张参考图不能超过 5MB。';
                             return;
                         }
-                        accepted.push({
+                        accepted.push(buildReferenceImage({
                             id: `${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`,
                             path,
                             filename: filenameFromPath(path, accepted.length + this.data.referenceImages.length + 1, mimeType),
                             mimeType,
                             size,
-                            sizeText: formatBytes(size),
+                        }));
+                    });
+                    if (accepted.length) {
+                        const referenceImages = [...this.data.referenceImages, ...accepted].slice(0, REFERENCE_IMAGE_LIMITS.maxCount);
+                        this.setData({
+                            referenceImages,
+                            referenceImageCount: referenceImages.length,
+                            referenceCanAddImage: referenceImages.length < REFERENCE_IMAGE_LIMITS.maxCount,
+                            referenceUploadError: error,
                         });
+                        this.refreshReferenceModeState();
+                        this.refreshReferenceCapability();
+                        this.refreshCanSubmit();
+                    }
+                    else if (error) {
+                        this.setData({ referenceUploadError: error });
+                    }
+                },
+            });
+        },
+        chooseReferenceSvgFile() {
+            const remaining = REFERENCE_IMAGE_LIMITS.maxCount - this.data.referenceImages.length;
+            if (remaining <= 0) {
+                this.setData({ referenceUploadError: `最多只能上传 ${REFERENCE_IMAGE_LIMITS.maxCount} 张参考图。` });
+                return;
+            }
+            wx.chooseMessageFile({
+                count: remaining,
+                type: 'file',
+                extension: ['svg'],
+                success: (res) => {
+                    const accepted = [];
+                    let error = '';
+                    res.tempFiles.forEach((file, index) => {
+                        const path = String(file.path || '');
+                        const size = Number(file.size || 0);
+                        const filename = sanitizeLocalFilename(String(file.name || ''), path, accepted.length + this.data.referenceImages.length + 1, 'image/svg+xml');
+                        const mimeType = normalizeReferenceFileMimeType('image/svg+xml', filename);
+                        if (!path || mimeType !== 'image/svg+xml') {
+                            error = '请选择 .svg 文件。';
+                            return;
+                        }
+                        if (!size || size > REFERENCE_IMAGE_LIMITS.maxBytes) {
+                            error = '单张参考图不能超过 5MB。';
+                            return;
+                        }
+                        accepted.push(buildReferenceImage({
+                            id: `${Date.now()}-svg-${index}-${Math.random().toString(36).slice(2, 8)}`,
+                            path,
+                            filename,
+                            mimeType,
+                            size,
+                        }));
                     });
                     if (accepted.length) {
                         const referenceImages = [...this.data.referenceImages, ...accepted].slice(0, REFERENCE_IMAGE_LIMITS.maxCount);
@@ -612,7 +695,12 @@ Component({
             const path = String(event.currentTarget.dataset.path || '');
             if (!path)
                 return;
-            const urls = this.data.referenceImages.map((image) => image.path);
+            const current = this.data.referenceImages.find((image) => image.path === path);
+            if (!current || !current.canPreview) {
+                wx.showToast({ title: 'SVG 参考图会在服务端解析', icon: 'none' });
+                return;
+            }
+            const urls = this.data.referenceImages.filter((image) => image.canPreview).map((image) => image.path);
             wx.previewImage({ current: path, urls: urls.length ? urls : [path] });
         },
         onReferenceModeTap(event) {
@@ -983,6 +1071,80 @@ Component({
                 showAuthPanel: false,
                 authError: '',
             });
+        },
+        openFeedbackPanel() {
+            this.setData({
+                showFeedbackPanel: true,
+                feedbackError: '',
+                feedbackSubmitted: false,
+            });
+            this.refreshFeedbackCanSubmit();
+        },
+        closeFeedbackPanel() {
+            this.setData({
+                showFeedbackPanel: false,
+                feedbackError: '',
+            });
+        },
+        onFeedbackCategoryChange(event) {
+            const feedbackCategoryIndex = readPickerIndex(event.detail.value, FEEDBACK_CATEGORIES.length);
+            const option = FEEDBACK_CATEGORIES[feedbackCategoryIndex] || FEEDBACK_CATEGORIES[0];
+            this.setData({
+                feedbackCategoryIndex,
+                feedbackCategoryLabel: option.label,
+            });
+        },
+        onFeedbackMessageInput(event) {
+            this.setData({
+                feedbackMessage: event.detail.value,
+                feedbackSubmitted: false,
+            });
+            this.refreshFeedbackCanSubmit();
+        },
+        onFeedbackContactInput(event) {
+            this.setData({ feedbackContact: event.detail.value });
+        },
+        refreshFeedbackCanSubmit() {
+            this.setData({
+                feedbackCanSubmit: Boolean(this.data.feedbackMessage.trim().length >= 4 && !this.data.isFeedbackSubmitting),
+            });
+        },
+        async submitFeedback() {
+            if (!this.data.feedbackCanSubmit || this.data.isFeedbackSubmitting)
+                return;
+            const category = FEEDBACK_CATEGORIES[this.data.feedbackCategoryIndex] || FEEDBACK_CATEGORIES[0];
+            this.setData({
+                isFeedbackSubmitting: true,
+                feedbackError: '',
+                feedbackSubmitted: false,
+            });
+            wx.showLoading({ title: '提交中' });
+            try {
+                await requestJson({
+                    action: 'submitFeedback',
+                    message: this.data.feedbackMessage.trim(),
+                    category: category.value,
+                    platform: 'miniprogram',
+                    clientVersion: 'miniprogram-0.1.0',
+                    jobId: this.data.currentJobId || undefined,
+                    contact: this.data.feedbackContact.trim() || undefined,
+                });
+                this.setData({
+                    feedbackMessage: '',
+                    feedbackContact: '',
+                    feedbackSubmitted: true,
+                });
+                wx.hideLoading();
+                wx.showToast({ title: '已收到反馈', icon: 'success' });
+            }
+            catch (error) {
+                this.setData({ feedbackError: formatError(error) });
+                wx.hideLoading();
+            }
+            finally {
+                this.setData({ isFeedbackSubmitting: false });
+                this.refreshFeedbackCanSubmit();
+            }
         },
         toggleAuthMode() {
             const nextMode = this.data.authMode === 'sign-in' ? 'sign-up' : 'sign-in';
@@ -1450,6 +1612,23 @@ function normalizeReferenceImageModeUsed(value) {
         return value;
     return '';
 }
+function buildReferenceImage(input) {
+    const canPreview = input.mimeType !== 'image/svg+xml';
+    return {
+        ...input,
+        sizeText: formatBytes(input.size),
+        canPreview,
+        formatText: canPreview ? '图片' : 'SVG',
+    };
+}
+function normalizeReferenceFileMimeType(mimeType, filename = '') {
+    const normalized = String(mimeType || '').toLowerCase().split(';', 1)[0].trim();
+    if (normalized === 'image/jpg')
+        return 'image/jpeg';
+    if (REFERENCE_IMAGE_LIMITS.mimeTypes.includes(normalized))
+        return normalized;
+    return mimeTypeFromPath(filename);
+}
 function mimeTypeFromPath(path) {
     const lower = path.split('?')[0].toLowerCase();
     if (lower.endsWith('.jpg') || lower.endsWith('.jpeg'))
@@ -1458,6 +1637,8 @@ function mimeTypeFromPath(path) {
         return 'image/webp';
     if (lower.endsWith('.png'))
         return 'image/png';
+    if (lower.endsWith('.svg'))
+        return 'image/svg+xml';
     return 'image/jpeg';
 }
 function filenameFromPath(path, index, mimeType) {
@@ -1466,6 +1647,14 @@ function filenameFromPath(path, index, mimeType) {
     if (rawName.includes('.'))
         return rawName;
     return `reference-${index}.${imageExtension(mimeType)}`;
+}
+function sanitizeLocalFilename(rawName, path, index, mimeType) {
+    const nameParts = rawName.split(/[\\/]/);
+    const cleanName = (nameParts[nameParts.length - 1] || '').trim();
+    if (cleanName) {
+        return cleanName.includes('.') ? cleanName : `${cleanName}.${imageExtension(mimeType)}`;
+    }
+    return filenameFromPath(path, index, mimeType);
 }
 function formatBytes(size) {
     if (size >= 1024 * 1024)

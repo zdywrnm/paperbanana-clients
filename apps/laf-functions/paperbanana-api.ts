@@ -1,6 +1,8 @@
 import cloud from '@lafjs/cloud'
 import * as crypto from 'crypto'
 
+declare const require: any
+
 type Provider = 'openrouter' | 'gemini' | 'openai' | 'bailian'
 type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed'
 type OutputFormat = 'png' | 'svg'
@@ -139,6 +141,11 @@ type VisionImageInput = {
   url: string
 }
 
+type ResvgWasmModule = {
+  initWasm: (bytes: any) => Promise<void> | void
+  Resvg: any
+}
+
 type RequestBody =
   | CreateJobBody
   | PrepareReferenceUploadBody
@@ -159,12 +166,14 @@ const maxReferenceBytes = Number(process.env.PAPERBANANA_MAX_REFERENCE_BYTES || 
 const referenceUploadTtlSeconds = Number(process.env.PAPERBANANA_REFERENCE_UPLOAD_TTL_SECONDS || 900)
 const allowedReferenceMimeTypes = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'])
 const allowedAnalysisMimeTypes = new Set(['image/png', 'image/jpeg', 'image/webp'])
+const svgReferenceRasterWidth = clamp(Number(process.env.PAPERBANANA_SVG_REFERENCE_RASTER_WIDTH || 1024), 320, 1536)
 const openRouterModelCacheTtlMs = Number(process.env.OPENROUTER_MODEL_CACHE_TTL_MS || 3600 * 1000)
 const feedbackRateLimitWindowMs = 10 * 60 * 1000
 const feedbackRateLimitMax = 5
 const allowedFeedbackCategories = new Set<FeedbackCategory>(['bug', 'feature', 'experience', 'other'])
 const allowedFeedbackPlatforms = new Set<FeedbackPlatform>(['web', 'miniprogram', 'android', 'windows', 'macos'])
 let openRouterModelCache: { expiresAt: number; modalities: Map<string, string[]> } | null = null
+let resvgWasmPromise: Promise<ResvgWasmModule> | null = null
 
 const openaiVisionMainModels = new Set([
   'gpt-4.1',
@@ -505,7 +514,7 @@ async function runJob(
     if (body.referenceImageModeUsed === 'main_model') {
       await appendLog(jobId, 'Reference mode: main model direct')
       await appendLog(jobId, 'Reference planner: planning with main model')
-      const visionInputs = await buildVisionImageInputs(body.referenceImages || [])
+      const visionInputs = await buildVisionImageInputs(body.referenceImages || [], jobId)
       sharedPlannerDescription = await planDiagramDescription(body, apiKey, maxCriticRounds, '', visionInputs, true)
       await appendLog(jobId, 'Reference planner: plan ready')
     } else {
@@ -648,7 +657,7 @@ async function analyzeReferenceImages(jobId: string, body: CreateJobBody, apiKey
   }
 
   await appendLog(jobId, `Analyzing ${references.length} reference image${references.length > 1 ? 's' : ''}`)
-  const visionInputs = await buildVisionImageInputs(references)
+  const visionInputs = await buildVisionImageInputs(references, jobId)
   const analysis = await callVisionModel(
     body.provider,
     body.referenceVisionModelName,
@@ -667,18 +676,32 @@ async function analyzeReferenceImages(jobId: string, body: CreateJobBody, apiKey
   return trimmed
 }
 
-async function buildVisionImageInputs(referenceImages: ReferenceImageInput[]) {
+async function buildVisionImageInputs(referenceImages: ReferenceImageInput[], jobId = '') {
   const bucket = cloud.storage.bucket(bucketName)
-  const inputs = []
+  const inputs: VisionImageInput[] = []
+  let referencesChanged = false
 
   for (const image of referenceImages) {
-    const objectKey = image.analysisObjectKey || image.objectKey
-    const mimeType = image.analysisMimeType || image.mimeType
-    if (!objectKey) throw new Error(`Reference image ${image.filename || ''} is missing objectKey`)
-    if (!allowedAnalysisMimeTypes.has(mimeType)) {
-      throw new Error('SVG reference images require a rasterized PNG analysis upload')
+    if (!image.objectKey) throw new Error(`Reference image ${image.filename || ''} is missing objectKey`)
+    let objectKey = image.analysisObjectKey || image.objectKey
+    let mimeType = image.analysisMimeType || image.mimeType
+    let url = ''
+
+    if (image.mimeType === 'image/svg+xml' && !image.analysisObjectKey) {
+      const analysis = await rasterizeSvgReferenceImage(bucket, image)
+      image.analysisObjectKey = analysis.objectKey
+      image.analysisMimeType = analysis.mimeType
+      image.analysisSize = analysis.size
+      objectKey = analysis.objectKey
+      mimeType = analysis.mimeType
+      url = analysis.url
+      referencesChanged = true
     }
-    const url = await bucket.getDownloadUrl(objectKey, 3600)
+
+    if (!allowedAnalysisMimeTypes.has(mimeType)) {
+      throw new Error('Reference image analysis input must be PNG, JPG, or WebP')
+    }
+    if (!url) url = await bucket.getDownloadUrl(objectKey, 3600)
     inputs.push({
       filename: image.filename,
       mimeType,
@@ -686,7 +709,69 @@ async function buildVisionImageInputs(referenceImages: ReferenceImageInput[]) {
     })
   }
 
+  if (referencesChanged && jobId) {
+    await jobs.updateOne(
+      { _id: jobId },
+      { $set: { referenceImages, updatedAt: new Date() } },
+    )
+  }
+
   return inputs
+}
+
+async function rasterizeSvgReferenceImage(bucket: any, image: ReferenceImageInput) {
+  const sourceUrl = await bucket.getDownloadUrl(image.objectKey, 3600)
+  const svgText = await fetchText(sourceUrl, `SVG reference image ${image.filename || ''} download`)
+  const pngBuffer = await rasterizeSvgReferenceToPng(svgText)
+  if (!pngBuffer.length) throw new Error('SVG reference image rasterization returned empty PNG')
+  if (pngBuffer.length > maxReferenceBytes) throw new Error('SVG reference image rasterized PNG exceeds 5MB limit')
+
+  const analysisObjectKey = analysisObjectKeyForSvg(image.objectKey)
+  await bucket.writeFile(analysisObjectKey, pngBuffer, { ContentType: 'image/png' })
+  return {
+    objectKey: analysisObjectKey,
+    mimeType: 'image/png',
+    size: pngBuffer.length,
+    url: await bucket.getDownloadUrl(analysisObjectKey, 3600),
+  }
+}
+
+async function rasterizeSvgReferenceToPng(rawSvg: string) {
+  const svg = sanitizeReferenceSvg(rawSvg)
+  const { Resvg } = await loadResvgWasm()
+  const resvg = new Resvg(svg, {
+    fitTo: { mode: 'width', value: svgReferenceRasterWidth },
+  })
+  return Buffer.from(resvg.render().asPng())
+}
+
+async function loadResvgWasm(): Promise<ResvgWasmModule> {
+  if (!resvgWasmPromise) {
+    resvgWasmPromise = (async () => {
+      const fs = require('fs')
+      const resvg = require('@resvg/resvg-wasm') as ResvgWasmModule
+      const basePath = process.env.CUSTOM_DEPENDENCY_BASE_PATH || '/tmp/custom_dependency'
+      const wasmPath = process.env.RESVG_WASM_PATH || `${basePath}/node_modules/@resvg/resvg-wasm/index_bg.wasm`
+      const wasmBytes = fs.readFileSync(wasmPath)
+      await resvg.initWasm(wasmBytes)
+      return resvg
+    })()
+  }
+  return resvgWasmPromise
+}
+
+async function fetchText(url: string, label: string) {
+  const response = await fetchWithRetry(url, undefined, label)
+  if (!response.ok) throw new Error(`${label} failed: HTTP ${response.status}`)
+  const text = await response.text()
+  if (!text.trim()) throw new Error(`${label} returned empty content`)
+  if (Buffer.byteLength(text, 'utf8') > maxReferenceBytes) throw new Error('SVG reference image exceeds 5MB limit')
+  return text
+}
+
+function analysisObjectKeyForSvg(objectKey: string) {
+  const key = String(objectKey || '')
+  return /\.svg$/i.test(key) ? key.replace(/\.svg$/i, '-server-analysis.png') : `${key}-server-analysis.png`
 }
 
 async function callVisionModel(
@@ -1323,6 +1408,14 @@ function withReferenceAnalysis(text: string, referenceAnalysis = '') {
 }
 
 function sanitizeSvg(raw: string) {
+  return sanitizeSvgMarkup(raw, false, 'SVG output')
+}
+
+function sanitizeReferenceSvg(raw: string) {
+  return sanitizeSvgMarkup(raw, true, 'SVG reference image')
+}
+
+function sanitizeSvgMarkup(raw: string, allowImageElement: boolean, label: string) {
   let svg = extractSvg(raw)
     .replace(/<\?xml[\s\S]*?\?>/gi, '')
     .replace(/<!doctype[\s\S]*?>/gi, '')
@@ -1330,23 +1423,25 @@ function sanitizeSvg(raw: string) {
     .trim()
 
   if (!/^<svg[\s>]/i.test(svg)) {
-    throw new Error('SVG model output did not contain a valid <svg> root')
+    throw new Error(`${label} did not contain a valid <svg> root`)
   }
 
-  const forbiddenElement = /<(script|foreignObject|iframe|object|embed|link|meta|base|audio|video|canvas|image)\b/i
+  const forbiddenElement = allowImageElement
+    ? /<(script|foreignObject|iframe|object|embed|link|meta|base|audio|video|canvas)\b/i
+    : /<(script|foreignObject|iframe|object|embed|link|meta|base|audio|video|canvas|image)\b/i
   if (forbiddenElement.test(svg)) {
-    throw new Error('SVG output contained unsupported unsafe elements')
+    throw new Error(`${label} contained unsupported unsafe elements`)
   }
 
   const styleBlocks = [...svg.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map((match) => match[1] || '')
-  const unsafeStylePattern = /(@import|javascript:|url\s*\(\s*['"]?\s*(?:https?:|data:|javascript:))/i
+  const unsafeStylePattern = /(@import|javascript:|url\s*\(\s*['"]?\s*(?:https?:|data:|file:|javascript:))/i
   if (styleBlocks.some((style) => unsafeStylePattern.test(style))) {
-    throw new Error('SVG output contained unsupported unsafe style references')
+    throw new Error(`${label} contained unsupported unsafe style references`)
   }
 
-  const unsafePattern = /(on[a-z]+\s*=|javascript:|data:text\/html|@import|url\s*\(\s*['"]?\s*(?:https?:|data:|javascript:)|href\s*=\s*['"]?\s*(?:https?:|data:|javascript:)|xlink:href\s*=\s*['"]?\s*(?:https?:|data:|javascript:))/i
+  const unsafePattern = /(on[a-z]+\s*=|javascript:|data:text\/html|@import|url\s*\(\s*['"]?\s*(?:https?:|data:|file:|javascript:)|href\s*=\s*['"]?\s*(?:https?:|data:|file:|javascript:)|xlink:href\s*=\s*['"]?\s*(?:https?:|data:|file:|javascript:))/i
   if (unsafePattern.test(svg)) {
-    throw new Error('SVG output contained unsupported unsafe references')
+    throw new Error(`${label} contained unsupported unsafe references`)
   }
 
   svg = svg.replace(/\s+xmlns:xlink=(["'])[^"']*\1/gi, '')
@@ -1416,10 +1511,6 @@ function normalizeReferenceImages(images: ReferenceImageInput[]): StoredReferenc
       normalized.analysisObjectKey = image.analysisObjectKey
       normalized.analysisMimeType = analysisMimeType
       normalized.analysisSize = analysisSize
-    }
-
-    if (mimeType === 'image/svg+xml' && !normalized.analysisObjectKey) {
-      throw new Error('SVG reference images require a rasterized PNG analysis upload')
     }
 
     return normalized
@@ -1563,13 +1654,28 @@ async function publicJob(job: any) {
 async function refreshReferenceImageUrls(images: any[]) {
   if (!images.length) return []
   const refreshed = await refreshStoredImageUrls(images)
-  return refreshed.map((image) => ({
-    filename: image.filename || '',
-    objectKey: image.objectKey || '',
-    url: image.url || '',
-    storage: image.storage || 'bucket',
-    mimeType: image.mimeType || '',
-    size: Number(image.size || 0),
+  const bucket = cloud.storage.bucket(bucketName)
+  return await Promise.all(refreshed.map(async (image) => {
+    let analysisUrl = image.analysisUrl || ''
+    if (image.analysisObjectKey && !String(analysisUrl).startsWith('data:')) {
+      try {
+        analysisUrl = await bucket.getDownloadUrl(image.analysisObjectKey, 3600 * 24 * 7)
+      } catch {
+        analysisUrl = ''
+      }
+    }
+    return {
+      filename: image.filename || '',
+      objectKey: image.objectKey || '',
+      url: image.url || '',
+      storage: image.storage || 'bucket',
+      mimeType: image.mimeType || '',
+      size: Number(image.size || 0),
+      analysisObjectKey: image.analysisObjectKey || '',
+      analysisUrl,
+      analysisMimeType: image.analysisMimeType || '',
+      analysisSize: Number(image.analysisSize || 0),
+    }
   }))
 }
 

@@ -41,7 +41,29 @@
 - [x] laf-functions
 - [x] auth-gateway
 - [x] web（含 admin 反馈页）
-- [ ] miniprogram
+- [x] miniprogram
+
+### [2026-06-07] Web 近期大版本同步基线 — by Codex
+**变更**：Web 端已完成一轮大版本更新，其他端同步时应以这些 API/数据契约为基线，而不是只同步单个页面 UI。
+**契约**：
+- `createJob` 支持 `outputFormat: 'png' | 'svg'`；`png` 走图像模型，`svg` 走 SVG 文本生成链路并由后端做安全清洗。
+- 任务记录需要展示并消费完整图片资产字段：`result_images` / `resultImages`、`reference_images` / `referenceImages`，每个资产按 `mimeType` / 文件名判断 PNG 或 SVG。
+- 结果图和参考图下载都要支持 bucket 签名 URL、`data:` URL、`image/png`、`image/svg+xml`；失败任务也应该展示可用的 `reference_images`。
+- 任务记录字段应同步展示：`output_format`、`main_model_name`、`image_gen_model_name`、`reference_vision_model_name`、`reference_image_mode`、`reference_image_mode_used`、`method_content`、`caption`、`error`。
+- 账号任务记录通过 auth-gateway：登录用户走 `myJobs`，管理员任务走 `adminJobs`，账号列表走 `adminUsers`；客户端不要再靠手填 email 查询用户任务。
+- 当前核心 action 基线：`health`、`createJob`、`getJob`、`userJobs`、`adminJobs`、`adminUsers`、`prepareReferenceUpload`、`modelCapability`。
+- 模型列表已在 Web 端按最新表固化，其他端需要同步 provider/model 常量；阿里百炼主模型直读参考图仍不启用，继续走独立识别模型。
+- 参考图上传、主模型直读、SVG 参考图服务端栅格化的细节见下方对应条目。
+**用户反馈 / 回归重点**：
+- 用户反馈过生成失败后信息不够明确；各端任务记录必须展示 `error`，必要时兜底展示 `logs_tail`。
+- 用户反馈任务记录里的图片/文件不好下载；各端要区分 PNG 与 SVG：PNG 才走保存到相册/图片保存，SVG 走复制链接或文件下载。
+- 用户反馈失败任务也需要保留输入上下文；各端不要只在 `status=succeeded` 时展示参考图和任务详情。
+- 用户反馈模型输入不应自由填写；各端要使用固定 provider/model 列表，并跟 Web 常量保持一致。
+**各端待办**：
+- [x] laf-functions
+- [x] auth-gateway
+- [x] web
+- [x] miniprogram
 - [ ] android
 - [ ] windows
 - [ ] macos
@@ -63,15 +85,25 @@
 - [ ] windows
 - [ ] macos
 
-### [2026-06-07] 🔜 计划中（未实现）：SVG 参考图改服务端栅格化 — proposed
-**目标**：让 SVG 参考图在**所有端**可用。现状是只有 web 能传——因为后端硬性要求 SVG 必须随附一份客户端栅格化的 PNG（`allowedAnalysisMimeTypes` 不含 svg），小程序/原生端产不出这份 PNG。
-**方案**：后端用 `@resvg/resvg-wasm`（已装为 Sealaf custom dependency）把 SVG 渲染成 PNG；**取消"客户端必须随附栅格化 PNG"的硬要求**，各端只需上传原始 SVG。
-- 已 spike 验证：resvg 在 Sealaf 运行时可用。wasm 路径 `${CUSTOM_DEPENDENCY_BASE_PATH}/node_modules/@resvg/resvg-wasm/index_bg.wasm`；`fs.readFileSync`→`initWasm(bytes)`（**全进程只调一次**）→`new Resvg(svg,{fitTo}).render().asPng()`。
-- 实现注意：渲染前 sanitize 用户 SVG（禁 external href/script）；限制最大边（如 1024–1536px）。
+### [2026-06-07] SVG 参考图改服务端栅格化 — by Codex
+**变更**：SVG 参考图不再要求客户端随附栅格化 PNG；后端会在需要喂给视觉模型/主模型直读时，把原始 SVG 服务端渲染为 PNG。
+**契约**：
+- `createJob.referenceImages[]` 中 SVG 参考图可以只传原始 `objectKey` / `mimeType=image/svg+xml`，不再强制 `analysisObjectKey`。
+- Laf 后端遇到 SVG 且缺少 `analysisObjectKey` 时，会下载原始 SVG、sanitize、用 `@resvg/resvg-wasm` 栅格化为 PNG，并写回 bucket 为 `*-server-analysis.png`。
+- 任务记录里的 `referenceImages[]` 会补上服务端生成的 `analysisObjectKey`、`analysisMimeType=image/png`、`analysisSize`；`publicJob` 同步返回 `analysisUrl`。
+- 新增 env：`PAPERBANANA_SVG_REFERENCE_RASTER_WIDTH`，默认 `1024`，运行时限制在 `320-1536`。
+- Laf 运行环境要求保留 Sealaf custom dependency：`@resvg/resvg-wasm`；wasm 路径按 `${CUSTOM_DEPENDENCY_BASE_PATH}/node_modules/@resvg/resvg-wasm/index_bg.wasm` 读取，不能使用 `require.resolve`。
+- 各客户端只需要上传原始 SVG；不要再强制做本地 canvas/原生栅格化。Web 端已移除 `rasterizeSvgFile`。
+- `auth-gateway` 无新增 action，无需改转发规则。
+**用户反馈 / 回归重点**：
+- 用户反馈非 Web 端无法使用 SVG 参考图；各端只上传原始 SVG 后，`main_model` 和 `vision_model` 两种参考图模式都必须能生成成功。
+- 用户反馈大文件/大 payload 会导致小程序性能问题；各端不要把参考图或结果图 base64 写入页面状态或任务记录，只保留 URL/objectKey 元数据。
+- 记录页应能看到原始 SVG 参考图；服务端生成的 PNG analysis 只用于模型理解和排查，不替代用户上传的原文件展示。
 **各端待办**：
-- [ ] laf-functions（加服务端栅格化）
-- [ ] web（可移除浏览器 `rasterizeSvgFile`，改为只传原始 SVG）
-- [ ] miniprogram
+- [x] laf-functions
+- [x] auth-gateway（无需改）
+- [x] web
+- [x] miniprogram
 - [ ] android
 - [ ] windows
 - [ ] macos

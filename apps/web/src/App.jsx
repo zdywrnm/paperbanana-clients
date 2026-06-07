@@ -328,19 +328,6 @@ export default function App() {
           mimeType: image.mimeType,
           size: image.size,
         });
-
-        if (image.mimeType === 'image/svg+xml') {
-          const analysisFile = await rasterizeSvgFile(image.file, image.filename);
-          uploadItems.push({
-            clientId: `${image.id}:analysis`,
-            imageId: image.id,
-            role: 'analysis',
-            file: analysisFile,
-            filename: analysisFile.name,
-            mimeType: analysisFile.type,
-            size: analysisFile.size,
-          });
-        }
       }
 
       const prepared = await prepareReferenceUploadRequest(
@@ -372,13 +359,6 @@ export default function App() {
           objectKey: original.objectKey,
           uploadToken: original.uploadToken,
         };
-        const analysis = uploadMap.get(`${image.id}:analysis`);
-        if (analysis) {
-          reference.analysisObjectKey = analysis.objectKey;
-          reference.analysisMimeType = analysis.mimeType;
-          reference.analysisSize = analysis.size;
-          reference.analysisUploadToken = analysis.uploadToken;
-        }
         references.push(reference);
       }
 
@@ -917,53 +897,6 @@ function extensionForMimeType(mimeType) {
   if (mimeType === 'image/webp') return 'webp';
   if (mimeType === 'image/svg+xml') return 'svg';
   return 'png';
-}
-
-async function rasterizeSvgFile(file, filename) {
-  const svgText = await file.text();
-  const svgUrl = URL.createObjectURL(new Blob([svgText], { type: 'image/svg+xml' }));
-  try {
-    const image = await loadImage(svgUrl);
-    const width = clampCanvasSize(image.naturalWidth || 1600);
-    const height = clampCanvasSize(image.naturalHeight || 900);
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const context = canvas.getContext('2d');
-    context.fillStyle = '#ffffff';
-    context.fillRect(0, 0, width, height);
-    context.drawImage(image, 0, 0, width, height);
-    const blob = await canvasToBlob(canvas, 'image/png');
-    if (blob.size > REFERENCE_IMAGE_LIMITS.maxBytes) {
-      throw new Error('SVG 参考图栅格化后超过 5MB，请换一张更简单的 SVG。');
-    }
-    const pngName = filename.replace(/\.svg$/i, '') || 'reference';
-    return new File([blob], `${pngName}.png`, { type: 'image/png' });
-  } finally {
-    URL.revokeObjectURL(svgUrl);
-  }
-}
-
-function loadImage(url) {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error('SVG 参考图无法加载。'));
-    image.src = url;
-  });
-}
-
-function canvasToBlob(canvas, mimeType) {
-  return new Promise((resolve, reject) => {
-    canvas.toBlob((blob) => {
-      if (blob) resolve(blob);
-      else reject(new Error('SVG 参考图无法栅格化。'));
-    }, mimeType);
-  });
-}
-
-function clampCanvasSize(value) {
-  return Math.max(320, Math.min(1600, Math.round(value)));
 }
 
 function findModelLabel(options, value) {

@@ -47,9 +47,10 @@
 - 函数允许 HTTP 调用。
 - `OPTIONS` 预检请求正常返回。
 - 发布后先调用 `health` 动作确认 `{ runtime: "laf" }`。
+- Laf custom dependency 已安装 `@resvg/resvg-wasm`，用于服务端栅格化 SVG 参考图。
 
 ## Notes
 
 - 用户填写的模型 API Key 只在单次任务执行闭包中使用，不写入数据库。
 - 不要把真实 `ADMIN_TOKEN` 或其他密钥提交到仓库。
-- `@lafjs/cloud` 由 Laf 运行时提供，本目录不单独安装依赖。
+- `@lafjs/cloud` 由 Laf 运行时提供；`@resvg/resvg-wasm` 由 Laf custom dependency 提供，本目录不单独安装依赖。

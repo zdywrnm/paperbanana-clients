@@ -180,6 +180,23 @@ page {
   border-color: #ead28d;
 }
 
+.status-action {
+  margin: 0;
+  padding: 0 18rpx;
+  min-height: 46rpx;
+  border: 1rpx solid #d9d6cc;
+  border-radius: 999rpx;
+  background: #fffffb;
+  color: #343230;
+  font-size: 22rpx;
+  font-weight: 720;
+  line-height: 46rpx;
+}
+
+.status-action::after {
+  border: 0;
+}
+
 .section {
   margin: 24rpx 24rpx 0;
   padding: 28rpx;
@@ -375,6 +392,12 @@ page {
   min-height: 188rpx;
 }
 
+.feedback-textarea {
+  height: 220rpx;
+  min-height: 220rpx;
+  max-height: 220rpx;
+}
+
 .default-summary {
   display: flex;
   flex-wrap: wrap;
@@ -464,6 +487,12 @@ page {
   min-width: 0;
 }
 
+.reference-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 10rpx;
+}
+
 .reference-preview-grid {
   display: grid;
   gap: 14rpx;
@@ -487,6 +516,19 @@ page {
   border: 1rpx solid #d9d6cc;
   border-radius: 10rpx;
   background: #f3f2ec;
+}
+
+.reference-file-thumb {
+  display: grid;
+  place-items: center;
+  width: 116rpx;
+  height: 86rpx;
+  border: 1rpx dashed #c8c2b6;
+  border-radius: 10rpx;
+  background: #f6f2e8;
+  color: #315f51;
+  font-size: 22rpx;
+  font-weight: 760;
 }
 
 .reference-info {
@@ -690,6 +732,28 @@ page {
   color: #9f3a2d;
   font-size: 24rpx;
   line-height: 1.5;
+}
+
+.success-box {
+  margin-top: 18rpx;
+  padding: 18rpx;
+  border-radius: 12rpx;
+  background: #e6f0e6;
+  color: #315f51;
+  font-size: 24rpx;
+  line-height: 1.5;
+}
+
+.job-record-error {
+  margin-top: 14rpx;
+  padding: 14rpx 16rpx;
+  border: 1rpx solid #ead1ca;
+  border-radius: 12rpx;
+  background: #f8ebe7;
+  color: #9f3a2d;
+  font-size: 22rpx;
+  line-height: 1.45;
+  word-break: break-all;
 }
 
 .result-grid,
