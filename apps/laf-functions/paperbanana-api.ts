@@ -221,15 +221,32 @@ async function spikeSvg(body: any) {
     const path: any = req('path')
     const mod: any = req('@resvg/resvg-wasm')
     out.exports = Object.keys(mod)
-    const candidates: string[] = []
-    try { candidates.push(req.resolve('@resvg/resvg-wasm/index_bg.wasm')) } catch (e: any) { out.resolveWasmErr = String(e?.message || e) }
-    try { candidates.push(path.join(path.dirname(req.resolve('@resvg/resvg-wasm')), 'index_bg.wasm')) } catch (e: any) { out.resolvePkgErr = String(e?.message || e) }
-    out.candidates = candidates
+    const base = process.env.CUSTOM_DEPENDENCY_BASE_PATH || ''
+    out.customDepBase = base
+    out.cwd = process.cwd()
+    // 1) 找本地 wasm
+    const tries = [
+      base && path.join(base, 'node_modules/@resvg/resvg-wasm/index_bg.wasm'),
+      path.join(process.cwd(), 'node_modules/@resvg/resvg-wasm/index_bg.wasm'),
+    ].filter(Boolean)
+    out.tries = tries
     let wasm: Buffer | null = null
-    for (const c of candidates) { try { wasm = fs.readFileSync(c); out.wasmFrom = c; out.wasmBytes = wasm.length; break } catch (e: any) {} }
-    if (!wasm) { out.error = 'cannot locate index_bg.wasm'; return ok(out) }
-    try { await mod.initWasm(wasm) } catch (e: any) { out.initWasmErr = String(e?.message || e); return ok(out) }
-    out.initWasm = 'OK'
+    for (const t of tries) { try { wasm = fs.readFileSync(t); out.wasmFrom = t; out.wasmBytes = wasm.length; break } catch (e: any) {} }
+    if (!wasm && base) { try { out.resvgDir = fs.readdirSync(path.join(base, 'node_modules/@resvg/resvg-wasm')) } catch (e: any) { out.resvgDirErr = String(e?.message || e) } }
+    // 2) 初始化：本地优先，CDN 兜底
+    if (wasm) {
+      try { await mod.initWasm(wasm); out.initWasm = 'OK(local)' } catch (e: any) { out.initWasmLocalErr = String(e?.message || e) }
+    }
+    if (out.initWasm !== 'OK(local)') {
+      let ver = ''
+      try { ver = req('@resvg/resvg-wasm/package.json').version } catch (e: any) { out.verErr = String(e?.message || e) }
+      out.installedVersion = ver
+      const u = ver ? `https://unpkg.com/@resvg/resvg-wasm@${ver}/index_bg.wasm` : 'https://unpkg.com/@resvg/resvg-wasm/index_bg.wasm'
+      out.cdn = u
+      try { await mod.initWasm(fetch(u)); out.initWasm = 'OK(cdn)' } catch (e: any) { out.initWasmCdnErr = String(e?.message || e) }
+    }
+    if (!out.initWasm) { out.error = 'initWasm failed (no local wasm, cdn failed)'; return ok(out) }
+    // 3) 真渲染
     const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="60"><rect width="120" height="60" fill="#4f46e5"/><circle cx="30" cy="30" r="18" fill="#ffffff"/><text x="60" y="36" font-size="14" fill="#ffffff">hi</text></svg>'
     const r = new mod.Resvg(svg, { fitTo: { mode: 'width', value: 256 } })
     const png = r.render().asPng()
