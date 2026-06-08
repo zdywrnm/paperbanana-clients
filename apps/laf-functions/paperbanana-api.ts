@@ -1790,6 +1790,19 @@ function bailianVisionModel(): string {
   return (process.env.BAILIAN_VISION_MODEL || 'qwen-vl-max').trim()
 }
 
+// True when a Bailian/DashScope error means the chosen model cannot accept image
+// content (so we should retry the SAME request with a VL-capable model). Most
+// bailian models read images fine; only some text-only ones (e.g. qwen3.7-max)
+// reject image items with "Unexpected item type in content".
+function isBailianImageContentError(error: any): boolean {
+  const m = (error?.message || String(error || '')).toLowerCase()
+  return (
+    m.includes('unexpected item type') ||
+    m.includes('image format is illegal') ||
+    (m.includes('invalid') && (m.includes('content') || m.includes('messages')))
+  )
+}
+
 // Bailian REJECTS 'data:image/...;base64,...' URLs (400 "The image format is
 // illegal and cannot be opened"); it only accepts PUBLIC https URLs. So for the
 // bailian path we must materialize any data: URL into the bucket and hand back
@@ -1835,39 +1848,50 @@ async function callVisionModel(
   }
 
   const baseUrl = textApiBaseUrl(provider)
-  // openrouter/openai keep their own model + raw url. bailian must use a
-  // VL-capable model (the passed-in model may be a non-VL text model) and a
-  // PUBLIC url (data: URLs are rejected) — so route each image url through the
-  // bucket first.
-  const actualModel =
-    provider === 'openrouter'
-      ? toOpenRouterModel(model)
-      : provider === 'bailian'
-        ? bailianVisionModel()
-        : model
+  // Respect the chosen recognition model. bailian only needs a PUBLIC image url
+  // (data: URLs are rejected), so route each image url through the bucket first;
+  // we keep the user's selected vision model and only fall back to a VL model if
+  // it turns out it cannot read images (see the catch below).
+  const requestImages =
+    provider === 'bailian'
+      ? await Promise.all(images.map(async (image) => ({ ...image, url: await toBailianImageUrl(image.url) })))
+      : images
   const content: any[] = [{ type: 'text', text: referenceVisionUserPrompt(methodContent, caption) }]
-  for (const image of images) {
-    const imageUrl = provider === 'bailian' ? await toBailianImageUrl(image.url) : image.url
-    content.push({ type: 'image_url', image_url: { url: imageUrl } })
+  for (const image of requestImages) {
+    content.push({ type: 'image_url', image_url: { url: image.url } })
+  }
+  const chosenModel = provider === 'openrouter' ? toOpenRouterModel(model) : model
+
+  const runVision = async (visionModelName: string) => {
+    const response = await fetchWithRetry(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: visionModelName,
+        messages: [
+          { role: 'system', content: referenceVisionSystemPrompt() },
+          { role: 'user', content },
+        ],
+        temperature: 0.2,
+      }),
+    }, `${provider} vision model ${visionModelName}`)
+    const data = await parseModelResponse(response)
+    return data.choices?.[0]?.message?.content || ''
   }
 
-  const response = await fetchWithRetry(`${baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: actualModel,
-      messages: [
-        { role: 'system', content: referenceVisionSystemPrompt() },
-        { role: 'user', content },
-      ],
-      temperature: 0.2,
-    }),
-  }, `${provider} vision model ${actualModel}`)
-  const data = await parseModelResponse(response)
-  return data.choices?.[0]?.message?.content || ''
+  try {
+    return await runVision(chosenModel)
+  } catch (error: any) {
+    // Only override the user's chosen model when it genuinely cannot accept
+    // images (e.g. a text-only bailian model). Retry once with a VL model.
+    if (provider === 'bailian' && isBailianImageContentError(error) && chosenModel !== bailianVisionModel()) {
+      return await runVision(bailianVisionModel())
+    }
+    throw error
+  }
 }
 
 async function callGeminiVision(
@@ -1917,21 +1941,20 @@ async function callTextModel(
     }
   }
   const baseUrl = textApiBaseUrl(provider)
-  let actualModel = provider === 'openrouter' ? toOpenRouterModel(model) : model
-  // Bailian image reads: data: URLs are rejected and a text-only main (e.g.
-  // qwen3.7-max) rejects image content entirely. When this bailian call carries
-  // images, materialize each url into a PUBLIC bucket url and route the call
-  // through a VL-capable model instead of the main model. Text-only bailian
-  // calls (no images) keep the main model unchanged. Non-bailian providers are
-  // untouched. Resolve urls before JSON.stringify.
+  const chosenModel = provider === 'openrouter' ? toOpenRouterModel(model) : model
+  // Bailian only accepts PUBLIC image urls (data: URLs are rejected), so when a
+  // bailian call carries images, materialize each url into a bucket url first.
+  // We RESPECT the chosen model and only fall back to a VL model if it cannot
+  // read images (e.g. text-only qwen3.7-max). Non-bailian providers untouched.
+  // Resolve urls before JSON.stringify.
   let requestImages = images
   if (provider === 'bailian' && images.length) {
     requestImages = await Promise.all(
       images.map(async (image) => ({ ...image, url: await toBailianImageUrl(image.url) })),
     )
-    actualModel = bailianVisionModel()
   }
-  try {
+
+  const runText = async (textModelName: string) => {
     const response = await fetchWithRetry(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -1939,18 +1962,31 @@ async function callTextModel(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: actualModel,
+        model: textModelName,
         messages: [
           { role: 'system', content: system },
           { role: 'user', content: chatUserContent(user, requestImages) },
         ],
         temperature: 1,
       }),
-    }, `${provider} text model ${actualModel}`)
+    }, `${provider} text model ${textModelName}`)
     const data = await parseModelResponse(response)
     return data.choices?.[0]?.message?.content || ''
+  }
+
+  try {
+    return await runText(chosenModel)
   } catch (error: any) {
-    if (images.length) throw new Error(mainModelReferenceError(provider, actualModel, error))
+    // Bailian + images: if the chosen model rejects image content, retry once
+    // with a VL-capable model before surfacing the error.
+    if (provider === 'bailian' && images.length && isBailianImageContentError(error) && chosenModel !== bailianVisionModel()) {
+      try {
+        return await runText(bailianVisionModel())
+      } catch (retryError: any) {
+        throw new Error(mainModelReferenceError(provider, bailianVisionModel(), retryError))
+      }
+    }
+    if (images.length) throw new Error(mainModelReferenceError(provider, chosenModel, error))
     throw error
   }
 }

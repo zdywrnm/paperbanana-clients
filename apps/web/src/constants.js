@@ -169,7 +169,7 @@ export const PROVIDERS = {
     keyPlaceholder: 'sk-...',
     mainModel: 'qwen3.7-max',
     imageModel: 'wan2.7-image-pro',
-    visionModel: 'qwen3.6-plus',
+    visionModel: 'qwen-vl-max',
     mainModels: [
       ['qwen3.7-max', 'Qwen3.7 Max', '通义千问'],
       ['qwen3.6-plus', 'Qwen3.6 Plus', '通义千问'],
@@ -190,10 +190,11 @@ export const PROVIDERS = {
       ['qwen-image-2.0', 'Qwen Image 2.0', '通义千问 Image'],
     ],
     visionModels: [
+      ['qwen-vl-max', 'Qwen VL Max（视觉）', '通义千问 VL'],
+      ['qwen-vl-plus', 'Qwen VL Plus（视觉）', '通义千问 VL'],
+      ['qwen3-vl-plus', 'Qwen3 VL Plus（视觉）', '通义千问 VL'],
       ['qwen3.6-plus', 'Qwen3.6 Plus', '通义千问'],
       ['qwen3.6-flash', 'Qwen3.6 Flash', '通义千问'],
-      ['kimi-k2.6', 'Kimi K2.6', '百炼第三方'],
-      ['kimi-k2.5', 'Kimi K2.5', '百炼第三方'],
     ],
     guideUrl: 'https://help.aliyun.com/zh/model-studio/get-api-key',
     guideSteps: [
