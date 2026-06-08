@@ -1175,14 +1175,27 @@ async function renderPlotViaWorker(code: string): Promise<{ base64: string; erro
   }
   const endpoint = `${workerUrl.replace(/\/+$/, '')}/render`
   let response: Response
+  // Hard client-side timeout (~28s, just above the worker's 20s wall clock).
+  // Do NOT use fetchWithRetry here: a wedged worker would otherwise block Laf
+  // indefinitely (it retries x2, after a paid LLM call per critic round x
+  // candidate). On timeout/abort we return an error so the critic loop reacts
+  // instead of retrying the slow request.
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 28000)
   try {
-    response = await fetchWithRetry(endpoint, {
+    response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ code, token: process.env.PLOT_WORKER_TOKEN || '' }),
-    }, 'plot-worker render')
+      signal: controller.signal,
+    })
   } catch (error: any) {
+    if (error?.name === 'AbortError' || controller.signal.aborted) {
+      return { base64: '', error: 'plot-worker timed out' }
+    }
     return { base64: '', error: error?.message || String(error) }
+  } finally {
+    clearTimeout(timer)
   }
   let data: any
   try {
@@ -3583,14 +3596,18 @@ async function evaluateJob(body: EvaluateJobBody) {
   const resultUrl = await firstResultImageUrl(job)
   if (!resultUrl) return fail('Job has no result image to evaluate', 400)
 
-  // A reference/GT image, if any: prefer an uploaded reference image, else the
-  // first retrieved PaperBananaBench reference (which carries a GT image).
-  const referenceUrl = await firstReferenceImageUrl(job)
+  // Pairwise GT ("referenced") mode requires a TRUE same-figure ground truth:
+  // a user-UPLOADED reference image attached to THIS job. Retrieved bench
+  // references are a DIFFERENT paper's figure, so they do NOT qualify (see
+  // uploadedReferenceImageUrl). Without an uploaded reference we fall back to
+  // reference-free single-image scoring.
+  const referenceUrl = await uploadedReferenceImageUrl(job)
   const method = String(job.methodContent || '')
   const caption = String(job.caption || '')
 
   if (referenceUrl) {
     const scores = {} as Record<EvalDimension, number>
+    const winners = {} as Record<EvalDimension, string>
     const reasoningParts: string[] = []
     for (const dimension of evalDimensions) {
       const raw = await callTextModel(
@@ -3606,15 +3623,24 @@ async function evaluateJob(body: EvaluateJobBody) {
       )
       const parsed = parseReferencedVerdict(raw)
       scores[dimension] = parsed.score
+      winners[dimension] = parsed.winner
       reasoningParts.push(`${dimension}: ${parsed.winner} — ${parsed.reasoning}`)
     }
-    const overall = roundScore(averageScores(scores))
+    // Tiered outcome (ported from root _determine_tier_outcome,
+    // utils/eval_toolkits.py:299-312): Tier 1 = Faithfulness + Readability
+    // decides; only on a Tier-1 tie does Tier 2 = Conciseness + Aesthetics
+    // decide. This tiered verdict is the PRIMARY 'overall'.
+    const tier = tieredOutcome(winners)
     return ok({
       mode: 'referenced',
+      referenceSource: 'uploaded',
       jobId,
       judge: { provider, model },
       scores,
-      overall,
+      winners,
+      overall: tier.outcome,
+      overallNumeric: roundScore(averageScores(scores)),
+      decisionPath: tier.decisionPath,
       reasoning: reasoningParts.join('\n\n'),
     })
   }
@@ -3637,6 +3663,7 @@ async function evaluateJob(body: EvaluateJobBody) {
   const overall = roundScore(averageScores(scores))
   return ok({
     mode: 'reference_free',
+    referenceSource: 'none',
     jobId,
     judge: { provider, model },
     scores,
@@ -3654,25 +3681,16 @@ async function firstResultImageUrl(job: any): Promise<string> {
   return ''
 }
 
-async function firstReferenceImageUrl(job: any): Promise<string> {
-  // Prefer an uploaded reference image (analysis raster when present), then a
-  // retrieved PaperBananaBench reference that carries a ground-truth image.
+async function uploadedReferenceImageUrl(job: any): Promise<string> {
+  // ONLY a user-UPLOADED reference image attached to THIS job qualifies as a
+  // true same-figure ground truth for the pairwise "Human-drawn figure of THIS
+  // paper" judge. Retrieved PaperBananaBench references belong to DIFFERENT
+  // papers, so they are intentionally NOT considered here (they would make the
+  // pairwise verdict meaningless). Prefer the analysis raster when present.
   const uploaded = await refreshReferenceImageUrls(job.referenceImages || [])
   for (const image of uploaded) {
     const url = String(image?.analysisUrl || image?.url || '')
     if (url && !String(image?.mimeType || '').includes('svg')) return url
-    if (url) return url
-  }
-  const retrieved = job.retrievedReferences || []
-  for (const ref of retrieved) {
-    let url = String(ref?.imageUrl || '')
-    if (!url && ref?.imageObjectKey) {
-      try {
-        url = await cloud.storage.bucket(bucketName).getDownloadUrl(ref.imageObjectKey, 3600)
-      } catch {
-        url = ''
-      }
-    }
     if (url) return url
   }
   return ''
@@ -3703,6 +3721,47 @@ function parseReferenceFreeScore(raw: string): { score: number; reasoning: strin
 function averageScores(scores: Record<EvalDimension, number>) {
   const values = evalDimensions.map((dimension) => Number(scores[dimension] || 0))
   return values.reduce((sum, value) => sum + value, 0) / (values.length || 1)
+}
+
+// Ported from root _determine_tier_outcome (utils/eval_toolkits.py:96-117):
+// given two pairwise dimension outcomes, decide the tier winner.
+function determineTierOutcome(dim1Outcome: string, dim2Outcome: string): string {
+  const o1 = String(dim1Outcome || '').trim()
+  const o2 = String(dim2Outcome || '').trim()
+  const neutral = (o: string) => o === 'Both are good' || o === 'Both are bad'
+  // Both agree on a clear winner.
+  if (o1 === o2) {
+    if (neutral(o1)) return 'Tie'
+    return o1
+  }
+  // One Model, one neutral.
+  if ((o1 === 'Model' && neutral(o2)) || (o2 === 'Model' && neutral(o1))) return 'Model'
+  // One Human, one neutral.
+  if ((o1 === 'Human' && neutral(o2)) || (o2 === 'Human' && neutral(o1))) return 'Human'
+  // Conflicting winners, etc.
+  return 'Tie'
+}
+
+// Ported from root tiered rule (utils/eval_toolkits.py:299-312): Tier 1 =
+// Faithfulness + Readability decides; only on a Tier-1 tie does Tier 2 =
+// Conciseness + Aesthetics decide.
+function tieredOutcome(winners: Record<EvalDimension, string>): { outcome: string; decisionPath: string } {
+  const faithfulness = winners.faithfulness || 'Unknown'
+  const readability = winners.readability || 'Unknown'
+  const conciseness = winners.conciseness || 'Unknown'
+  const aesthetics = winners.aesthetics || 'Unknown'
+  const tier1 = determineTierOutcome(faithfulness, readability)
+  if (tier1 === 'Model' || tier1 === 'Human') {
+    return {
+      outcome: tier1,
+      decisionPath: `Tier1(${faithfulness}, ${readability}) -> ${tier1} [Decided at Tier 1]`,
+    }
+  }
+  const tier2 = determineTierOutcome(conciseness, aesthetics)
+  return {
+    outcome: tier2,
+    decisionPath: `Tier1(${faithfulness}, ${readability}) -> Tie; Tier2(${conciseness}, ${aesthetics}) -> ${tier2} [Decided at Tier 2]`,
+  }
 }
 
 function roundScore(value: number) {

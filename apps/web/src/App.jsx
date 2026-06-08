@@ -260,7 +260,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [apiBaseNormalized, health, isAdvancedMode, retrievalSetting]);
+  }, [apiBaseNormalized, health, isAdvancedMode, retrievalSetting, isPlotCategory]);
 
   const canSubmit = useMemo(() => {
     const hasKey = selectedKey.trim();
@@ -426,7 +426,7 @@ export default function App() {
     if (!options.silent) setReferenceLibraryError('');
     setIsLoadingReferenceLibrary(true);
     try {
-      const data = await referenceLibraryRequest(apiBaseNormalized, health, { taskName: 'diagram', limit: 24 });
+      const data = await referenceLibraryRequest(apiBaseNormalized, health, { taskName: isPlotCategory ? 'plot' : 'diagram', limit: 24 });
       if (options.cancelledRef?.()) return;
       setReferenceLibrary(data.references || []);
     } catch (err) {
