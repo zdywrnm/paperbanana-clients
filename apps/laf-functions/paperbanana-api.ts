@@ -781,6 +781,7 @@ async function runCandidate(
     const description = await buildVisualDescription(jobId, candidateId, body, apiKey, maxCriticRounds, referenceAnalysis, retrievalContext, referenceImages, true)
     await logStage('plan ready')
     await logStage('rendering SVG')
+    const svgRenderStartedAt = new Date()
     const svg = await callSvgModel(body.provider, body.mainModelName, apiKey, description)
     const stageImage = await saveStageImage(jobId, candidateId, 'svg-final', svg, 'image/svg+xml', 'utf8')
     await recordStage(jobId, {
@@ -789,6 +790,8 @@ async function runCandidate(
       title: 'SVG render',
       text: 'Final SVG rendered from the current visual description.',
       image: stageImage,
+      startedAt: svgRenderStartedAt,
+      completedAt: new Date(),
     })
     return { content: svg, encoding: 'utf8' as const, mimeType: 'image/svg+xml', description }
   }
@@ -802,6 +805,7 @@ async function runCandidate(
       text: prompt,
     })
     await logStage('rendering PNG')
+    const vanillaRenderStartedAt = new Date()
     const base64 = await callImageModel(body.provider, body.imageModelName, apiKey, prompt, body.aspectRatio || '16:9')
     const stageImage = await saveStageImage(jobId, candidateId, 'vanilla-render', base64, 'image/png', 'base64')
     await recordStage(jobId, {
@@ -810,6 +814,8 @@ async function runCandidate(
       title: 'Vanilla render',
       text: 'Initial image rendered without planner/stylist pipeline.',
       image: stageImage,
+      startedAt: vanillaRenderStartedAt,
+      completedAt: new Date(),
     })
     return { content: base64, encoding: 'base64' as const, mimeType: 'image/png', description: prompt }
   }
@@ -818,6 +824,7 @@ async function runCandidate(
   await logStage('plan ready')
   let imagePrompt = diagramPromptFromDescription(description)
   await logStage('rendering PNG')
+  const initialRenderStartedAt = new Date()
   let base64 = await callImageModel(body.provider, body.imageModelName, apiKey, imagePrompt, body.aspectRatio || '16:9')
   let stageImage = await saveStageImage(jobId, candidateId, 'render-0', base64, 'image/png', 'base64')
   await recordStage(jobId, {
@@ -826,10 +833,18 @@ async function runCandidate(
     title: 'Initial render',
     text: imagePrompt,
     image: stageImage,
+    startedAt: initialRenderStartedAt,
+    completedAt: new Date(),
   })
+
+  // Track the last image+description that rendered successfully so we can roll
+  // back if a critic re-render throws (mirrors paperviz_processor.py rollback).
+  let lastGoodImage = base64
+  let lastGoodDescription = description
 
   for (let round = 1; round <= maxCriticRounds; round += 1) {
     await logStage(`critic round ${round}`)
+    const criticStartedAt = new Date()
     const critique = await critiqueRenderedDiagram(body, apiKey, description, base64, referenceAnalysis, retrievalContext)
     const decision = criticDecision(critique, description)
     const noChanges = decision.noChanges
@@ -841,22 +856,49 @@ async function runCandidate(
       text: critique,
       suggestion: noChanges ? '' : critique,
       image: stageImage,
+      startedAt: criticStartedAt,
+      completedAt: new Date(),
     })
     if (noChanges) break
 
     description = decision.description
     imagePrompt = diagramPromptFromDescription(description)
     await logStage(`rerender round ${round}`)
-    base64 = await callImageModel(body.provider, body.imageModelName, apiKey, imagePrompt, body.aspectRatio || '16:9')
-    stageImage = await saveStageImage(jobId, candidateId, `render-${round}`, base64, 'image/png', 'base64')
-    await recordStage(jobId, {
-      candidateId,
-      type: 'render',
-      title: `Rerender round ${round}`,
-      round,
-      text: imagePrompt,
-      image: stageImage,
-    })
+    const rerenderStartedAt = new Date()
+    try {
+      base64 = await callImageModel(body.provider, body.imageModelName, apiKey, imagePrompt, body.aspectRatio || '16:9')
+      stageImage = await saveStageImage(jobId, candidateId, `render-${round}`, base64, 'image/png', 'base64')
+      await recordStage(jobId, {
+        candidateId,
+        type: 'render',
+        title: `Rerender round ${round}`,
+        round,
+        text: imagePrompt,
+        image: stageImage,
+        startedAt: rerenderStartedAt,
+        completedAt: new Date(),
+      })
+      lastGoodImage = base64
+      lastGoodDescription = description
+    } catch (error: any) {
+      // Re-render failed this round: roll back to the last successful
+      // image+description and stop the loop rather than failing the candidate.
+      const message = error?.message || String(error)
+      await logStage(`rerender round ${round} failed, rolling back: ${message}`)
+      await recordStage(jobId, {
+        candidateId,
+        type: 'render',
+        title: `Rerender round ${round} (rolled back)`,
+        round,
+        text: imagePrompt,
+        startedAt: rerenderStartedAt,
+        completedAt: new Date(),
+        error: message,
+      })
+      base64 = lastGoodImage
+      description = lastGoodDescription
+      break
+    }
   }
 
   return { content: base64, encoding: 'base64' as const, mimeType: 'image/png', description }
@@ -880,12 +922,14 @@ async function buildVisualDescription(
     ), retrievalContext)
   }
 
+  const infographicCategory = limitText(body.infographicCategory, 80)
+  const plannerStartedAt = new Date()
   const planner = await callTextModel(
     body.provider,
     body.mainModelName,
     apiKey,
     plannerSystemPrompt(),
-    plannerUserPrompt(body.methodContent, body.caption, referenceAnalysis, retrievalContext),
+    plannerUserPrompt(body.methodContent, body.caption, referenceAnalysis, retrievalContext, infographicCategory),
     referenceImages,
   )
   await recordStage(jobId, {
@@ -893,29 +937,35 @@ async function buildVisualDescription(
     type: 'planner',
     title: 'Planner',
     text: planner,
+    startedAt: plannerStartedAt,
+    completedAt: new Date(),
   })
 
   let description = planner
 
   if ((body.pipelineMode || 'planner_critic') === 'full') {
+    const stylistStartedAt = new Date()
     description = await callTextModel(
       body.provider,
       body.mainModelName,
       apiKey,
       stylistSystemPrompt(),
-      stylistUserPrompt(body.methodContent, body.caption, planner, referenceAnalysis, retrievalContext),
+      stylistUserPrompt(body.methodContent, body.caption, planner, referenceAnalysis, retrievalContext, infographicCategory),
     )
     await recordStage(jobId, {
       candidateId,
       type: 'stylist',
       title: 'Stylist',
       text: description,
+      startedAt: stylistStartedAt,
+      completedAt: new Date(),
     })
   }
 
   if (!includeTextCritic) return description
 
   for (let round = 1; round <= textCriticRounds; round += 1) {
+    const criticStartedAt = new Date()
     const critique = await callTextModel(
       body.provider,
       body.mainModelName,
@@ -932,6 +982,8 @@ async function buildVisualDescription(
       round,
       text: critique,
       suggestion: noChanges ? '' : critique,
+      startedAt: criticStartedAt,
+      completedAt: new Date(),
     })
     if (noChanges) break
     description = decision.description
@@ -953,32 +1005,63 @@ async function runRefineJob(jobId: string, body: RefineImageBody, apiKey: string
     url: sourceUrl,
   }
 
-  await appendLog(jobId, 'Refine: analyzing source image')
-  const description = await callTextModel(
-    body.provider,
-    body.mainModelName || body.imageModelName,
-    apiKey,
-    refineSystemPrompt(),
-    refineUserPrompt(body.editInstruction, body.imageSize || '2K'),
-    [sourceImage],
-  )
-  await recordStage(jobId, {
-    candidateId: 0,
-    type: 'planner',
-    title: 'Refine plan',
-    text: description,
-  })
+  let base64: string
+  let description: string
 
-  await appendLog(jobId, 'Refine: rendering edited image')
-  const base64 = await callImageModel(body.provider, body.imageModelName, apiKey, diagramPromptFromDescription(description), body.aspectRatio || '16:9')
-  const stageImage = await saveStageImage(jobId, 0, 'refine-render', base64, 'image/png', 'base64')
-  await recordStage(jobId, {
-    candidateId: 0,
-    type: 'render',
-    title: 'Refined render',
-    text: body.editInstruction,
-    image: stageImage,
-  })
+  if (providerSupportsImageEdit(body.provider)) {
+    // True image-to-image: forward the source image bytes directly to the
+    // image model so it edits the actual pixels (mirrors polish_agent.py).
+    await appendLog(jobId, 'Refine: editing source image (image-to-image)')
+    const editPrompt = refineEditPrompt(body.editInstruction, body.imageSize || '2K')
+    description = editPrompt
+    const renderStartedAt = new Date()
+    base64 = await callImageModel(body.provider, body.imageModelName, apiKey, editPrompt, body.aspectRatio || '16:9', sourceUrl)
+    const stageImage = await saveStageImage(jobId, 0, 'refine-render', base64, 'image/png', 'base64')
+    await recordStage(jobId, {
+      candidateId: 0,
+      type: 'render',
+      title: 'Refined render',
+      text: body.editInstruction,
+      image: stageImage,
+      startedAt: renderStartedAt,
+      completedAt: new Date(),
+    })
+  } else {
+    // Fallback for providers without image-edit support: describe the source
+    // image, then regenerate from the description.
+    await appendLog(jobId, 'Refine: analyzing source image')
+    const planStartedAt = new Date()
+    description = await callTextModel(
+      body.provider,
+      body.mainModelName || body.imageModelName,
+      apiKey,
+      refineSystemPrompt(),
+      refineUserPrompt(body.editInstruction, body.imageSize || '2K'),
+      [sourceImage],
+    )
+    await recordStage(jobId, {
+      candidateId: 0,
+      type: 'planner',
+      title: 'Refine plan',
+      text: description,
+      startedAt: planStartedAt,
+      completedAt: new Date(),
+    })
+
+    await appendLog(jobId, 'Refine: rendering edited image')
+    const renderStartedAt = new Date()
+    base64 = await callImageModel(body.provider, body.imageModelName, apiKey, diagramPromptFromDescription(description), body.aspectRatio || '16:9')
+    const stageImage = await saveStageImage(jobId, 0, 'refine-render', base64, 'image/png', 'base64')
+    await recordStage(jobId, {
+      candidateId: 0,
+      type: 'render',
+      title: 'Refined render',
+      text: body.editInstruction,
+      image: stageImage,
+      startedAt: renderStartedAt,
+      completedAt: new Date(),
+    })
+  }
 
   const saved = await saveResult(jobId, 0, base64, 'image/png', 'base64')
   await jobs.updateOne(
@@ -1022,14 +1105,16 @@ async function resolveRetrievedReferences(body: CreateJobBody, apiKey: string): 
   const selected = selectedIds
     .map((id) => library.find((item) => item.id === id))
     .filter(Boolean) as RetrievedReference[]
-  return (selected.length ? selected : library).slice(0, 10)
+  // On an empty/garbled auto result, return no references rather than dumping
+  // the entire library (which would flood the prompt with irrelevant context).
+  return selected.slice(0, 10)
 }
 
 async function autoSelectReferenceIds(body: CreateJobBody, apiKey: string, library: RetrievedReference[]) {
-  const candidates = library.slice(0, 80).map((item) => ({
+  const candidates = library.slice(0, 200).map((item) => ({
     id: item.id,
     title: item.title,
-    summary: item.summary.slice(0, 360),
+    summary: item.summary.slice(0, 1500),
   }))
   const raw = await callTextModel(
     body.provider,
@@ -1112,6 +1197,23 @@ async function critiqueRenderedDiagram(
   referenceAnalysis = '',
   retrievalContext = '',
 ) {
+  // If the rendered image is missing or effectively empty, degrade to a
+  // text-only critique and inject a SYSTEM NOTICE instead of sending an empty
+  // image (mirrors critic_agent.py's text-only fallback).
+  const hasImage = typeof imageBase64 === 'string' && imageBase64.trim().length > 100
+  if (!hasImage) {
+    return await callTextModel(
+      body.provider,
+      body.mainModelName,
+      apiKey,
+      imageCriticSystemPrompt(),
+      [
+        '[SYSTEM NOTICE] The diagram image could not be generated based on the current description. Check the description for errors and revise it.',
+        '',
+        imageCriticUserPrompt(body.methodContent, body.caption, description, referenceAnalysis, retrievalContext),
+      ].join('\n'),
+    )
+  }
   return await callTextModel(
     body.provider,
     body.mainModelName,
@@ -1408,8 +1510,23 @@ async function callSvgModel(provider: Provider, model: string, apiKey: string, d
   return sanitizeSvg(rawSvg)
 }
 
-async function callImageModel(provider: Provider, model: string, apiKey: string, prompt: string, aspectRatio: string): Promise<string> {
+async function callImageModel(
+  provider: Provider,
+  model: string,
+  apiKey: string,
+  prompt: string,
+  aspectRatio: string,
+  sourceImage = '',
+): Promise<string> {
+  // When a source image is supplied, route to a true image-to-image / edit
+  // request for providers that support image input. Otherwise fall back to
+  // plain text-to-image generation.
+  const source = await normalizeSourceImage(sourceImage)
+
   if (provider === 'openai') {
+    if (source) {
+      return callOpenAiImageEdit(model, apiKey, prompt, source)
+    }
     const response = await fetchWithRetry('https://api.openai.com/v1/images/generations', {
       method: 'POST',
       headers: {
@@ -1430,13 +1547,19 @@ async function callImageModel(provider: Provider, model: string, apiKey: string,
   }
 
   if (provider === 'gemini') {
-    return callGeminiImage(model, apiKey, prompt, aspectRatio)
+    return callGeminiImage(model, apiKey, prompt, aspectRatio, source)
   }
 
   if (provider === 'bailian') {
+    // Bailian image model does not support a conditioned edit here; fall back
+    // to the describe-then-regenerate path (source image is ignored).
     return callBailianImage(model, apiKey, prompt, aspectRatio)
   }
 
+  const userContent: any[] = [{ type: 'text', text: prompt }]
+  if (source) {
+    userContent.push({ type: 'image_url', image_url: { url: source.dataUrl } })
+  }
   const response = await fetchWithRetry('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -1445,7 +1568,7 @@ async function callImageModel(provider: Provider, model: string, apiKey: string,
     },
     body: JSON.stringify({
       model: toOpenRouterModel(model),
-      messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }],
+      messages: [{ role: 'user', content: userContent }],
       modalities: ['image', 'text'],
       image_config: {
         aspect_ratio: aspectRatio,
@@ -1461,6 +1584,56 @@ async function callImageModel(provider: Provider, model: string, apiKey: string,
     return message.content.split(',', 2)[1]
   }
   throw new Error('Image model did not return image data')
+}
+
+type NormalizedSourceImage = { base64: string; mimeType: string; dataUrl: string }
+
+// Accepts a data URL, a bare base64 string, or a remote/bucket URL and returns
+// a normalized base64 + data URL pair for conditioning image-edit requests.
+async function normalizeSourceImage(sourceImage: string): Promise<NormalizedSourceImage | null> {
+  const value = String(sourceImage || '').trim()
+  if (!value) return null
+
+  const dataMatch = value.match(/^data:([^;,]+);base64,(.*)$/i)
+  if (dataMatch) {
+    const mimeType = dataMatch[1] || 'image/png'
+    const base64 = dataMatch[2] || ''
+    if (!base64) return null
+    return { base64, mimeType, dataUrl: value }
+  }
+
+  if (/^https?:\/\//i.test(value)) {
+    const mimeType = inferMimeTypeFromUrl(value)
+    const base64 = await fetchImageAsBase64(value, 'Refine source image download')
+    if (!base64) return null
+    return { base64, mimeType, dataUrl: `data:${mimeType};base64,${base64}` }
+  }
+
+  // Treat as a bare base64 payload.
+  return { base64: value, mimeType: 'image/png', dataUrl: `data:image/png;base64,${value}` }
+}
+
+async function callOpenAiImageEdit(model: string, apiKey: string, prompt: string, source: NormalizedSourceImage): Promise<string> {
+  const form = new FormData()
+  form.append('model', model)
+  form.append('prompt', prompt)
+  form.append('size', '1536x1024')
+  form.append('quality', 'high')
+  const ext = source.mimeType === 'image/jpeg' ? 'jpg' : source.mimeType === 'image/webp' ? 'webp' : 'png'
+  const blob = new Blob([Buffer.from(source.base64, 'base64')], { type: source.mimeType })
+  form.append('image', blob, `source.${ext}`)
+
+  const response = await fetchWithRetry('https://api.openai.com/v1/images/edits', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: form as any,
+  }, `openai image edit model ${model}`)
+  const data = await parseModelResponse(response)
+  const b64 = data.data?.[0]?.b64_json
+  if (!b64) throw new Error('OpenAI image edit did not return image data')
+  return b64
 }
 
 function textApiBaseUrl(provider: Provider) {
@@ -1499,13 +1672,17 @@ async function callGeminiText(
   return data.candidates?.[0]?.content?.parts?.map((part: any) => part.text || '').join('') || ''
 }
 
-async function callGeminiImage(model: string, apiKey: string, prompt: string, aspectRatio: string): Promise<string> {
+async function callGeminiImage(model: string, apiKey: string, prompt: string, aspectRatio: string, source: NormalizedSourceImage | null = null): Promise<string> {
   const actualModel = normalizeModelName('gemini', model)
+  const parts: any[] = [{ text: prompt }]
+  if (source) {
+    parts.push({ inlineData: { mimeType: source.mimeType, data: source.base64 } })
+  }
   const response = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1/models/${actualModel}:generateContent?key=${apiKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      contents: [{ role: 'user', parts }],
       generationConfig: {
         responseModalities: ['IMAGE'],
         imageConfig: { aspectRatio, imageSize: '1K' },
@@ -1877,11 +2054,11 @@ function plannerSystemPrompt() {
   ].join('\n')
 }
 
-function plannerUserPrompt(method: string, caption: string, referenceAnalysis = '', retrievalContext = '') {
-  return withRetrievalContext(withReferenceAnalysis(
+function plannerUserPrompt(method: string, caption: string, referenceAnalysis = '', retrievalContext = '', infographicCategory = '') {
+  return withInfographicCategory(withRetrievalContext(withReferenceAnalysis(
     `Methodology Section:\n${method}\n\nFigure Caption:\n${caption}\n\nDetailed description of the target figure:`,
     referenceAnalysis,
-  ), retrievalContext)
+  ), retrievalContext), infographicCategory)
 }
 
 function stylistSystemPrompt() {
@@ -1915,11 +2092,11 @@ function stylistSystemPrompt() {
   ].join('\n')
 }
 
-function stylistUserPrompt(method: string, caption: string, description: string, referenceAnalysis = '', retrievalContext = '') {
-  return withRetrievalContext(withReferenceAnalysis(
+function stylistUserPrompt(method: string, caption: string, description: string, referenceAnalysis = '', retrievalContext = '', infographicCategory = '') {
+  return withInfographicCategory(withRetrievalContext(withReferenceAnalysis(
     `Initial Description:\n${description}\n\nMethodology Section:\n${method}\n\nFigure Caption:\n${caption}\n\nPolished detailed description:`,
     referenceAnalysis,
-  ), retrievalContext)
+  ), retrievalContext), infographicCategory)
 }
 
 function criticSystemPrompt() {
@@ -2109,12 +2286,26 @@ function retrievalUserPrompt(method: string, caption: string, candidates: any[])
   ].join('\n')
 }
 
+// Edit prompt sent directly to an image model that accepts the source image
+// as input (true image-to-image conditioned edit).
+function refineEditPrompt(instruction: string, imageSize: string) {
+  return [
+    'You are editing the attached source diagram image directly.',
+    'Apply the requested edits to the existing image while preserving everything else: keep the original layout, structure, labels, colors, and style intact except where the instruction requires a change.',
+    'Produce a high-quality academic diagram. Do not add a figure title or caption text inside the image.',
+    '',
+    `Edit instruction:\n${instruction}`,
+    '',
+    `Target quality: ${imageSize}`,
+  ].join('\n')
+}
+
 function refineSystemPrompt() {
   return [
     'You are the PaperBanana Refine Agent.',
     'The user provides an existing generated diagram image and an edit instruction.',
-    'Inspect the image, preserve its useful structure, and write a complete revised visual description for a new high-quality academic diagram.',
-    'Do not mention that you cannot edit pixels directly. The next model will render from your description.',
+    'Inspect the image, preserve its useful structure, and write a complete revised visual description for a new high-quality academic diagram that applies the requested edits.',
+    'The next model will render the edited diagram from your description.',
   ].join('\n')
 }
 
@@ -2125,7 +2316,7 @@ function refineUserPrompt(instruction: string, imageSize: string) {
     '',
     `Target quality: ${imageSize}`,
     '',
-    'Return the complete revised visual description only.',
+    'Return the complete revised visual description only, preserving the parts of the original image not covered by the edit instruction.',
   ].join('\n')
 }
 
@@ -2358,6 +2549,16 @@ function withRetrievalContext(text: string, retrievalContext = '') {
   ].join('\n')
 }
 
+function withInfographicCategory(text: string, infographicCategory = '') {
+  const category = String(infographicCategory || '').trim()
+  if (!category) return text
+  return [
+    text,
+    '',
+    `Infographic category: ${category} — emphasize the conventions of this figure type.`,
+  ].join('\n')
+}
+
 function sanitizeSvg(raw: string) {
   return sanitizeSvgMarkup(raw, false, 'SVG output')
 }
@@ -2582,6 +2783,13 @@ function selectApiKey(provider: Provider, apiKeys: ApiKeys) {
   if (provider === 'openai') return apiKeys?.openai?.trim() || ''
   if (provider === 'bailian') return apiKeys?.bailian?.trim() || ''
   return ''
+}
+
+// Providers whose image model accepts a source image for a conditioned edit
+// (true image-to-image). Bailian only supports text-to-image here, so it falls
+// back to the describe-then-regenerate path.
+function providerSupportsImageEdit(provider: Provider) {
+  return provider === 'gemini' || provider === 'openrouter' || provider === 'openai'
 }
 
 async function publicJob(job: any) {
