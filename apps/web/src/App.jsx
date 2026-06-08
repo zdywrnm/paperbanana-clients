@@ -835,7 +835,8 @@ export default function App() {
                 ]} />
                 <label className="field compact">
                   <span>候选图数量</span>
-                  <input type="number" min="1" max="4" value={numCandidates} onChange={(event) => setNumCandidates(event.target.value)} />
+                  {/* max 与后端 PAPERBANANA_MAX_CANDIDATES 默认值 (3) 对齐，避免用户选到被后端静默 clamp 的值。 */}
+                  <input type="number" min="1" max="3" value={numCandidates} onChange={(event) => setNumCandidates(event.target.value)} />
                 </label>
                 <label className="field compact">
                   <span>评审轮数</span>
