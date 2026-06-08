@@ -831,7 +831,8 @@ async function runCandidate(
   for (let round = 1; round <= maxCriticRounds; round += 1) {
     await logStage(`critic round ${round}`)
     const critique = await critiqueRenderedDiagram(body, apiKey, description, base64, referenceAnalysis, retrievalContext)
-    const noChanges = /no changes needed/i.test(critique)
+    const decision = criticDecision(critique, description)
+    const noChanges = decision.noChanges
     await recordStage(jobId, {
       candidateId,
       type: 'critic',
@@ -843,7 +844,7 @@ async function runCandidate(
     })
     if (noChanges) break
 
-    description = extractRevisedDescription(critique, description)
+    description = decision.description
     imagePrompt = diagramPromptFromDescription(description)
     await logStage(`rerender round ${round}`)
     base64 = await callImageModel(body.provider, body.imageModelName, apiKey, imagePrompt, body.aspectRatio || '16:9')
@@ -922,7 +923,8 @@ async function buildVisualDescription(
       criticSystemPrompt(),
       criticUserPrompt(body.methodContent, body.caption, description, referenceAnalysis, retrievalContext),
     )
-    const noChanges = /no changes needed/i.test(critique)
+    const decision = criticDecision(critique, description)
+    const noChanges = decision.noChanges
     await recordStage(jobId, {
       candidateId,
       type: 'critic',
@@ -932,7 +934,7 @@ async function buildVisualDescription(
       suggestion: noChanges ? '' : critique,
     })
     if (noChanges) break
-    description = critique
+    description = decision.description
   }
 
   return description
@@ -1120,13 +1122,42 @@ async function critiqueRenderedDiagram(
   )
 }
 
-function extractRevisedDescription(critique: string, previous: string) {
+// The critic agents return strict JSON {critic_suggestions, revised_description}
+// where revised_description === 'No changes needed.' (or empty) means "stop,
+// keep the current description". We parse that contract here while remaining
+// backward-compatible with plain-text critic responses.
+function isNoChangesSignal(value: string) {
+  const trimmed = String(value || '').trim()
+  if (!trimmed) return true
+  return /^no changes? needed\.?$/i.test(trimmed)
+}
+
+function criticDecision(critique: string, previous: string): { noChanges: boolean; description: string } {
   const trimmed = String(critique || '').trim()
-  if (!trimmed || /no changes needed/i.test(trimmed)) return previous
+  if (!trimmed) return { noChanges: true, description: previous }
+
   const json = parseJsonObject(trimmed)
-  if (json?.revisedDescription) return String(json.revisedDescription)
-  if (json?.description) return String(json.description)
-  return trimmed
+  if (json && typeof json === 'object') {
+    // Read the revised description under any of the supported key spellings.
+    const revisedRaw =
+      json.revised_description ?? json.revisedDescription ?? json.description
+    if (revisedRaw !== undefined && revisedRaw !== null) {
+      const revised = String(revisedRaw)
+      // Only the revised_description field carries the stop signal; the
+      // critic_suggestions field legitimately holds prose that may mention
+      // changes even when the revision is "No changes needed.".
+      if (isNoChangesSignal(revised)) return { noChanges: true, description: previous }
+      return { noChanges: false, description: revised }
+    }
+  }
+
+  // Backward-compat: plain-text critic response (no JSON / no revised field).
+  if (/no changes needed/i.test(trimmed)) return { noChanges: true, description: previous }
+  return { noChanges: false, description: trimmed }
+}
+
+function extractRevisedDescription(critique: string, previous: string) {
+  return criticDecision(critique, previous).description
 }
 
 async function analyzeReferenceImages(jobId: string, body: CreateJobBody, apiKey: string) {
@@ -1835,11 +1866,14 @@ async function parseDashScopeResponse(response: Response) {
 
 function plannerSystemPrompt() {
   return [
-    'You are the Planner Agent for PaperBanana.',
-    'Given a paper methodology section and figure caption, write a detailed visual specification for a publication-quality academic diagram.',
-    'Describe semantic components, layout, arrows, labels, colors, background, spacing, and icon style.',
-    'If reference image analysis is provided, use it as structure and style guidance without copying irrelevant content.',
-    'Do not include the figure title or caption text inside the image.',
+    "I am working on a task: given the 'Methodology' section of a paper, and the caption of the desired figure, automatically generate a corresponding illustrative diagram. I will input the text of the 'Methodology' section, the figure caption, and your output should be a detailed description of an illustrative figure that effectively represents the methods described in the text.",
+    '',
+    'To help you understand the task better, and grasp the principles for generating such figures, I will also provide you with several examples. You should learn from these examples to provide your figure description.',
+    '',
+    '** IMPORTANT: **',
+    'Your description should be as detailed as possible. Semantically, clearly describe each element and their connections. Formally, include various details such as background style (typically pure white or very light pastel), colors, line thickness, icon styles, etc. Remember: vague or unclear specifications will only make the generated figure worse, not better.',
+    '',
+    'If reference image analysis is provided, use it as structure and style guidance without copying irrelevant content. Do not include the figure title or caption text inside the image.',
   ].join('\n')
 }
 
@@ -1852,12 +1886,31 @@ function plannerUserPrompt(method: string, caption: string, referenceAnalysis = 
 
 function stylistSystemPrompt() {
   return [
-    'You are the Stylist Agent for PaperBanana.',
-    'Refine the visual specification for a clean NeurIPS-style academic diagram.',
-    'Preserve semantics. Improve layout clarity, typography, color harmony, line thickness, and whitespace.',
-    'Use reference image analysis only for layout and style cues.',
+    '## ROLE',
+    'You are a Lead Visual Designer for top-tier AI conferences (e.g., NeurIPS 2025).',
     '',
-    'NeurIPS 2025 diagram style guide excerpt:',
+    '## TASK',
+    'Our goal is to generate high-quality, publication-ready diagrams, given the methodology section and the caption of the desired diagram. The diagram should illustrate the logic of the methodology section, while adhering to the scope defined by the caption. Before you, a planner agent has already generated a preliminary description of the target diagram. However, this description may lack specific aesthetic details, such as element shapes, color palettes, and background styling. Your task is to refine and enrich this description based on the provided [NeurIPS 2025 Style Guidelines] to ensure the final generated image is a high-quality, publication-ready diagram that adheres to the NeurIPS 2025 aesthetic standards where appropriate.',
+    '',
+    '## INPUT DATA',
+    '-   **Detailed Description**: [The preliminary description of the figure]',
+    '-   **Style Guidelines**: [NeurIPS 2025 Style Guidelines]',
+    '-   **Methodology Section**: [Contextual content from the methodology section]',
+    '-   **Diagram Caption**: [Target diagram caption]',
+    '',
+    "Note that you should primary focus on the detailed description and style guidelines. The methodology section and diagram caption are provided for context only, there's no need to regenerate a description from scratch, solely based on them, while ignoring the detailed description we already have.",
+    '',
+    '**Crucial Instructions:**',
+    '1.  **Preserve Semantic Content:** Do NOT alter the semantic content, logic, or structure of the diagram. Your job is purely aesthetic refinement, not content editing. However, if you find some phrases or descriptions too verbose, you may simplify them appropriately while referencing the original methodology section to ensure semantic accuracy.',
+    '2.  **Preserve High-Quality Aesthetics and Intervene Only When Necessary:** First, evaluate the aesthetic quality implied by the input description. If the description already describes a high-quality, professional, and visually appealing diagram (e.g., nice 3D icons, rich textures, good color harmony), **PRESERVE IT**. Only apply strict Style Guide adjustments if the current description lacks detail, looks outdated, or is visually cluttered. Your goal is specific refinement, not blind standardization.',
+    '3.  **Respect Diversity:** Different domains have different styles. If the input describes a specific style (e.g., illustrative for agents) that works well, keep it.',
+    '4.  **Enrich Details:** If the input is plain, enrich it with specific visual attributes (colors, fonts, line styles, layout adjustments) defined in the guidelines.',
+    '5.  **Handle Icons with Care:** Be cautious when modifying icons as they may carry specific semantic meanings. Some icons have conventional technical meanings (e.g., snowflake = frozen/non-trainable, flame = trainable) - when encountering such icons, reference the original methodology section to verify their intent before making changes. However, purely decorative or symbolic icons can be freely enhanced and beautified. For examples, agent papers often use cute 2D robot avatars to represent agents.',
+    '',
+    '## OUTPUT',
+    'Output ONLY the final polished Detailed Description. Do not include any conversational text or explanations.',
+    '',
+    '## [NeurIPS 2025 Style Guidelines]',
     neuripsDiagramStyleGuide(),
   ].join('\n')
 }
@@ -1870,11 +1923,49 @@ function stylistUserPrompt(method: string, caption: string, description: string,
 }
 
 function criticSystemPrompt() {
+  return diagramCriticSystemPrompt()
+}
+
+function diagramCriticSystemPrompt() {
   return [
-    'You are the Critic Agent for PaperBanana.',
-    'Check whether the current diagram description matches the methodology and caption.',
-    'If changes are needed, return a revised detailed description only.',
-    'If it is already good, return exactly: No changes needed.',
+    '## ROLE',
+    'You are a Lead Visual Designer for top-tier AI conferences (e.g., NeurIPS 2025).',
+    '',
+    '## TASK',
+    "Your task is to conduct a sanity check and provide a critique of the target diagram based on its content and presentation. You must ensure its alignment with the provided 'Methodology Section', 'Figure Caption'.",
+    '',
+    "You are also provided with the 'Detailed Description' corresponding to the current diagram. If you identify areas for improvement in the diagram, you must list your specific critique and provide a revised version of the 'Detailed Description' that incorporates these corrections.",
+    '',
+    '## CRITIQUE & REVISION RULES',
+    '',
+    '1. Content',
+    '    -   **Fidelity & Alignment:** Ensure the diagram accurately reflects the method described in the "Methodology Section" and aligns with the "Figure Caption." Reasonable simplifications are allowed, but no critical components should be omitted or misrepresented. Also, the diagram should not contain any hallucinated content. Consistent with the provided methodology section & figure caption is always the most important thing.',
+    '    -   **Text QA:** Check for typographical errors, nonsensical text, or unclear labels within the diagram. Suggest specific corrections.',
+    '    -   **Validation of Examples:** Verify the accuracy of illustrative examples. If the diagram includes specific examples to aid understanding (e.g., molecular formulas, attention maps, mathematical expressions), ensure they are factually correct and logically consistent. If an example is incorrect, provide the correct version.',
+    '    -   **Caption Exclusion:** Ensure the figure caption text (e.g., "Figure 1: Overview...") is **not** included within the image visual itself. The caption should remain separate.',
+    '',
+    '2. Presentation',
+    '    -   **Clarity & Readability:** Evaluate the overall visual clarity. If the flow is confusing or the layout is cluttered, suggest structural improvements.',
+    '    -   **Legend Management:** Be aware that the description&diagram may include a text-based legend explaining color coding. Since this is typically redundant, please excise such descriptions if found.',
+    '',
+    '** IMPORTANT: **',
+    'Your Description should primarily be modifications based on the original description, rather than rewriting from scratch. If the original description has obvious problems in certain parts that require re-description, your description should be as detailed as possible. Semantically, clearly describe each element and their connections. Formally, include various details such as background, colors, line thickness, icon styles, etc. Remember: vague or unclear specifications will only make the generated figure worse, not better.',
+    '',
+    '## INPUT DATA',
+    '-   **Target Diagram**: [The generated figure]',
+    '-   **Detailed Description**: [The detailed description of the figure]',
+    '-   **Methodology Section**: [Contextual content from the methodology section]',
+    '-   **Figure Caption**: [Target figure caption]',
+    '',
+    '## OUTPUT',
+    'Provide your response strictly in the following JSON format.',
+    '',
+    '```json',
+    '{',
+    '    "critic_suggestions": "Insert your detailed critique and specific suggestions for improvement here. If the diagram is perfect, write \'No changes needed.\'",',
+    '    "revised_description": "Insert the fully revised detailed description here, incorporating all your suggestions. If no changes are needed, write \'No changes needed.\'"',
+    '}',
+    '```',
   ].join('\n')
 }
 
@@ -1886,12 +1977,9 @@ function criticUserPrompt(method: string, caption: string, description: string, 
 }
 
 function imageCriticSystemPrompt() {
-  return [
-    'You are the image-aware Critic Agent for PaperBanana.',
-    'Inspect the rendered diagram image against the methodology, caption, and current visual description.',
-    'If it is already good, return exactly: No changes needed.',
-    'If changes are needed, return a revised detailed visual description only. Do not return a list of complaints without a complete revised description.',
-  ].join('\n')
+  // Same rubric and strict JSON contract as the text critic, but a rendered
+  // diagram image is attached for inspection.
+  return diagramCriticSystemPrompt()
 }
 
 function imageCriticUserPrompt(method: string, caption: string, description: string, referenceAnalysis = '', retrievalContext = '') {
@@ -1969,9 +2057,42 @@ function referenceVisionUserPrompt(method: string, caption: string) {
 
 function retrievalSystemPrompt() {
   return [
-    'You are the Retriever Agent for PaperBanana.',
-    'Select the most useful reference examples for generating a new academic diagram.',
-    'Return JSON only: {"ids":["id-1","id-2"]}. Select at most 10 ids.',
+    '# Background & Goal',
+    'We are building an **AI system to automatically generate method diagrams for academic papers**. Given a paper\'s methodology section and a figure caption, the system needs to create a high-quality illustrative diagram that visualizes the described method.',
+    '',
+    'To help the AI learn how to generate appropriate diagrams, we use a **few-shot learning approach**: we provide it with reference examples of similar diagrams. The AI will learn from these examples to understand what kind of diagram to create for the target.',
+    '',
+    '# Your Task',
+    '**You are the Retrieval Agent.** Your job is to select the most relevant reference diagrams from a candidate pool that will serve as few-shot examples for the diagram generation model.',
+    '',
+    'You will receive:',
+    '- **Target Input:** The methodology section and caption of the diagram we need to generate',
+    '- **Candidate Pool:** Existing diagrams (each with methodology and caption)',
+    '',
+    'You must select the **Top 10 candidates** that would be most helpful as examples for teaching the AI how to draw the target diagram.',
+    '',
+    '# Selection Logic (Topic + Intent)',
+    '',
+    'Your goal is to find examples that match the Target in both **Domain** and **Diagram Type**.',
+    '',
+    '**1. Match Research Topic (Use Methodology & Caption):**',
+    '* What is the domain? (e.g., Agent & Reasoning, Vision & Perception, Generative & Learning, Science & Applications).',
+    '* Select candidates that belong to the **same research domain**.',
+    '* *Why?* Similar domains share similar terminology (e.g., "Actor-Critic" in RL).',
+    '',
+    '**2. Match Visual Intent (Use Caption & Keywords):**',
+    '* What type of diagram is implied? (e.g., "Framework", "Pipeline", "Detailed Module", "Performance Chart").',
+    '* Select candidates with **similar visual structures**.',
+    '* *Why?* A "Framework" diagram example is useless for drawing a "Performance Bar Chart", even if they are in the same domain.',
+    '',
+    '**Ranking Priority:**',
+    '1.  **Best Match:** Same Topic AND Same Visual Intent (e.g., Target is "Agent Framework" -> Candidate is "Agent Framework", Target is "Dataset Construction Pipeline" -> Candidate is "Dataset Construction Pipeline").',
+    '2.  **Second Best:** Same Visual Intent (e.g., Target is "Agent Framework" -> Candidate is "Vision Framework"). *Structure is more important than Topic for drawing.*',
+    '3.  **Avoid:** Different Visual Intent (e.g., Target is "Pipeline" -> Candidate is "Bar Chart").',
+    '',
+    '# Output Format',
+    'Provide your output strictly as a single valid JSON object containing only the **exact IDs** of the Top 10 selected diagrams (use the exact IDs from the Candidate Pool). Select at most 10 ids.',
+    'Return JSON only: {"ids":["id-1","id-2"]}.',
   ].join('\n')
 }
 
@@ -2010,13 +2131,206 @@ function refineUserPrompt(instruction: string, imageSize: string) {
 
 function neuripsDiagramStyleGuide() {
   return [
-    'Aesthetic: soft tech and scientific pastels; clean modularity with clear left-to-right narrative flow.',
-    'Use high-value light backgrounds and reserve saturated accents for critical active elements.',
-    'Group stages in very light desaturated containers; use dashed borders for logical scopes and optional paths.',
-    'Use rounded rectangles for process nodes, 3D stacks/grids for tensors, and cylinders only for databases or memory.',
-    'Use orthogonal connectors for architecture/data flow, curved connectors for feedback loops, dashed lines for auxiliary flow.',
-    'Use sans-serif labels, serif italic math variables, consistent line weight, readable spacing, and no PowerPoint-default heavy outlines.',
-    'Avoid saturated primary backgrounds, ambiguous arrows, inconsistent dimensions, and decorative clutter.',
+    '### 1. The "NeurIPS Look"',
+    'The prevailing aesthetic for 2025 is **"Soft Tech & Scientific Pastels."**',
+    'Gone are the days of harsh primary colors and sharp black boxes. The modern NeurIPS diagram feels approachable yet precise. It utilizes high-value (light) backgrounds to organize complexity, reserving saturation for the most critical active elements. The vibe balances **clean modularity** (clear separation of parts) with **narrative flow** (clear left-to-right progression).',
+    '',
+    '---',
+    '',
+    '### 2. Detailed Style Options',
+    '',
+    '#### **A. Color Palettes**',
+    '*Design Philosophy: Use color to group logic, not just to decorate. Avoid fully saturated backgrounds.*',
+    '',
+    '**Background Fills (The "Zone" Strategy)**',
+    '*Used to encapsulate stages (e.g., "Pre-training phase") or environments.*',
+    '*   **Most papers use:** Very light, desaturated pastels (Opacity ~10–15%).',
+    '*   **Aesthetically pleasing options include:**',
+    '    *   🍦 **Cream / Beige** (e.g., `#F5F5DC`) – *Warm, academic feel.*',
+    '    *   ☁️ **Pale Blue / Ice** (e.g., `#E6F3FF`) – *Clean, technical feel.*',
+    '    *   🌿 **Mint / Sage** (e.g., `#E0F2F1`) – *Soft, organic feel.*',
+    '    *   🌸 **Pale Lavender** (e.g., `#F3E5F5`) – *distinctive, modern feel.*',
+    '*   **Alternative (~20%):** White backgrounds with colored *dashed borders* for a high-contrast, minimalist look (common in theoretical papers).',
+    '',
+    '**Functional Element Colors**',
+    '*   **For "Active" Modules (Encoders, MLP, Attention):** Medium saturation is preferred.',
+    '    *   *Common pairings:* Blue/Orange, Green/Purple, or Teal/Pink.',
+    '    *   *Observation:* Colors are often used to distinguish **status** rather than component type:',
+    '        *   **Trainable Elements:** Often Warm tones (Red, Orange, Deep Pink).',
+    '        *   **Frozen/Static Elements:** Often Cool tones (Grey, Ice Blue, Cyan).',
+    '*   **For Highlights/Results:** High saturation (Primary Red, Bright Gold) is strictly reserved for "Error/Loss," "Ground Truth," or the final output.',
+    '',
+    '#### **B. Shapes & Containers**',
+    '*Design Philosophy: "Softened Geometry." Sharp corners are for data; rounded corners are for processes.*',
+    '',
+    '**Core Components**',
+    '*   **Process Nodes (The Standard):** Rounded Rectangles (Corner radius 5–10px). This is the dominant shape (~80%) for generic layers or steps.',
+    '*   **Tensors & Data:**',
+    '    *   **3D Stacks/Cuboids:** Used to imply depth/volume (e.g., $B \\times H \\times W$).',
+    '    *   **Flat Squares/Grids:** Used for matrices, tokens, or attention maps.',
+    '    *   **Cylinders:** Exclusively reserved for Databases, Buffers, or Memory.',
+    '',
+    '**Grouping & Hierarchy**',
+    '*   **The "Macro-Micro" Pattern:** A solid, light-colored container represents the global view, with a specific module (e.g., "Attention Block") connected via lines to a "zoomed-in" detailed breakout box.',
+    '*   **Borders:**',
+    '    *   **Solid:** For physical components.',
+    '    *   **Dashed:** Highly prevalent for indicating "Logical Stages," "Optional Paths," or "Scopes."',
+    '',
+    '#### **C. Lines & Arrows**',
+    '*Design Philosophy: Line style dictates flow type.*',
+    '',
+    '**Connector Styles**',
+    '*   **Orthogonal / Elbow (Right Angles):** Most papers use this for **Network Architectures** (implies precision, matrices, and tensors).',
+    '*   **Curved / Bezier:** Common choices include this for **System Logic, Feedback Loops, or High-Level Data Flow** (implies narrative and connection).',
+    '',
+    '**Line Semantics**',
+    '*   **Solid Black/Grey:** Standard data flow (Forward pass).',
+    '*   **Dashed Lines:** Universally recognized as "Auxiliary Flow."',
+    '    *   *Used for:* Gradient updates, Skip connections, or Loss calculations.',
+    '*   **Integrated Math:** Standard operators ($\\oplus$ for Add, $\\otimes$ for Concat/Multiply) are frequently placed *directly* on the line or intersection.',
+    '',
+    '#### **D. Typography & Icons**',
+    '*Design Philosophy: Strict separation between "Labeling" and "Math."*',
+    '',
+    '**Typography**',
+    '*   **Labels (Module Names):** **Sans-Serif** (Arial, Roboto, Helvetica).',
+    '    *   *Style:* Bold for headers, Regular for details.',
+    '*   **Variables (Math):** **Serif** (Times New Roman, LaTeX default).',
+    '    *   *Rule:* If it is a variable in your equation (e.g., $x, \\theta, \\mathcal{L}$), it **must** be Serif and Italicized in the diagram.',
+    '',
+    '**Iconography Options**',
+    '*   **For Model State:**',
+    '    *   *Trainable:* 🔥 Fire, ⚡ Lightning.',
+    '    *   *Frozen:* ❄️ Snowflake, 🔒 Padlock, 🛑 Stop Sign (Greyed out).',
+    '*   **For Operations:**',
+    '    *   *Inspection:* 🔍 Magnifying Glass.',
+    '    *   *Processing/Computation:* ⚙️ Gear, 🖥️ Monitor.',
+    '*   **For Content:**',
+    '    *   *Text/Prompt:* 📄 Document, 💬 Chat Bubble.',
+    '    *   *Image:* 🖼️ Actual thumbnail of an image (not just a square).',
+    '',
+    '---',
+    '',
+    '### 3. Common Pitfalls (How to look "Amateur")',
+    '*   ❌ **The "PowerPoint Default" Look:** Using standard Blue/Orange presets with heavy black outlines.',
+    '*   ❌ **Font Mixing:** Using Times New Roman for "Encoder" labels (makes the paper look dated to the 1990s).',
+    '*   ❌ **Inconsistent Dimension:** Mixing flat 2D boxes and 3D isometric cubes without a clear reason (e.g., 2D for logic, 3D for tensors is fine; random mixing is not).',
+    '*   ❌ **Primary Backgrounds:** Using saturated Yellow or Blue backgrounds for grouping (distracts from the content).',
+    '*   ❌ **Ambiguous Arrows:** Using the same line style for "Data Flow" and "Gradient Flow."',
+    '',
+    '---',
+    '',
+    '### 4. Domain-Specific Styles',
+    '',
+    '**If you are writing an AGENT / LLM Paper:**',
+    '*   **Vibe:** Illustrative, Narrative, "Friendly.", Cartoony.',
+    '*   **Key Elements:** Use "User Interface" aesthetics. Chat bubbles for prompts, document icons for retrieval.',
+    "*   **Characters:** It is common to use cute 2D vector robots, human avatars, or emojis to humanize the agent's reasoning steps.",
+    '',
+    '**If you are writing a COMPUTER VISION / 3D Paper:**',
+    '*   **Vibe:** Spatial, Dense, Geometric.',
+    '*   **Key Elements:** Frustums (camera cones), Ray lines, and Point Clouds.',
+    '*   **Color:** Often uses RGB color coding to denote axes or channel correspondence. Use heatmaps (Rainbow/Viridis) to show activation.',
+    '',
+    '**If you are writing a THEORETICAL / OPTIMIZATION Paper:**',
+    '*   **Vibe:** Minimalist, Abstract, "Textbook."',
+    '*   **Key Elements:** Focus on graph nodes (circles) and manifolds (planes/surfaces).',
+    '*   **Color:** Restrained. mostly Grayscale/Black/White with one highlight color (e.g., Gold or Blue). Avoid "cartoony" elements.',
+  ].join('\n')
+}
+
+function neuripsPlotStyleGuide() {
+  return [
+    '# NeurIPS 2025 Statistical Plot Aesthetics Guide',
+    '',
+    '## 1. The "NeurIPS Look": A High-Level Overview',
+    'The prevailing aesthetic for 2025 is defined by **precision, accessibility, and high contrast**. The "default" academic look has shifted away from bare-bones styling toward a more graphic, publication-ready presentation.',
+    '',
+    '*   **Vibe:** Professional, clean, and information-dense.',
+    '*   **Backgrounds:** There is a heavy bias toward **stark white backgrounds** for maximum contrast in print and PDF reading, though the "Seaborn-style" light grey background remains an accepted variant.',
+    '*   **Accessibility:** A strong emphasis on distinguishing data not just by color, but by texture (patterns) and shape (markers) to support black-and-white printing and colorblind readers.',
+    '',
+    '---',
+    '',
+    '## 2. Detailed Style Options',
+    '',
+    '### **Color Palettes**',
+    '*   **Categorical Data:**',
+    '    *   **Soft Pastels:** Matte, low-saturation colors (salmon, sky blue, mint, lavender) are frequently used to prevent visual fatigue.',
+    '    *   **Muted Earth Tones:** "Academic" palettes using olive, beige, slate grey, and navy.',
+    '    *   **High-Contrast Primaries:** Used sparingly when categories must be distinct (e.g., deep orange vs. vivid purple).',
+    '    *   **Accessibility Mode:** A growing trend involves combining color with **geometric patterns** (hatches, dots, stripes) to differentiate categories.',
+    '*   **Sequential & Heatmaps:**',
+    '    *   **Perceptually Uniform:** "Viridis" (blue-to-yellow) and "Magma/Plasma" (purple-to-orange) are the standard.',
+    '    *   **Diverging:** "Coolwarm" (blue-to-red) is used for positive/negative value splits.',
+    '    *   **Avoid:** The traditional "Jet/Rainbow" scale is almost entirely absent.',
+    '',
+    '### **Axes & Grids**',
+    '*   **Grid Style:**',
+    '    *   **Visibility:** Grid lines are almost rarely solid. Common choices include **fine dashed (`--`)** or **dotted (`:`)** lines in light gray.',
+    '    *   **Placement:** Grids are consistently rendered *behind* data elements (low Z-order).',
+    '*   **Spines (Borders):**',
+    '    *   **The "Boxed" Look:** A full enclosure (black spines on all 4 sides) is very common.',
+    '    *   **The "Open" Look:** Removing the top and right spines for a minimalist appearance.',
+    '*   **Ticks:**',
+    '    *   **Style:** Ticks are generally subtle, facing inward, or removed entirely in favor of grid alignment.',
+    '',
+    '### **Layout & Typography**',
+    '*   **Typography:**',
+    '    *   **Font Family:** Exclusively **Sans-Serif** (resembling Helvetica, Arial, or DejaVu Sans). Serif fonts are rarely used for labels.',
+    '    *   **Label Rotation:** X-axis labels are rotated **45 degrees** only when necessary to prevent overlap; otherwise, horizontal orientation is preferred.',
+    '*   **Legends:**',
+    '    *   **Internal Placement:** Floating the legend *inside* the plot area (top-left or top-right) to maximize the "data-ink ratio."',
+    '    *   **Top Horizontal:** Placing the legend in a single row above the plot title.',
+    '*   **Annotations:**',
+    '    *   **Direct Labeling:** Instead of forcing readers to reference a legend, text is often placed directly next to lines or on top of bars.',
+    '',
+    '---',
+    '',
+    '## 3. Type-Specific Guidelines',
+    '',
+    '### **Bar Charts & Histograms**',
+    '*   **Borders:** Two distinct styles are accepted:',
+    '    *   **High-Definition:** Using **black outlines** around colored bars for a "comic-book" or high-contrast look.',
+    '    *   **Borderless:** Solid color fills with no outline (often used with light grey backgrounds).',
+    '*   **Grouping:** Bars are grouped tightly, with significant whitespace between categorical groups.',
+    '*   **Error Bars:** Consistently styled with **black, flat caps**.',
+    '',
+    '### **Line Charts**',
+    '*   **Markers:** A critical observation: Lines almost always include **geometric markers** (circles, squares, diamonds) at data points, rather than just being smooth strokes.',
+    '*   **Line Styles:** Use **dashed lines** (`--`) for theoretical limits, baselines, or secondary data, and **solid lines** for primary experimental data.',
+    '*   **Uncertainty:** Represented by semi-transparent **shaded bands** (confidence intervals) rather than simple vertical error bars.',
+    '',
+    '### **Tree & Pie/Donut Charts**',
+    '*   **Separators:** Thick **white borders** are standard to separate slices or treemap blocks.',
+    '*   **Structure:** Thick **Donut charts** are preferred over traditional Pie charts.',
+    '*   **Emphasis:** "Exploding" (detaching) a specific slice is a common technique to highlight a key statistic.',
+    '',
+    '### **Scatter Plots**',
+    '*   **Shape Coding:** Use different marker shapes (e.g., circles vs. triangles) to encode a categorical dimension alongside color.',
+    '*   **Fills:** Markers are typically solid and fully opaque.',
+    '*   **3D Plots:** Depth is emphasized by drawing "walls" with grids or using drop-lines to the "floor" of the plot.',
+    '',
+    '### **Heatmaps**',
+    '*   **Aspect Ratio:** Cells are almost strictly **square**.',
+    '*   **Annotation:** Writing the exact value (in white or black text) **inside the cell** is highly preferred over relying solely on a color bar.',
+    '*   **Borders:** Cells are often borderless (smooth gradient look) or separated by very thin white lines.',
+    '',
+    '### **Radar Charts**',
+    '*   **Fills:** The polygon area uses **translucent fills** (alpha ~0.2) to show grid lines underneath.',
+    '*   **Perimeter:** The outer boundary is marked by a solid, darker line.',
+    '',
+    '### **Miscellaneous**',
+    '*   **Dot Plots:** Used as a modern alternative to bar charts; often styled as "lollipops" (dots connected to the axis by a thin line).',
+    '',
+    '---',
+    '',
+    '## 4. Common Pitfalls (What to Avoid)',
+    '*   **The "Excel Default" Look:** Avoid heavy 3D effects on bars, shadow drops, or serif fonts (Times New Roman) on axes.',
+    '*   **The "Rainbow" Map:** Avoid the Jet/Rainbow colormap; it is considered outdated and perceptually misleading.',
+    '*   **Ambiguous Lines:** A line chart *without* markers can look ambiguous if data points are sparse; always add markers.',
+    '*   **Over-reliance on Color:** Failing to use patterns or shapes to distinguish groups makes the plot inaccessible to colorblind readers.',
+    '*   **Cluttered Grids:** Avoid solid black grid lines; they compete with the data. Always use light grey/dashed grids.',
   ].join('\n')
 }
 
