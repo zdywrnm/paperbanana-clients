@@ -149,6 +149,15 @@ type ImportReferencesBody = {
   zipUrl?: string
 }
 
+type EvaluateJobBody = {
+  action: 'evaluateJob'
+  adminToken: string
+  jobId: string
+  apiKey?: string
+  provider?: Provider
+  model?: string
+}
+
 type ModelCapabilityBody = {
   action: 'modelCapability'
   provider: Provider
@@ -222,6 +231,7 @@ type RequestBody =
   | ModelCapabilityBody
   | ReferenceLibraryBody
   | ImportReferencesBody
+  | EvaluateJobBody
   | HealthBody
 
 const db = cloud.mongo.db
@@ -373,6 +383,9 @@ export default async function (ctx: FunctionContext) {
     }
     if (action === 'importReferences') {
       return await importReferences(body as ImportReferencesBody)
+    }
+    if (action === 'evaluateJob') {
+      return await evaluateJob(body as EvaluateJobBody)
     }
     return fail(`Unknown action: ${action}`, 400)
   } catch (error: any) {
@@ -803,6 +816,12 @@ async function runCandidate(
   referenceImages: VisionImageInput[] = [],
   logStage: (message: string) => Promise<void> = async () => {},
 ) {
+  // Plot task: instead of calling an image model, generate matplotlib CODE and
+  // render it via the external plot-worker. Keep the diagram path 100% intact.
+  if (normalizeTaskName(body.taskName) === 'plot') {
+    return await runPlotCandidate(jobId, candidateId, body, apiKey, maxCriticRounds, referenceAnalysis, retrievalContext, referenceImages, logStage)
+  }
+
   if (normalizeOutputFormat(body.outputFormat) === 'svg') {
     const description = await buildVisualDescription(jobId, candidateId, body, apiKey, maxCriticRounds, referenceAnalysis, retrievalContext, referenceImages, true)
     await logStage('plan ready')
@@ -928,6 +947,288 @@ async function runCandidate(
   }
 
   return { content: base64, encoding: 'base64' as const, mimeType: 'image/png', description }
+}
+
+// Plot candidate: planner(plot) -> optional stylist(plot) -> matplotlib code via
+// the visualizer prompt -> render via the external plot-worker. Then the SAME
+// image-critic loop as the diagram path, but using the PLOT critic, the
+// worker-rendered PNG as the inspected image, and re-rendering the matplotlib
+// code from the revised description on each "revise". When the worker returns
+// a code error, the critic is fed via the [SYSTEM NOTICE] failure path so it
+// revises the code (mirrors critic_agent.py + PLOT_CRITIC failure section).
+async function runPlotCandidate(
+  jobId: string,
+  candidateId: number,
+  body: CreateJobBody,
+  apiKey: string,
+  maxCriticRounds: number,
+  referenceAnalysis = '',
+  retrievalContext = '',
+  referenceImages: VisionImageInput[] = [],
+  logStage: (message: string) => Promise<void> = async () => {},
+) {
+  let description = await buildPlotDescription(jobId, candidateId, body, apiKey, referenceAnalysis, retrievalContext, referenceImages)
+  await logStage('plan ready')
+
+  // Generate the matplotlib code from the plot description and render it.
+  await logStage('generating matplotlib code')
+  let code = await generatePlotCode(body, apiKey, description)
+  await logStage('rendering plot via worker')
+  let renderStartedAt = new Date()
+  let rendered = await renderPlotViaWorker(code)
+  let stageImage = rendered.base64
+    ? await saveStageImage(jobId, candidateId, 'plot-render-0', rendered.base64, 'image/png', 'base64')
+    : null
+  await recordStage(jobId, {
+    candidateId,
+    type: 'render',
+    title: 'Initial plot render',
+    text: code,
+    image: stageImage,
+    startedAt: renderStartedAt,
+    completedAt: new Date(),
+    error: rendered.error,
+  })
+
+  // Track the last image+description+code that rendered successfully so we can
+  // roll back if a critic re-render throws (mirrors the diagram rollback).
+  let base64 = rendered.base64
+  let lastGoodImage = rendered.base64
+  let lastGoodDescription = description
+  let lastGoodCode = code
+
+  for (let round = 1; round <= maxCriticRounds; round += 1) {
+    await logStage(`plot critic round ${round}`)
+    const criticStartedAt = new Date()
+    const critique = await critiqueRenderedPlot(body, apiKey, description, base64, rendered.error, referenceAnalysis, retrievalContext)
+    const decision = criticDecision(critique, description)
+    const noChanges = decision.noChanges
+    await recordStage(jobId, {
+      candidateId,
+      type: 'critic',
+      title: `Plot critic round ${round}`,
+      round,
+      text: critique,
+      suggestion: noChanges ? '' : critique,
+      image: stageImage,
+      startedAt: criticStartedAt,
+      completedAt: new Date(),
+    })
+    // Only stop when the critic signals "no changes" AND we already have a
+    // valid image. If the current render failed, keep iterating so the critic
+    // can repair the code via the failure path.
+    if (noChanges && base64) break
+
+    description = decision.description
+    await logStage(`regenerating matplotlib code round ${round}`)
+    renderStartedAt = new Date()
+    try {
+      code = await generatePlotCode(body, apiKey, description)
+      rendered = await renderPlotViaWorker(code)
+      if (rendered.error || !rendered.base64) {
+        // Worker rejected the code this round. Record the failure and let the
+        // next critic round see it via the [SYSTEM NOTICE] path. Keep the last
+        // good image as the candidate result if we have one.
+        await logStage(`plot render round ${round} failed: ${rendered.error || 'no image'}`)
+        await recordStage(jobId, {
+          candidateId,
+          type: 'render',
+          title: `Plot rerender round ${round} (failed)`,
+          round,
+          text: code,
+          startedAt: renderStartedAt,
+          completedAt: new Date(),
+          error: rendered.error || 'plot-worker returned no image',
+        })
+        base64 = ''
+        continue
+      }
+      stageImage = await saveStageImage(jobId, candidateId, `plot-render-${round}`, rendered.base64, 'image/png', 'base64')
+      await recordStage(jobId, {
+        candidateId,
+        type: 'render',
+        title: `Plot rerender round ${round}`,
+        round,
+        text: code,
+        image: stageImage,
+        startedAt: renderStartedAt,
+        completedAt: new Date(),
+      })
+      base64 = rendered.base64
+      lastGoodImage = rendered.base64
+      lastGoodDescription = description
+      lastGoodCode = code
+    } catch (error: any) {
+      const message = error?.message || String(error)
+      await logStage(`plot rerender round ${round} failed, rolling back: ${message}`)
+      await recordStage(jobId, {
+        candidateId,
+        type: 'render',
+        title: `Plot rerender round ${round} (rolled back)`,
+        round,
+        text: code,
+        startedAt: renderStartedAt,
+        completedAt: new Date(),
+        error: message,
+      })
+      base64 = lastGoodImage
+      description = lastGoodDescription
+      code = lastGoodCode
+      break
+    }
+  }
+
+  // Fall back to the last good image if the final round left us without one.
+  if (!base64) base64 = lastGoodImage
+  if (!base64) {
+    throw new Error(`Plot generation failed: the plot-worker could not render the matplotlib code${rendered.error ? ` (${rendered.error})` : ''}`)
+  }
+  return { content: base64, encoding: 'base64' as const, mimeType: 'image/png', description }
+}
+
+// Plot planner(+optional stylist). Mirrors buildVisualDescription's structure
+// but uses the PLOT_* prompts ported from the root agents. No text-critic here;
+// the plot critic operates on the rendered image inside runPlotCandidate.
+async function buildPlotDescription(
+  jobId: string,
+  candidateId: number,
+  body: CreateJobBody,
+  apiKey: string,
+  referenceAnalysis = '',
+  retrievalContext = '',
+  referenceImages: VisionImageInput[] = [],
+) {
+  const plannerStartedAt = new Date()
+  const planner = await callTextModel(
+    body.provider,
+    body.mainModelName,
+    apiKey,
+    plotPlannerSystemPrompt(),
+    plotPlannerUserPrompt(body.methodContent, body.caption, referenceAnalysis, retrievalContext),
+    referenceImages,
+  )
+  await recordStage(jobId, {
+    candidateId,
+    type: 'planner',
+    title: 'Plot planner',
+    text: planner,
+    startedAt: plannerStartedAt,
+    completedAt: new Date(),
+  })
+
+  let description = planner
+
+  if ((body.pipelineMode || 'planner_critic') === 'full') {
+    const stylistStartedAt = new Date()
+    description = await callTextModel(
+      body.provider,
+      body.mainModelName,
+      apiKey,
+      plotStylistSystemPrompt(),
+      plotStylistUserPrompt(body.methodContent, body.caption, planner, referenceAnalysis, retrievalContext),
+    )
+    await recordStage(jobId, {
+      candidateId,
+      type: 'stylist',
+      title: 'Plot stylist',
+      text: description,
+      startedAt: stylistStartedAt,
+      completedAt: new Date(),
+    })
+  }
+
+  return description
+}
+
+// Turn a plot description into self-contained matplotlib code (visualizer).
+async function generatePlotCode(body: CreateJobBody, apiKey: string, description: string) {
+  const raw = await callTextModel(
+    body.provider,
+    body.mainModelName,
+    apiKey,
+    plotVisualizerSystemPrompt(),
+    plotVisualizerUserPrompt(description),
+  )
+  return extractPythonCode(raw)
+}
+
+// Strip Markdown fences and any prose so the worker receives runnable code.
+function extractPythonCode(raw: string) {
+  const text = String(raw || '').trim()
+  const fenced = text.match(/```(?:python)?\s*([\s\S]*?)```/i)
+  if (fenced && fenced[1].trim()) return fenced[1].trim()
+  return text
+}
+
+// POST the matplotlib code to the external plot-worker, which executes it in a
+// sandbox and returns a base64 PNG of the produced figure.
+async function renderPlotViaWorker(code: string): Promise<{ base64: string; error: string }> {
+  const workerUrl = String(process.env.PLOT_WORKER_URL || '').trim()
+  if (!workerUrl) {
+    throw new Error('Plot rendering is not configured: PLOT_WORKER_URL is unset')
+  }
+  if (!code || !code.trim()) {
+    return { base64: '', error: 'No matplotlib code was generated' }
+  }
+  const endpoint = `${workerUrl.replace(/\/+$/, '')}/render`
+  let response: Response
+  try {
+    response = await fetchWithRetry(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, token: process.env.PLOT_WORKER_TOKEN || '' }),
+    }, 'plot-worker render')
+  } catch (error: any) {
+    return { base64: '', error: error?.message || String(error) }
+  }
+  let data: any
+  try {
+    data = await parseModelResponse(response)
+  } catch (error: any) {
+    return { base64: '', error: error?.message || String(error) }
+  }
+  const base64 = String(data?.image_base64 || '').trim()
+  if (data?.ok && base64) return { base64, error: '' }
+  return { base64, error: String(data?.error || (base64 ? '' : 'plot-worker returned no image')) }
+}
+
+// Plot critic: same image-critic loop shape as critiqueRenderedDiagram, but uses
+// the PLOT critic rubric and routes a worker render error into the [SYSTEM
+// NOTICE] failure path so the critic repairs the code (mirrors critic_agent.py).
+async function critiqueRenderedPlot(
+  body: CreateJobBody,
+  apiKey: string,
+  description: string,
+  imageBase64: string,
+  renderError = '',
+  referenceAnalysis = '',
+  retrievalContext = '',
+) {
+  const hasImage = typeof imageBase64 === 'string' && imageBase64.trim().length > 100
+  if (!hasImage) {
+    const notice = renderError
+      ? `[SYSTEM NOTICE] The plot image could not be generated based on the current description (likely due to invalid code). Worker error: ${renderError}. Please check the description for errors (e.g., syntax issues, missing data) and provide a revised, simplified, and robust version.`
+      : '[SYSTEM NOTICE] The plot image could not be generated based on the current description (likely due to invalid code). Please check the description for errors (e.g., syntax issues, missing data) and provide a revised, simplified, and robust version.'
+    return await callTextModel(
+      body.provider,
+      body.mainModelName,
+      apiKey,
+      plotCriticSystemPrompt(),
+      [
+        notice,
+        '',
+        plotCriticUserPrompt(body.methodContent, body.caption, description, referenceAnalysis, retrievalContext),
+      ].join('\n'),
+    )
+  }
+  return await callTextModel(
+    body.provider,
+    body.mainModelName,
+    apiKey,
+    plotCriticSystemPrompt(),
+    plotCriticUserPrompt(body.methodContent, body.caption, description, referenceAnalysis, retrievalContext),
+    [{ filename: 'candidate.png', mimeType: 'image/png', url: `data:image/png;base64,${imageBase64}` }],
+  )
 }
 
 async function buildVisualDescription(
@@ -1167,14 +1468,18 @@ async function loadReferenceLibrary(taskName: TaskName, options: { limit: number
 
 async function normalizeStoredReference(item: any): Promise<RetrievedReference> {
   const imageObjectKey = item.imageObjectKey || item.image_object_key || item.objectKey || ''
-  let imageUrl = item.imageUrl || item.image_url || item.url || ''
-  if (!imageUrl && imageObjectKey) {
+  // Always re-sign from the object key so seeded references never serve a stale
+  // (expired) presigned URL; fall back to a stored direct URL only when there is
+  // no object key (e.g. external http reference links).
+  let imageUrl = ''
+  if (imageObjectKey) {
     try {
       imageUrl = await cloud.storage.bucket(bucketName).getDownloadUrl(imageObjectKey, 3600 * 24 * 7)
     } catch {
       imageUrl = ''
     }
   }
+  if (!imageUrl) imageUrl = item.imageUrl || item.image_url || item.url || ''
   return {
     id: String(item._id || item.id || ''),
     taskName: normalizeTaskName(item.taskName || item.task_name),
@@ -2192,6 +2497,138 @@ function imageCriticUserPrompt(method: string, caption: string, description: str
   ), retrievalContext)
 }
 
+// ---------------------------------------------------------------------------
+// PLOT prompt builders (ported verbatim from the root PLOT_* agents). The plot
+// task feeds raw data + visual intent through methodContent/caption, the same
+// fields the diagram task uses.
+// ---------------------------------------------------------------------------
+function plotPlannerSystemPrompt() {
+  return [
+    'I am working on a task: given the raw data (typically in tabular or json format) and a visual intent of the desired plot, automatically generate a corresponding statistical plot that are both accurate and aesthetically pleasing. I will input the raw data and the plot visual intent, and your output should be a detailed description of an illustrative plot that effectively represents the data.  Note that your description should include all the raw data points to be plotted.',
+    '',
+    'To help you understand the task better, and grasp the principles for generating such plots, I will also provide you with several examples. You should learn from these examples to provide your plot description.',
+    '',
+    '** IMPORTANT: **',
+    "Your description should be as detailed as possible. For content, explain the precise mapping of variables to visual channels (x, y, hue) and explicitly enumerate every raw data point's coordinate to be drawn to ensure accuracy. For presentation, specify the exact aesthetic parameters, including specific HEX color codes, font sizes for all labels, line widths, marker dimensions, legend placement, and grid styles. You should learn from the examples' content presentation and aesthetic design (e.g., color schemes).",
+  ].join('\n')
+}
+
+function plotPlannerUserPrompt(rawData: string, visualIntent: string, referenceAnalysis = '', retrievalContext = '') {
+  return withRetrievalContext(withReferenceAnalysis(
+    `Plot Raw Data:\n${rawData}\n\nVisual Intent of the Desired Plot:\n${visualIntent}\n\nDetailed description of the target figure to be generated:`,
+    referenceAnalysis,
+  ), retrievalContext)
+}
+
+function plotStylistSystemPrompt() {
+  return [
+    '## ROLE',
+    'You are a Lead Visual Designer for top-tier AI conferences (e.g., NeurIPS 2025).',
+    '',
+    '## TASK',
+    'You are provided with a preliminary description of a statistical plot to be generated. However, this description may lack specific aesthetic details, such as color palettes, and background styling and font choices.',
+    '',
+    'Your task is to refine and enrich this description based on the provided [NeurIPS 2025 Style Guidelines] to ensure the final generated image is a high-quality, publication-ready plot that strictly adheres to the NeurIPS 2025 aesthetic standards.',
+    '',
+    '**Crucial Instructions:**',
+    '1.  **Enrich Details:** Focus on specifying visual attributes (colors, fonts, line styles, layout adjustments) defined in the guidelines.',
+    '2.  **Preserve Content:** Do NOT alter the semantic content, logic, or quantitative results of the plot. Your job is purely aesthetic refinement, not content editing.',
+    '3.  **Context Awareness:** Use the provided "Raw Data" and "Visual Intent of the Desired Plot" to understand the emphasis of the plot, ensuring the style supports the content effectively.',
+    '',
+    '## INPUT DATA',
+    '-   **Detailed Description**: [The preliminary description of the plot]',
+    '-   **Style Guidelines**: [NeurIPS 2025 Style Guidelines]',
+    '-   **Raw Data**: [The raw data to be visualized]',
+    '-   **Visual Intent of the Desired Plot**: [Visual intent of the desired plot]',
+    '',
+    '## OUTPUT',
+    'Output ONLY the final polished Detailed Description. Do not include any conversational text or explanations.',
+    '',
+    '## [NeurIPS 2025 Style Guidelines]',
+    neuripsPlotStyleGuide(),
+  ].join('\n')
+}
+
+function plotStylistUserPrompt(rawData: string, visualIntent: string, description: string, referenceAnalysis = '', retrievalContext = '') {
+  return withRetrievalContext(withReferenceAnalysis(
+    `Detailed Description: ${description}\nRaw Data: ${rawData}\nVisual Intent of the Desired Plot: ${visualIntent}\nYour Output:`,
+    referenceAnalysis,
+  ), retrievalContext)
+}
+
+function plotCriticSystemPrompt() {
+  return [
+    '## ROLE',
+    'You are a Lead Visual Designer for top-tier AI conferences (e.g., NeurIPS 2025).',
+    '',
+    '## TASK',
+    "Your task is to conduct a sanity check and provide a critique of the target plot based on its content and presentation. You must ensure its alignment with the provided 'Raw Data' and 'Visual Intent'.",
+    '',
+    "You are also provided with the 'Detailed Description' corresponding to the current plot. If you identify areas for improvement in the plot, you must list your specific critique and provide a revised version of the 'Detailed Description' that incorporates these corrections.",
+    '',
+    '## CRITIQUE & REVISION RULES',
+    '',
+    '1. Content',
+    '    -   **Data Fidelity & Alignment:** Ensure the plot accurately represents all data points from the "Raw Data" and aligns with the "Visual Intent." All quantitative values must be correct. No data should be hallucinated, omitted, or misrepresented.',
+    '    -   **Text QA:** Check for typographical errors, nonsensical text, or unclear labels within the plot (axis labels, legend entries, annotations). Suggest specific corrections.',
+    '    -   **Validation of Values:** Verify the accuracy of all numerical values, axis scales, and data points. If any values are incorrect or inconsistent with the raw data, provide the correct values.',
+    '    -   **Caption Exclusion:** Ensure the figure caption text (e.g., "Figure 1: Performance comparison...") is **not** included within the image visual itself. The caption should remain separate.',
+    '',
+    '2. Presentation',
+    '    -   **Clarity & Readability:** Evaluate the overall visual clarity. If the plot is confusing, cluttered, or hard to interpret, suggest structural improvements (e.g., better axis labeling, clearer legend, appropriate plot type).',
+    '    -   **Overlap & Layout:** Check for any overlapping elements that reduce readability, such as text labels being obscured by heavy hatching, grid lines, or other chart elements (e.g., pie chart labels inside dark slices). If overlaps exist, suggest adjusting element positions (e.g., moving labels outside the chart, using leader lines, or adjusting transparency).',
+    '    -   **Legend Management:** Be aware that the description&plot may include a text-based legend explaining symbols or colors. Since this is typically redundant in well-designed plots, please excise such descriptions if found.',
+    '',
+    '3. Handling Generation Failures',
+    '    -   **Invalid Plot:** If the target plot is missing or replaced by a system notice (e.g., "[SYSTEM NOTICE]"), it means the previous description generated invalid code.',
+    '    -   **Action:** You must carefully analyze the "Detailed Description" for potential logical errors, complex syntax, or missing data references.',
+    '    -   **Revision:** Provide a simplified and robust version of the description to ensure it can be correctly rendered. Do not just repeat the same description.',
+    '',
+    '## INPUT DATA',
+    '-   **Target Plot**: [The generated plot]',
+    '-   **Detailed Description**: [The detailed description of the plot]',
+    '-   **Raw Data**: [The raw data to be visualized]',
+    '-   **Visual Intent**: [Visual intent of the desired plot]',
+    '',
+    '## OUTPUT',
+    'Provide your response strictly in the following JSON format.',
+    '',
+    '```json',
+    '{',
+    '    "critic_suggestions": "Insert your detailed critique and specific suggestions for improvement here. If the plot is perfect, write \'No changes needed.\'",',
+    '    "revised_description": "Insert the fully revised detailed description here, incorporating all your suggestions. If no changes are needed, write \'No changes needed.\'"',
+    '}',
+    '```',
+  ].join('\n')
+}
+
+function plotCriticUserPrompt(rawData: string, visualIntent: string, description: string, referenceAnalysis = '', retrievalContext = '') {
+  return withRetrievalContext(withReferenceAnalysis(
+    `Target Plot for Critique:\nDetailed Description: ${description}\nRaw Data: ${rawData}\nVisual Intent: ${visualIntent}\nYour Output:`,
+    referenceAnalysis,
+  ), retrievalContext)
+}
+
+function plotVisualizerSystemPrompt() {
+  return 'You are an expert statistical plot illustrator. Write code to generate high-quality statistical plots based on user requests.'
+}
+
+function plotVisualizerUserPrompt(description: string) {
+  return [
+    `Use python matplotlib to generate a statistical plot based on the following detailed description: ${description}`,
+    '',
+    'Requirements for the code:',
+    "- Use the non-interactive Agg backend (the figure is captured automatically; do NOT call plt.show()).",
+    '- Build exactly one matplotlib figure.',
+    '- The code must be fully self-contained and runnable as-is.',
+    '- Do not read or write any files, and do not access the network.',
+    '- Only use the matplotlib, numpy, pandas, and math libraries (import what you need).',
+    '- Embed all required data inline; do not rely on external data sources.',
+    '',
+    'Only provide the code without any explanations. Code:',
+  ].join('\n')
+}
+
 function diagramPrompt(method: string, caption: string, referenceAnalysis = '', retrievalContext = '') {
   return diagramPromptFromDescription(
     withRetrievalContext(withReferenceAnalysis(
@@ -2780,7 +3217,7 @@ function randomId() {
 
 function validateCreateBody(body: CreateJobBody) {
   if (!['openrouter', 'gemini', 'openai', 'bailian'].includes(body.provider)) throw new Error('Invalid provider')
-  if (body.taskName && body.taskName !== 'diagram') throw new Error('Plot generation is not enabled yet. Please use diagram task.')
+  if (body.taskName && !['diagram', 'plot'].includes(body.taskName)) throw new Error('Invalid taskName. Must be diagram or plot.')
   if (!body.methodContent || body.methodContent.trim().length < 20) throw new Error('methodContent is too short')
   if (!body.caption || body.caption.trim().length < 3) throw new Error('caption is required')
   const requestedFormat = body.outputFormat || body.output_format
@@ -3079,6 +3516,310 @@ function redactClientIp(ip: string) {
 function clamp(value: number, min: number, max: number) {
   if (Number.isNaN(value)) return min
   return Math.max(min, Math.min(value, max))
+}
+
+// ---------------------------------------------------------------------------
+// Admin-only / diagnostic: LLM-judge evaluation of a finished job's result
+// image across 4 dimensions (faithfulness / conciseness / readability /
+// aesthetics), ported from the root diagram_eval_prompts rubric. If the job has
+// a reference/GT image, it runs a REFERENCED pairwise-style judge of the result
+// vs. the reference; otherwise it runs a reference-free single-image quality
+// scoring using the same dimensions. Self-contained; changes no existing action.
+// ---------------------------------------------------------------------------
+type EvalDimension = 'faithfulness' | 'conciseness' | 'readability' | 'aesthetics'
+const evalDimensions: EvalDimension[] = ['faithfulness', 'conciseness', 'readability', 'aesthetics']
+
+async function evaluateJob(body: EvaluateJobBody) {
+  // ADMIN-GATE first, exactly like adminJobs/importReferences.
+  const expected = process.env.ADMIN_TOKEN || ''
+  if (!expected) return fail('Admin API disabled: ADMIN_TOKEN is not configured', 503)
+  if (body.adminToken !== expected) return fail('Invalid admin token', 401)
+
+  const jobId = limitText(body.jobId, 200)
+  if (!jobId) return fail('jobId is required', 400)
+  const job = await jobs.findOne({ _id: jobId })
+  if (!job) return fail('Job not found', 404)
+
+  // Resolve the judge model. Default to the job's main model + provider, but
+  // allow the caller to override provider/model/apiKey for a dedicated judge.
+  const provider = (['openrouter', 'gemini', 'openai', 'bailian'].includes(String(body.provider))
+    ? body.provider
+    : job.provider) as Provider
+  const model = normalizeModelName(provider, limitText(body.model, 120) || job.mainModelName || job.referenceVisionModelName)
+  const apiKey = limitText(body.apiKey, 400)
+  if (!apiKey) return fail('apiKey is required to run the LLM judge', 400)
+  if (!model) return fail('No judge model available for this job', 400)
+
+  // The result image to grade.
+  const resultUrl = await firstResultImageUrl(job)
+  if (!resultUrl) return fail('Job has no result image to evaluate', 400)
+
+  // A reference/GT image, if any: prefer an uploaded reference image, else the
+  // first retrieved PaperBananaBench reference (which carries a GT image).
+  const referenceUrl = await firstReferenceImageUrl(job)
+  const method = String(job.methodContent || '')
+  const caption = String(job.caption || '')
+
+  if (referenceUrl) {
+    const scores = {} as Record<EvalDimension, number>
+    const reasoningParts: string[] = []
+    for (const dimension of evalDimensions) {
+      const raw = await callTextModel(
+        provider,
+        model,
+        apiKey,
+        referencedEvalSystemPrompt(dimension),
+        referencedEvalUserPrompt(dimension, method, caption),
+        [
+          { filename: 'reference.png', mimeType: 'image/png', url: referenceUrl },
+          { filename: 'model.png', mimeType: 'image/png', url: resultUrl },
+        ],
+      )
+      const parsed = parseReferencedVerdict(raw)
+      scores[dimension] = parsed.score
+      reasoningParts.push(`${dimension}: ${parsed.winner} — ${parsed.reasoning}`)
+    }
+    const overall = roundScore(averageScores(scores))
+    return ok({
+      mode: 'referenced',
+      jobId,
+      judge: { provider, model },
+      scores,
+      overall,
+      reasoning: reasoningParts.join('\n\n'),
+    })
+  }
+
+  const scores = {} as Record<EvalDimension, number>
+  const reasoningParts: string[] = []
+  for (const dimension of evalDimensions) {
+    const raw = await callTextModel(
+      provider,
+      model,
+      apiKey,
+      referenceFreeEvalSystemPrompt(dimension),
+      referenceFreeEvalUserPrompt(dimension, method, caption),
+      [{ filename: 'model.png', mimeType: 'image/png', url: resultUrl }],
+    )
+    const parsed = parseReferenceFreeScore(raw)
+    scores[dimension] = parsed.score
+    reasoningParts.push(`${dimension}: ${parsed.score}/10 — ${parsed.reasoning}`)
+  }
+  const overall = roundScore(averageScores(scores))
+  return ok({
+    mode: 'reference_free',
+    jobId,
+    judge: { provider, model },
+    scores,
+    overall,
+    reasoning: reasoningParts.join('\n\n'),
+  })
+}
+
+async function firstResultImageUrl(job: any): Promise<string> {
+  const images = await refreshStoredImageUrls(job.resultImages || [])
+  for (const image of images) {
+    const url = String(image?.url || '')
+    if (url) return url
+  }
+  return ''
+}
+
+async function firstReferenceImageUrl(job: any): Promise<string> {
+  // Prefer an uploaded reference image (analysis raster when present), then a
+  // retrieved PaperBananaBench reference that carries a ground-truth image.
+  const uploaded = await refreshReferenceImageUrls(job.referenceImages || [])
+  for (const image of uploaded) {
+    const url = String(image?.analysisUrl || image?.url || '')
+    if (url && !String(image?.mimeType || '').includes('svg')) return url
+    if (url) return url
+  }
+  const retrieved = job.retrievedReferences || []
+  for (const ref of retrieved) {
+    let url = String(ref?.imageUrl || '')
+    if (!url && ref?.imageObjectKey) {
+      try {
+        url = await cloud.storage.bucket(bucketName).getDownloadUrl(ref.imageObjectKey, 3600)
+      } catch {
+        url = ''
+      }
+    }
+    if (url) return url
+  }
+  return ''
+}
+
+// Maps a pairwise verdict to a 0-10 score: Model wins -> 9, Both good -> 7,
+// Human wins (model loses but is acceptable) -> 4, Both bad -> 2.
+function parseReferencedVerdict(raw: string): { winner: string; score: number; reasoning: string } {
+  const json = parseJsonObject(raw) || {}
+  const winnerRaw = String(json.winner || '').trim().toLowerCase()
+  const reasoning = limitText(json.comparison_reasoning || json.reasoning || raw, 4000)
+  let winner = 'Both are good'
+  let score = 7
+  if (winnerRaw === 'model') { winner = 'Model'; score = 9 }
+  else if (winnerRaw === 'human') { winner = 'Human'; score = 4 }
+  else if (winnerRaw === 'both are bad') { winner = 'Both are bad'; score = 2 }
+  else if (winnerRaw === 'both are good') { winner = 'Both are good'; score = 7 }
+  return { winner, score, reasoning }
+}
+
+function parseReferenceFreeScore(raw: string): { score: number; reasoning: string } {
+  const json = parseJsonObject(raw) || {}
+  const score = clamp(Math.round(Number(json.score)), 0, 10)
+  const reasoning = limitText(json.reasoning || raw, 4000)
+  return { score: Number.isFinite(score) ? score : 0, reasoning }
+}
+
+function averageScores(scores: Record<EvalDimension, number>) {
+  const values = evalDimensions.map((dimension) => Number(scores[dimension] || 0))
+  return values.reduce((sum, value) => sum + value, 0) / (values.length || 1)
+}
+
+function roundScore(value: number) {
+  return Math.round(value * 100) / 100
+}
+
+// LLM-judge prompts ported from /tmp/pb-root/prompts/diagram_eval_prompts.py.
+// The "referenced" variants are the pairwise Human-vs-Model judges; the
+// "reference_free" variants reuse the same Core Definitions and Veto Rules to
+// score a single image on a 0-10 scale.
+function evalDimensionDefinition(dimension: EvalDimension) {
+  if (dimension === 'faithfulness') {
+    return [
+      '# Core Definition: What is Faithfulness?',
+      "**Faithfulness** is the technical alignment between the figure and the paper's content. A faithful figure must be factually correct, logically sound, and strictly follow the figure scope described in the **Caption**. It must preserve the **core logic flow** and **module interactions** mentioned in the Method Section without introducing fabrication. While simplification is encouraged (e.g., using a single block for a standard module), any visual element present must have a direct, non-contradictory basis in the text.",
+      '',
+      "**Important**: Since \"smart simplification\" is typically allowed and encouraged in academic figures, a figure which looks simpler is not necessarily less faithful, as long as it preserves the core logic flow and module interactions mentioned in the Method Section without introducing fabrication, and adheres to the caption.",
+      '',
+      '# Veto Rules (The "Red Lines")',
+      '**If a figure commits any of the following errors, it fails the faithfulness test immediately:**',
+      '1.  **Major Hallucination:** Inventing modules, entities, or functional connections that are not mentioned in the method section.',
+      '2.  **Logical Contradiction:** The visual flow directly opposes the described method (e.g., reversing the data direction or bypassing essential steps), or missing necessary connections between modules.',
+      '3.  **Scope Violation:** The content presented in the figure is inconsistent with the figure scope described in the **Caption**.',
+      '4.  **Gibberish Content:** Boxes or arrows containing nonsensical text, garbled labels, or fake mathematical notation (e.g., broken LaTeX characters).',
+    ].join('\n')
+  }
+  if (dimension === 'conciseness') {
+    return [
+      '# Core Definition: What is Conciseness?',
+      '**Conciseness** is the "Visual Signal-to-Noise Ratio." A concise figure acts as a high-level **visual abstraction** of the method, not a literal translation of the text. It must distill complex logic into clean blocks, flowcharts, or icons. The ideal figure relies on **structural shorthand** (arrows, grouping) and **keywords** rather than explicit descriptions, heavy mathematical notation, or dense textual explanations.',
+      '',
+      '# Veto Rules (The "Red Lines")',
+      '**If a figure commits any of the following errors, it fails the conciseness test immediately:**',
+      '1.  **Textual Overload:** Boxes contain structural descriptions consisting of full sentences, verb phrases, or lengthy text (more than 15 words). *Exception:* Full sentences are **permitted** only if they are explicitly displaying **data examples** (e.g., an input query or sample text).',
+      '2.  **Literal Copying:** The figure appears to be a "box-ified" copy-paste of the Method Section text with no visual abstraction.',
+      '3.  **Math Dump:** The figure is cluttered with raw equations instead of conceptual blocks.',
+    ].join('\n')
+  }
+  if (dimension === 'readability') {
+    return [
+      '# Core Definition: What is Readability?',
+      '**Readability** measures how easily a reader can **extract and navigate** the core information within a figure. A readable figure must have a **clear visual flow**, **high legibility**, and **minimal visual interference**. The goal is for a reader to understand the data paths at a glance. Readability is a **baseline requirement**, not a differentiator; only severe violations of the Veto Rules below constitute readability failures.',
+      '',
+      '# Veto Rules (The "Red Lines")',
+      '**If a figure commits any of the following errors, it fails the readability test immediately:**',
+      '1.  **Visual Noise & Extraneous Elements:** The Figure Title or full caption text rendered within the image pixels (subfigure labels like (a), (b) are permitted), duplicated text labels without semantic purpose, or watermarks that clutter the visual space.',
+      '2.  **Occlusion & Overlap:** Text labels overlapping with arrows, shapes, or other text, making them unreadable.',
+      '3.  **Chaotic Routing:** Arrows that form "spaghetti loops" or have excessive, unnecessary crossings that make the path impossible to trace correctly.',
+      '4.  **Illegible Font Size:** Text that is too small to be read without extreme zooming, or font sizes that vary inconsistently throughout the figure.',
+      '5.  **Low Contrast:** Light-colored text on light backgrounds (or dark on dark) that makes labels invisible or extremely hard to decipher.',
+      '6.  **Inefficient Layout:** The figure fails to use a compact rectangular layout, leaving large empty margins, protruding elements, or unbalanced empty corners.',
+      '7.  **Using black background:** A black background is typically not compatible with academic publications.',
+    ].join('\n')
+  }
+  return [
+    '# Core Definition: What is Aesthetics?',
+    '**Aesthetics** refers to the visual polish, professional maturity, and design harmony of the figure. A high-aesthetic figure meets the publication standards of top-tier AI conferences (e.g., NeurIPS, CVPR). It features a refined visual hierarchy, balanced use of white space, consistent typography, and a harmonious color palette. The design should feel "scientific" and precise, avoiding amateurish artifacts or overly simplistic clip-art styles.',
+    '',
+    '# Veto Rules (The "Red Lines")',
+    '**If a figure commits any of the following errors, it fails the aesthetics test immediately:**',
+    '1.  **Low Quality Artifacts:** Visible background grids (e.g., from draw.io), pixelation, blurry elements, or distorted shapes.',
+    '2.  **Harmful Color Violations:** Using jarring, high-saturation "neon" colors or inconsistent color schemes that lack professional balance.',
+    '3.  **Amateurish Styling:** Overly rounded "bubbly" styles, "Corporate Blog" clip-art, or decorative elements that lack scientific precision.',
+    '4.  **Inconsistent Typography:** Mixing multiple unrelated fonts or having misaligned text blocks.',
+    '5.  **Using black background:** A black background is typically considered unprofessional in academic publications.',
+  ].join('\n')
+}
+
+function referencedEvalSystemPrompt(dimension: EvalDimension) {
+  const label = dimension.charAt(0).toUpperCase() + dimension.slice(1)
+  return [
+    '# Role',
+    `You are an expert judge in academic visual design. Your task is to evaluate the **${label}** of a **Model-generated figure** by comparing it against a **Human-drawn figure**.`,
+    '',
+    '# Inputs',
+    '1.  **Method Section**: [content]',
+    '2.  **Figure Caption**: [content]',
+    '3.  **Human-drawn figure (Human)**: the FIRST attached image.',
+    '4.  **Model-generated figure (Model)**: the SECOND attached image.',
+    '',
+    evalDimensionDefinition(dimension),
+    '',
+    '# Decision Criteria',
+    `Compare the two figures and select the strictly best option based solely on the **Core Definition** and **Veto Rules** above for **${label}**.`,
+    '-   **Model**: The Model better embodies the Core Definition while avoiding all Veto errors.',
+    '-   **Human**: The Human better embodies the Core Definition while avoiding all Veto errors.',
+    '-   **Both are good**: Both figures successfully embody the Core Definition without any Veto errors. (For Readability, this is the DEFAULT when neither figure violates a Veto Rule.)',
+    '-   **Both are bad**: BOTH figures violate one or more Veto Rules or fail the Core Definition. Do not force a winner if both fail.',
+    '',
+    '# Output Format (Strict JSON)',
+    'Provide your response strictly in the following JSON format:',
+    '```json',
+    '{',
+    '    "comparison_reasoning": "Human: ...; Model: ...; Conclusion: ...",',
+    '    "winner": "Model" | "Human" | "Both are good" | "Both are bad"',
+    '}',
+    '```',
+  ].join('\n')
+}
+
+function referencedEvalUserPrompt(dimension: EvalDimension, method: string, caption: string) {
+  const includeMethod = dimension === 'faithfulness' || dimension === 'conciseness'
+  return [
+    includeMethod ? `Method Section:\n${method}\n` : '',
+    `Figure Caption:\n${caption}`,
+    '',
+    'The first attached image is the Human-drawn figure; the second is the Model-generated figure.',
+    'Provide your JSON verdict.',
+  ].filter(Boolean).join('\n')
+}
+
+function referenceFreeEvalSystemPrompt(dimension: EvalDimension) {
+  const label = dimension.charAt(0).toUpperCase() + dimension.slice(1)
+  return [
+    '# Role',
+    `You are an expert judge in academic visual design. Your task is to evaluate the **${label}** of a single **Model-generated figure** (NO human reference is available — this is a reference-free quality assessment).`,
+    '',
+    '# Inputs',
+    '1.  **Method Section**: [content]',
+    '2.  **Figure Caption**: [content]',
+    '3.  **Model-generated figure (Model)**: the attached image.',
+    '',
+    evalDimensionDefinition(dimension),
+    '',
+    '# Scoring',
+    `Score the figure's **${label}** on an integer scale from 0 to 10, where 10 is flawless and fully embodies the Core Definition, and 0 means it grossly violates the Veto Rules. Any Veto Rule violation should cap the score at 4 or below.`,
+    '',
+    '# Output Format (Strict JSON)',
+    'Provide your response strictly in the following JSON format:',
+    '```json',
+    '{',
+    '    "score": 0,',
+    '    "reasoning": "Explain the score with reference to the Core Definition and Veto Rules."',
+    '}',
+    '```',
+  ].join('\n')
+}
+
+function referenceFreeEvalUserPrompt(dimension: EvalDimension, method: string, caption: string) {
+  const includeMethod = dimension === 'faithfulness' || dimension === 'conciseness'
+  return [
+    includeMethod ? `Method Section:\n${method}\n` : '',
+    `Figure Caption:\n${caption}`,
+    '',
+    'The attached image is the Model-generated figure. Provide your JSON score.',
+  ].filter(Boolean).join('\n')
 }
 
 // ---------------------------------------------------------------------------
