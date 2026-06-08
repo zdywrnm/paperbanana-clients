@@ -1178,21 +1178,22 @@ async function renderPlotViaWorker(code: string): Promise<{ base64: string; erro
   // Hard client-side timeout (~28s, just above the worker's 20s wall clock).
   // Do NOT use fetchWithRetry here: a wedged worker would otherwise block Laf
   // indefinitely (it retries x2, after a paid LLM call per critic round x
-  // candidate). On timeout/abort we return an error so the critic loop reacts
-  // instead of retrying the slow request.
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 28000)
+  // candidate). We bound the wait with Promise.race rather than AbortController
+  // because the Laf runtime does not expose a global AbortController. On timeout
+  // we return an error so the critic loop reacts instead of hanging.
+  let timer: any
   try {
-    response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, token: process.env.PLOT_WORKER_TOKEN || '' }),
-      signal: controller.signal,
-    })
+    response = await Promise.race([
+      fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, token: process.env.PLOT_WORKER_TOKEN || '' }),
+      }),
+      new Promise<Response>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('plot-worker timed out')), 28000)
+      }),
+    ])
   } catch (error: any) {
-    if (error?.name === 'AbortError' || controller.signal.aborted) {
-      return { base64: '', error: 'plot-worker timed out' }
-    }
     return { base64: '', error: error?.message || String(error) }
   } finally {
     clearTimeout(timer)
