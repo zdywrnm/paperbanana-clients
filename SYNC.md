@@ -24,6 +24,25 @@
 
 ## 条目（最新在上）
 
+### [2026-06-08] PaperBanana 根项目 10 项功能对齐（diagram 主链路）— by Codex
+变更：补齐 web 主链路的参考检索、手选参考、图像 Critic、Stylist 风格指南、pipeline stages、候选阶段记录、Refine Image、下载全部、管理员诊断摘要；`data_stat/plot` 明确标为二阶段能力，避免假入口。
+契约：
+- `createJob` 新增/启用 `taskName`、`retrievalSetting`(`none|auto|random|manual`)、`manualReferenceIds[]`；`manual` 必须带参考 id。
+- 新增 action：`referenceLibrary`（列出 `paperbanana_references` + fallback 文本参考卡）、`refineImage`（源图 + 精修指令 → refine job）。
+- `paperbanana_jobs/publicJob` 新增 `jobType`、`taskName`、`infographicCategory`、`retrievalSetting`、`manualReferenceIds`、`retrievedReferenceIds`、`retrievedReferences`、`stages`、`criticMode`、`imageSize`。
+- `auth-gateway` 已放行 `referenceLibrary` / `refineImage`，精修会像 createJob 一样附登录用户身份；`ADMIN_TOKEN` 逻辑不变。
+- 正式 PaperBananaBench 大图不进仓库；后续应把参考元数据导入 `paperbanana_references`，图片放对象存储。
+各端待办：
+- [x] laf-functions
+- [x] auth-gateway
+- [x] packages/api
+- [x] web（manual 参考、timeline、zip、refine、plot 占位）
+- [ ] miniprogram（兼容新增字段；后续补 UI）
+- [ ] android（兼容新增字段；后续补 UI）
+- [ ] windows（兼容新增字段；后续补 UI）
+- [ ] macos（兼容新增字段；后续补 UI）
+- [ ] plot render worker（二阶段：Python/matplotlib 执行与图像 Critic）
+
 ### [2026-06-07] 管理员改为账号制(邮箱白名单) — by Codex
 变更：admin 鉴权从手填 `ADMIN_TOKEN` 改为“登录邮箱 ∈ `ADMIN_EMAILS`”；新增 `adminStatus`；前端去掉 token 框、按 `adminStatus` 显示站长入口。
 契约：网关新增 env `ADMIN_EMAILS` + `adminStatus` 动作；admin 动作不再接收用户 `adminToken`（网关内部注入）；`ADMIN_TOKEN` 仅网关内部保留。

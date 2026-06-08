@@ -1,9 +1,10 @@
 import { AlertTriangle } from 'lucide-react';
 import { formatConfigurationMode, formatDate, formatErrorMessage, formatOutputFormat, formatReferenceImageMode } from '../utils';
+import DownloadJobZipButton from './DownloadJobZipButton';
 import ResultFigure from './ResultFigure';
 import StatusBadge from './StatusBadge';
 
-export default function JobTable({ jobs, showUser, apiBase }) {
+export default function JobTable({ jobs, showUser, apiBase, onUseForRefine }) {
   return (
     <div className="job-table">
       {!jobs.length ? <div className="job-empty">暂无任务记录</div> : null}
@@ -30,6 +31,14 @@ export default function JobTable({ jobs, showUser, apiBase }) {
               <span>
                 <strong>格式</strong>
                 {formatOutputFormat(item.output_format)}
+              </span>
+              <span>
+                <strong>检索</strong>
+                {formatRetrievalSetting(item.retrieval_setting)}
+              </span>
+              <span>
+                <strong>阶段</strong>
+                {(item.stages || []).length || 0}
               </span>
               {showUser ? (
                 <span>
@@ -58,6 +67,10 @@ export default function JobTable({ jobs, showUser, apiBase }) {
             <div>
               <strong>参考图处理</strong>
               <span title={item.reference_image_mode_used || item.reference_image_mode}>{formatReferenceImageMode(item.reference_image_mode_used || item.reference_image_mode)}</span>
+            </div>
+            <div>
+              <strong>评审模式</strong>
+              <span>{item.critic_mode === 'image' ? '图像评审' : item.critic_mode === 'text' ? '文本评审' : '未记录'}</span>
             </div>
           </div>
 
@@ -94,10 +107,13 @@ export default function JobTable({ jobs, showUser, apiBase }) {
 
           {item.status === 'succeeded' && (item.result_images || []).some((image) => image.url) ? (
             <div className="job-record-images">
-              <strong>结果图</strong>
+              <div className="job-record-images-head">
+                <strong>结果图</strong>
+                <DownloadJobZipButton job={item} apiBase={apiBase} />
+              </div>
               <div className="job-record-image-grid">
                 {(item.result_images || []).filter((image) => image.url).map((image) => (
-                  <ResultFigure key={image.filename} image={image} apiBase={apiBase} labelPrefix="结果图" outputFormat={item.output_format} />
+                  <ResultFigure key={image.filename} image={image} apiBase={apiBase} labelPrefix="结果图" outputFormat={item.output_format} onUseForRefine={onUseForRefine} />
                 ))}
               </div>
             </div>
@@ -106,4 +122,11 @@ export default function JobTable({ jobs, showUser, apiBase }) {
       ))}
     </div>
   );
+}
+
+function formatRetrievalSetting(setting) {
+  if (setting === 'auto') return '自动';
+  if (setting === 'random') return '随机';
+  if (setting === 'manual') return '手动';
+  return '无';
 }

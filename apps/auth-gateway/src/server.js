@@ -104,6 +104,11 @@ app.post('/paperbanana-api', async (req, res) => {
       return sendLafResponse(res, data);
     }
 
+    if (action === 'referenceLibrary') {
+      const data = await callLaf(withGatewayToken(req.body), req);
+      return sendLafResponse(res, data);
+    }
+
     if (action === 'adminUsers') {
       await requireAdminSessionOrToken(req);
       const data = await listAuthUsers(req.body);
@@ -129,6 +134,21 @@ app.post('/paperbanana-api', async (req, res) => {
       const data = await callLaf(
         withGatewayToken({
           ...jobBody,
+          userId: session?.user?.id || '',
+          userEmail: session?.user?.email || '',
+        }),
+        req,
+      );
+      return sendLafResponse(res, data);
+    }
+
+    if (action === 'refineImage') {
+      const session = await optionalSession(req);
+      const data = await callLaf(
+        withGatewayToken({
+          ...req.body,
+          mainModelName: normalizeModelName(req.body?.provider, req.body?.mainModelName),
+          imageModelName: normalizeModelName(req.body?.provider, req.body?.imageModelName),
           userId: session?.user?.id || '',
           userEmail: session?.user?.email || '',
         }),

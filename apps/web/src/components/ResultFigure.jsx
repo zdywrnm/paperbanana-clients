@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { FileDown } from 'lucide-react';
 import { resolveImageUrl } from '../utils';
 
-export default function ResultFigure({ image, apiBase, labelPrefix = '候选图', outputFormat = '' }) {
+export default function ResultFigure({ image, apiBase, labelPrefix = '候选图', outputFormat = '', onUseForRefine }) {
   const [isDownloading, setIsDownloading] = useState(false);
   const url = resolveImageUrl(apiBase, image.url);
   const candidateNumber = Number(image.candidate_id ?? 0) + 1;
@@ -29,10 +29,17 @@ export default function ResultFigure({ image, apiBase, labelPrefix = '候选图'
       <figcaption className="result-caption">
         <span>{labelPrefix} {candidateNumber} · {format.toUpperCase()}</span>
         {url ? (
-          <button type="button" onClick={downloadImage} disabled={isDownloading} aria-label={`下载${labelPrefix} ${candidateNumber}`}>
-            <FileDown size={15} />
-            {isDownloading ? '准备中' : '下载'}
-          </button>
+          <span className="result-actions">
+            {onUseForRefine ? (
+              <button type="button" onClick={() => onUseForRefine(url, image)} aria-label={`精修${labelPrefix} ${candidateNumber}`}>
+                精修
+              </button>
+            ) : null}
+            <button type="button" onClick={downloadImage} disabled={isDownloading} aria-label={`下载${labelPrefix} ${candidateNumber}`}>
+              <FileDown size={15} />
+              {isDownloading ? '准备中' : '下载'}
+            </button>
+          </span>
         ) : null}
       </figcaption>
     </figure>

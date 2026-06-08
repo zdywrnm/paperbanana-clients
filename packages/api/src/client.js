@@ -1,5 +1,6 @@
-const AUTH_REQUIRED = import.meta.env.VITE_AUTH_REQUIRED === 'true';
-const AUTH_ENABLED = AUTH_REQUIRED || import.meta.env.VITE_AUTH_ENABLED === 'true' || Boolean(import.meta.env.VITE_AUTH_BASE);
+const META_ENV = import.meta.env || {};
+const AUTH_REQUIRED = META_ENV.VITE_AUTH_REQUIRED === 'true';
+const AUTH_ENABLED = AUTH_REQUIRED || META_ENV.VITE_AUTH_ENABLED === 'true' || Boolean(META_ENV.VITE_AUTH_BASE);
 
 export async function fetchJson(url, options = {}) {
   const fetchOptions = AUTH_ENABLED ? { credentials: 'include', ...options } : options;
