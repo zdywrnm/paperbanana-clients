@@ -1,6 +1,7 @@
-import { fetchJson } from './client';
+import { fetchJson } from './client.js';
 
-const BACKEND_MODE = import.meta.env.VITE_BACKEND_MODE || '';
+const META_ENV = import.meta.env || {};
+const BACKEND_MODE = META_ENV.VITE_BACKEND_MODE || '';
 
 export async function fetchBackendHealth(apiBase) {
   const candidates = BACKEND_MODE === 'gateway'
@@ -37,6 +38,7 @@ export async function createJobRequest(apiBase, health, payload) {
         configurationMode: payload.configurationMode,
         provider: payload.provider,
         apiKeys: payload.apiKeys,
+        taskName: payload.taskName,
         methodContent: payload.methodContent,
         caption: payload.caption,
         infographicCategory: payload.infographicCategory,
@@ -47,6 +49,8 @@ export async function createJobRequest(apiBase, health, payload) {
         referenceImageMode: payload.referenceImageMode,
         referenceImages: payload.referenceImages || [],
         pipelineMode: toLafPipeline(payload.pipelineMode),
+        retrievalSetting: payload.retrievalSetting,
+        manualReferenceIds: payload.manualReferenceIds || [],
         aspectRatio: payload.aspectRatio,
         numCandidates: payload.numCandidates,
         maxCriticRounds: payload.maxCriticRounds,
@@ -80,6 +84,47 @@ export async function createJobRequest(apiBase, health, payload) {
       mock: payload.mock,
     }),
   });
+}
+
+export async function referenceLibraryRequest(apiBase, health, opts = {}) {
+  if (shouldUsePaperbananaApi(apiBase, health)) {
+    const data = await fetchJson(lafEndpoint(apiBase), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'referenceLibrary',
+        taskName: opts.taskName || 'diagram',
+        query: opts.query || '',
+        limit: opts.limit || 24,
+      }),
+    });
+    return { references: (data.references || []).map(normalizeRetrievedReference) };
+  }
+
+  throw new Error('参考案例库需要使用 Laf 或登录网关后端。');
+}
+
+export async function refineImageRequest(apiBase, health, payload = {}) {
+  if (shouldUsePaperbananaApi(apiBase, health)) {
+    const data = await fetchJson(lafEndpoint(apiBase), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'refineImage',
+        provider: payload.provider,
+        apiKeys: payload.apiKeys,
+        imageModelName: payload.imageModelName,
+        sourceImageUrl: payload.sourceImageUrl,
+        sourceImageObjectKey: payload.sourceImageObjectKey,
+        editInstruction: payload.editInstruction,
+        aspectRatio: payload.aspectRatio,
+        imageSize: payload.imageSize,
+      }),
+    });
+    return { id: data.jobId, status: data.status };
+  }
+
+  throw new Error('图片精修需要使用 Laf 或登录网关后端。');
 }
 
 export async function prepareReferenceUploadRequest(apiBase, health, files) {
@@ -264,6 +309,7 @@ function normalizeJob(job = {}) {
     id: job.id || job._id,
     status: job.status,
     provider: job.provider,
+    job_type: job.job_type || job.jobType || 'generate',
     user_id: job.user_id || job.userId || '',
     user_email: job.user_email || job.userEmail || '',
     configuration_mode: job.configuration_mode || job.configurationMode || 'advanced',
@@ -277,7 +323,14 @@ function normalizeJob(job = {}) {
     reference_image_mode: job.reference_image_mode || job.referenceImageMode || (rawReferenceImages.length ? 'vision_model' : ''),
     reference_image_mode_used: job.reference_image_mode_used || job.referenceImageModeUsed || (rawReferenceImages.length ? 'vision_model' : 'none'),
     pipeline_mode: job.pipeline_mode || job.pipelineMode || '',
+    task_name: job.task_name || job.taskName || 'diagram',
+    retrieval_setting: job.retrieval_setting || job.retrievalSetting || 'none',
+    retrieved_reference_ids: job.retrieved_reference_ids || job.retrievedReferenceIds || [],
+    retrieved_references: (job.retrieved_references || job.retrievedReferences || []).map(normalizeRetrievedReference),
+    stages: (job.stages || []).map(normalizeJobStage),
+    critic_mode: job.critic_mode || job.criticMode || '',
     aspect_ratio: job.aspect_ratio || job.aspectRatio || '',
+    image_size: job.image_size || job.imageSize || '',
     num_candidates: job.num_candidates || job.numCandidates || 0,
     max_critic_rounds: job.max_critic_rounds || job.maxCriticRounds || 0,
     prompt_char_count: job.prompt_char_count || job.promptCharCount || 0,
@@ -304,6 +357,44 @@ function normalizeJob(job = {}) {
     updated_at: job.updated_at || job.updatedAt,
     started_at: job.started_at || job.startedAt,
     completed_at: job.completed_at || job.completedAt,
+  };
+}
+
+function normalizeRetrievedReference(item = {}) {
+  return {
+    id: item.id || item._id || '',
+    task_name: item.task_name || item.taskName || 'diagram',
+    title: item.title || item.visualIntent || item.caption || '',
+    summary: item.summary || item.content || item.methodExcerpt || '',
+    image_url: item.image_url || item.imageUrl || item.url || '',
+    image_object_key: item.image_object_key || item.imageObjectKey || item.objectKey || '',
+    source: item.source || 'paperbanana-bench',
+  };
+}
+
+function normalizeJobStage(stage = {}) {
+  return {
+    id: stage.id || stage._id || '',
+    candidate_id: Number(stage.candidate_id ?? stage.candidateId ?? 0),
+    type: stage.type || '',
+    title: stage.title || '',
+    round: Number(stage.round || 0),
+    text: stage.text || stage.description || stage.message || '',
+    suggestion: stage.suggestion || stage.criticSuggestion || '',
+    image: stage.image ? normalizeStageImage(stage.image) : null,
+    started_at: stage.started_at || stage.startedAt,
+    completed_at: stage.completed_at || stage.completedAt,
+    duration_ms: Number(stage.duration_ms ?? stage.durationMs ?? 0),
+    error: stage.error || '',
+  };
+}
+
+function normalizeStageImage(image = {}) {
+  return {
+    filename: image.filename || image.url || '',
+    url: image.url || '',
+    storage: image.storage || '',
+    mime_type: image.mime_type || image.mimeType || '',
   };
 }
 

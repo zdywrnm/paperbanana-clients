@@ -29,6 +29,8 @@ import {
   getJobRequest,
   modelCapabilityRequest,
   prepareReferenceUploadRequest,
+  referenceLibraryRequest,
+  refineImageRequest,
   submitFeedbackRequest,
   userJobsRequest,
 } from '@paperbanana/api';
@@ -59,7 +61,9 @@ import ExampleTemplates from './components/ExampleTemplates';
 import FeedbackDialog from './components/FeedbackDialog';
 import JobStatus from './components/JobStatus';
 import JobTable from './components/JobTable';
+import ReferenceLibraryPanel from './components/ReferenceLibraryPanel';
 import ReferenceUploadPanel from './components/ReferenceUploadPanel';
+import RefinePanel from './components/RefinePanel';
 import Select from './components/Select';
 import TaskRecordsPanel from './components/TaskRecordsPanel';
 import { useAuthSession } from './hooks/useAuthSession';
@@ -88,6 +92,10 @@ export default function App() {
   const [isUploadingReferences, setIsUploadingReferences] = useState(false);
   const [pipelineMode, setPipelineMode] = useState('demo_planner_critic');
   const [retrievalSetting, setRetrievalSetting] = useState('none');
+  const [manualReferenceIds, setManualReferenceIds] = useState([]);
+  const [referenceLibrary, setReferenceLibrary] = useState([]);
+  const [referenceLibraryError, setReferenceLibraryError] = useState('');
+  const [isLoadingReferenceLibrary, setIsLoadingReferenceLibrary] = useState(false);
   const [aspectRatio, setAspectRatio] = useState('16:9');
   const [numCandidates, setNumCandidates] = useState(1);
   const [maxCriticRounds, setMaxCriticRounds] = useState(1);
@@ -111,6 +119,14 @@ export default function App() {
   const [feedbackError, setFeedbackError] = useState('');
   const [feedbackSuccess, setFeedbackSuccess] = useState(false);
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
+  const [refineSourceUrl, setRefineSourceUrl] = useState('');
+  const [refineInstruction, setRefineInstruction] = useState('');
+  const [refineImageSize, setRefineImageSize] = useState('2K');
+  const [refineAspectRatio, setRefineAspectRatio] = useState('16:9');
+  const [refineJobId, setRefineJobId] = useState('');
+  const [refineJob, setRefineJob] = useState(null);
+  const [refineError, setRefineError] = useState('');
+  const [isSubmittingRefine, setIsSubmittingRefine] = useState(false);
 
   const currentUser = AUTH_ENABLED ? authSession.session?.user : null;
   const authReady = !AUTH_REQUIRED || Boolean(!authSession.isPending && currentUser);
@@ -119,6 +135,7 @@ export default function App() {
   const apiBaseNormalized = apiBase.replace(/\/$/, '');
   const selectedInfographicCategory = INFOGRAPHIC_CATEGORIES.find(([id]) => id === infographicCategory) || INFOGRAPHIC_CATEGORIES[0];
   const isAdvancedMode = configurationMode === 'advanced';
+  const isPlotCategory = infographicCategory === 'data_stat';
   const defaultMainModelLabel = findModelLabel(providerConfig.mainModels, providerConfig.mainModel);
   const defaultImageModelLabel = findModelLabel(providerConfig.imageModels, providerConfig.imageModel);
   const defaultVisionModelLabel = findModelLabel(providerConfig.visionModels || [], providerConfig.visionModel);
@@ -214,12 +231,49 @@ export default function App() {
     };
   }, [apiBaseNormalized, currentJobId, health]);
 
+  useEffect(() => {
+    if (!refineJobId) return undefined;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const data = await getJobRequest(apiBaseNormalized, health, refineJobId);
+        if (!cancelled) {
+          setRefineJob(data);
+          setRefineError('');
+        }
+      } catch (err) {
+        if (!cancelled) setRefineError(err.message);
+      }
+    };
+    load();
+    const timer = setInterval(load, 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [apiBaseNormalized, refineJobId, health]);
+
+  useEffect(() => {
+    if (!isAdvancedMode || retrievalSetting !== 'manual') return undefined;
+    let cancelled = false;
+    loadReferenceLibrary({ silent: true, cancelledRef: () => cancelled });
+    return () => {
+      cancelled = true;
+    };
+  }, [apiBaseNormalized, health, isAdvancedMode, retrievalSetting]);
+
   const canSubmit = useMemo(() => {
     const hasKey = selectedKey.trim();
     const canMock = isAdvancedMode && mock && health?.mock_enabled;
     const hasVisionModel = !needsReferenceVisionModel || Boolean((isAdvancedMode ? referenceVisionModelName : providerConfig.visionModel)?.trim());
-    return authReady && hasVisionModel && !mainModelDirectUnsupported && (hasKey || canMock) && methodContent.trim().length >= 20 && caption.trim().length >= 3 && !isSubmitting && !isUploadingReferences;
-  }, [authReady, selectedKey, methodContent, caption, isSubmitting, mock, health, isAdvancedMode, needsReferenceVisionModel, referenceVisionModelName, providerConfig.visionModel, isUploadingReferences, mainModelDirectUnsupported]);
+    const hasManualReferences = !isAdvancedMode || retrievalSetting !== 'manual' || manualReferenceIds.length > 0;
+    return authReady && !isPlotCategory && hasManualReferences && hasVisionModel && !mainModelDirectUnsupported && (hasKey || canMock) && methodContent.trim().length >= 20 && caption.trim().length >= 3 && !isSubmitting && !isUploadingReferences;
+  }, [authReady, isPlotCategory, selectedKey, methodContent, caption, isSubmitting, mock, health, isAdvancedMode, retrievalSetting, manualReferenceIds.length, needsReferenceVisionModel, referenceVisionModelName, providerConfig.visionModel, isUploadingReferences, mainModelDirectUnsupported]);
+
+  const canSubmitRefine = useMemo(() => {
+    const hasKey = selectedKey.trim();
+    return authReady && hasKey && refineSourceUrl.trim() && refineInstruction.trim().length >= 3 && !isSubmittingRefine;
+  }, [authReady, selectedKey, refineSourceUrl, refineInstruction, isSubmittingRefine]);
 
   useEffect(() => {
     if (!AUTH_ENABLED || !currentUser) return undefined;
@@ -388,6 +442,36 @@ export default function App() {
     }
   }
 
+  async function loadReferenceLibrary(options = {}) {
+    if (!options.silent) setReferenceLibraryError('');
+    setIsLoadingReferenceLibrary(true);
+    try {
+      const data = await referenceLibraryRequest(apiBaseNormalized, health, { taskName: 'diagram', limit: 24 });
+      if (options.cancelledRef?.()) return;
+      setReferenceLibrary(data.references || []);
+    } catch (err) {
+      if (options.cancelledRef?.()) return;
+      setReferenceLibraryError(err.message);
+    } finally {
+      if (!options.cancelledRef?.()) setIsLoadingReferenceLibrary(false);
+    }
+  }
+
+  function toggleManualReference(id) {
+    setManualReferenceIds((current) => {
+      if (current.includes(id)) return current.filter((item) => item !== id);
+      if (current.length >= 10) return current;
+      return [...current, id];
+    });
+  }
+
+  function useImageForRefine(url) {
+    setRefineSourceUrl(url);
+    setRefineInstruction((current) => current || '提升标签可读性，优化留白和箭头关系，保持论文图示风格。');
+    setRefineAspectRatio(aspectRatio);
+    setActiveTab('refine');
+  }
+
   async function submitJob(event) {
     event.preventDefault();
     setError('');
@@ -419,6 +503,7 @@ export default function App() {
         referenceImages: uploadedReferenceImages,
         pipelineMode: isAdvancedMode ? pipelineMode : 'demo_planner_critic',
         retrievalSetting: isAdvancedMode ? retrievalSetting : 'none',
+        manualReferenceIds: isAdvancedMode && retrievalSetting === 'manual' ? manualReferenceIds : [],
         aspectRatio: isAdvancedMode ? aspectRatio : '16:9',
         numCandidates: isAdvancedMode ? Number(numCandidates) : 1,
         maxCriticRounds: isAdvancedMode ? Number(maxCriticRounds) : 1,
@@ -431,6 +516,38 @@ export default function App() {
       setError(err.message);
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function submitRefine(event) {
+    event.preventDefault();
+    setRefineError('');
+    setIsSubmittingRefine(true);
+    setRefineJob(null);
+    try {
+      const scopedApiKeys = {
+        openrouter: '',
+        gemini: '',
+        openai: '',
+        bailian: '',
+        [providerConfig.keyName]: selectedKey,
+      };
+      const created = await refineImageRequest(apiBaseNormalized, health, {
+        provider,
+        apiKeys: scopedApiKeys,
+        mainModelName: isAdvancedMode ? mainModelName : providerConfig.mainModel,
+        imageModelName: isAdvancedMode ? imageGenModelName : providerConfig.imageModel,
+        sourceImageUrl: refineSourceUrl.trim(),
+        editInstruction: refineInstruction,
+        aspectRatio: refineAspectRatio,
+        imageSize: refineImageSize,
+      });
+      setRefineJobId(created.id);
+      if (currentUser) void loadUserJobs({ silent: true });
+    } catch (err) {
+      setRefineError(err.message);
+    } finally {
+      setIsSubmittingRefine(false);
     }
   }
 
@@ -597,6 +714,7 @@ export default function App() {
 
       <nav className="paper-tabs">
         <button type="button" className={activeTab === 'generate' ? 'active' : ''} onClick={() => setActiveTab('generate')}>生成候选图</button>
+        <button type="button" className={activeTab === 'refine' ? 'active' : ''} onClick={() => setActiveTab('refine')}>精修图片</button>
         <button type="button" className={activeTab === 'records' ? 'active' : ''} onClick={() => setActiveTab('records')}>任务记录</button>
         {isAdmin ? (
           <button type="button" className={activeTab === 'admin' ? 'active' : ''} onClick={() => setActiveTab('admin')}>站长</button>
@@ -779,6 +897,17 @@ export default function App() {
                   <span>模拟模式</span>
                 </label>
               ) : null}
+
+              {retrievalSetting === 'manual' ? (
+                <ReferenceLibraryPanel
+                  references={referenceLibrary}
+                  selectedIds={manualReferenceIds}
+                  isLoading={isLoadingReferenceLibrary}
+                  error={referenceLibraryError}
+                  onToggle={toggleManualReference}
+                  onRefresh={() => loadReferenceLibrary()}
+                />
+              ) : null}
             </>
           )}
 
@@ -809,6 +938,11 @@ export default function App() {
             />
             <p>{selectedInfographicCategory[2]}</p>
           </div>
+          {isPlotCategory ? (
+            <div className="plot-placeholder">
+              数据统计图需要独立 Python/matplotlib 渲染服务，当前网站先开放论文图解生成。请先选择方法框架图、流程图或系统架构图。
+            </div>
+          ) : null}
 
           <ReferenceUploadPanel
             images={referenceImages}
@@ -838,9 +972,26 @@ export default function App() {
               <p>{currentJobId ? `任务编号 ${currentJobId}` : '提交任务后显示生成结果。'}</p>
             </div>
           </div>
-          <JobStatus job={job} apiBase={apiBaseNormalized} />
+          <JobStatus job={job} apiBase={apiBaseNormalized} onUseForRefine={useImageForRefine} />
         </section>
         </section>
+      ) : activeTab === 'refine' ? (
+        <RefinePanel
+          sourceUrl={refineSourceUrl}
+          instruction={refineInstruction}
+          imageSize={refineImageSize}
+          aspectRatio={refineAspectRatio}
+          canSubmit={canSubmitRefine}
+          isSubmitting={isSubmittingRefine}
+          error={refineError}
+          job={refineJob}
+          apiBase={apiBaseNormalized}
+          onSourceUrlChange={setRefineSourceUrl}
+          onInstructionChange={setRefineInstruction}
+          onImageSizeChange={setRefineImageSize}
+          onAspectRatioChange={setRefineAspectRatio}
+          onSubmit={submitRefine}
+        />
       ) : activeTab === 'admin' && isAdmin ? (
         <section className="admin-panel">
           <div className="section-head">
@@ -878,7 +1029,7 @@ export default function App() {
               <span>{adminJobs.length ? `${adminJobs.length} 条任务` : '暂无任务数据'}</span>
             </div>
             {adminError ? <div className="error-line"><AlertTriangle size={16} /> {formatErrorMessage(adminError)}</div> : null}
-            <JobTable jobs={adminJobs} showUser apiBase={apiBaseNormalized} />
+            <JobTable jobs={adminJobs} showUser apiBase={apiBaseNormalized} onUseForRefine={useImageForRefine} />
           </div>
         </section>
       ) : (
@@ -891,6 +1042,7 @@ export default function App() {
           apiBase={apiBaseNormalized}
           onLogin={() => setShowAuthPanel(true)}
           onRefresh={() => loadUserJobs()}
+          onUseForRefine={useImageForRefine}
         />
       )}
         </>

@@ -4,6 +4,8 @@ import * as crypto from 'crypto'
 type Provider = 'openrouter' | 'gemini' | 'openai' | 'bailian'
 type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed'
 type OutputFormat = 'png' | 'svg'
+type TaskName = 'diagram' | 'plot'
+type RetrievalSetting = 'none' | 'auto' | 'random' | 'manual'
 type ReferenceImageRole = 'original' | 'analysis'
 type ReferenceImageMode = 'auto' | 'main_model' | 'vision_model'
 type ReferenceImageModeUsed = 'none' | 'main_model' | 'vision_model'
@@ -22,8 +24,11 @@ type CreateJobBody = {
   action: 'createJob'
   provider: Provider
   apiKeys: ApiKeys
+  configurationMode?: string
+  taskName?: TaskName
   methodContent: string
   caption: string
+  infographicCategory?: string
   userId?: string
   userEmail?: string
   outputFormat?: OutputFormat
@@ -35,9 +40,26 @@ type CreateJobBody = {
   referenceImageModeUsed?: ReferenceImageModeUsed
   referenceImages?: ReferenceImageInput[]
   pipelineMode?: 'planner_critic' | 'full' | 'vanilla'
+  retrievalSetting?: RetrievalSetting
+  manualReferenceIds?: string[]
   aspectRatio?: '16:9' | '21:9' | '3:2' | '1:1'
   numCandidates?: number
   maxCriticRounds?: number
+}
+
+type RefineImageBody = {
+  action: 'refineImage'
+  provider: Provider
+  apiKeys: ApiKeys
+  mainModelName?: string
+  imageModelName: string
+  sourceImageUrl?: string
+  sourceImageObjectKey?: string
+  editInstruction: string
+  aspectRatio?: '16:9' | '21:9' | '3:2' | '1:1'
+  imageSize?: '2K' | '4K'
+  userId?: string
+  userEmail?: string
 }
 
 type PrepareReferenceUploadBody = {
@@ -121,6 +143,13 @@ type ModelCapabilityBody = {
   model: string
 }
 
+type ReferenceLibraryBody = {
+  action: 'referenceLibrary'
+  taskName?: TaskName
+  query?: string
+  limit?: number
+}
+
 type HealthBody = {
   action: 'health'
 }
@@ -139,8 +168,34 @@ type VisionImageInput = {
   url: string
 }
 
+type RetrievedReference = {
+  id: string
+  taskName: TaskName
+  title: string
+  summary: string
+  imageUrl: string
+  imageObjectKey: string
+  source: string
+}
+
+type JobStage = {
+  id: string
+  candidateId: number
+  type: string
+  title: string
+  round?: number
+  text?: string
+  suggestion?: string
+  image?: any
+  startedAt: Date
+  completedAt: Date
+  durationMs: number
+  error?: string
+}
+
 type RequestBody =
   | CreateJobBody
+  | RefineImageBody
   | PrepareReferenceUploadBody
   | GetJobBody
   | AdminJobsBody
@@ -148,11 +203,13 @@ type RequestBody =
   | AdminFeedbackBody
   | UserJobsBody
   | ModelCapabilityBody
+  | ReferenceLibraryBody
   | HealthBody
 
 const db = cloud.mongo.db
 const jobs = db.collection('paperbanana_jobs')
 const feedback = db.collection('paperbanana_feedback')
+const references = db.collection('paperbanana_references')
 const bucketName = process.env.PAPERBANANA_BUCKET || 'paperbanana'
 const maxReferenceImages = Number(process.env.PAPERBANANA_MAX_REFERENCE_IMAGES || 3)
 const maxReferenceBytes = Number(process.env.PAPERBANANA_MAX_REFERENCE_BYTES || 5 * 1024 * 1024)
@@ -164,6 +221,7 @@ const feedbackRateLimitWindowMs = 10 * 60 * 1000
 const feedbackRateLimitMax = 5
 const allowedFeedbackCategories = new Set<FeedbackCategory>(['bug', 'feature', 'experience', 'other'])
 const allowedFeedbackPlatforms = new Set<FeedbackPlatform>(['web', 'miniprogram', 'android', 'windows', 'macos'])
+const allowedRetrievalSettings = new Set<RetrievalSetting>(['none', 'auto', 'random', 'manual'])
 let openRouterModelCache: { expiresAt: number; modalities: Map<string, string[]> } | null = null
 
 const openaiVisionMainModels = new Set([
@@ -198,6 +256,45 @@ const geminiVisionMainModels = new Set([
   'gemini-3.5-flash',
 ])
 
+const fallbackReferences: RetrievedReference[] = [
+  {
+    id: 'paperbanana-style-agent-flow',
+    taskName: 'diagram',
+    title: 'Agent workflow with retrieval, planning, generation, and critique',
+    summary: 'Use a left-to-right multi-agent workflow: input paper content, retrieval examples, planner, stylist, visualizer, critic loop, and final figure. Group agents in soft rounded containers with arrows showing feedback.',
+    imageUrl: '',
+    imageObjectKey: '',
+    source: 'paperbanana-fallback',
+  },
+  {
+    id: 'paperbanana-style-model-pipeline',
+    taskName: 'diagram',
+    title: 'Academic model pipeline with modules and tensor/data flow',
+    summary: 'Use a modular scientific diagram with input data on the left, stacked processing blocks in the center, auxiliary losses or memory paths in dashed connectors, and output artifacts on the right.',
+    imageUrl: '',
+    imageObjectKey: '',
+    source: 'paperbanana-fallback',
+  },
+  {
+    id: 'paperbanana-style-macro-micro',
+    taskName: 'diagram',
+    title: 'Macro-micro layout with zoomed module detail',
+    summary: 'Use one large system container plus a zoomed-in breakout box for an important module. Connect the high-level block to the detail view with thin lines and keep labels short.',
+    imageUrl: '',
+    imageObjectKey: '',
+    source: 'paperbanana-fallback',
+  },
+  {
+    id: 'paperbanana-style-comparison',
+    taskName: 'diagram',
+    title: 'Method comparison or ablation diagram',
+    summary: 'Use parallel lanes for baseline and proposed method. Highlight the added component with one accent color, keep shared parts grey or muted, and show the final performance/output comparison at the right edge.',
+    imageUrl: '',
+    imageObjectKey: '',
+    source: 'paperbanana-fallback',
+  },
+]
+
 export default async function (ctx: FunctionContext) {
   setCorsHeaders(ctx)
   if (ctx.request?.method === 'OPTIONS') {
@@ -215,11 +312,17 @@ export default async function (ctx: FunctionContext) {
     if (action === 'createJob') {
       return await createJob(body as CreateJobBody, ctx)
     }
+    if (action === 'refineImage') {
+      return await refineImage(body as RefineImageBody, ctx)
+    }
     if (action === 'prepareReferenceUpload') {
       return await prepareReferenceUpload(body as PrepareReferenceUploadBody)
     }
     if (action === 'modelCapability') {
       return await modelCapability(body as ModelCapabilityBody)
+    }
+    if (action === 'referenceLibrary') {
+      return await referenceLibrary(body as ReferenceLibraryBody)
     }
     if (action === 'getJob') {
       return await getJob((body as GetJobBody).jobId)
@@ -295,16 +398,31 @@ async function modelCapability(body: ModelCapabilityBody) {
   return ok(await referenceModelCapability(body.provider, normalizeModelName(body.provider, body.model)))
 }
 
+async function referenceLibrary(body: ReferenceLibraryBody) {
+  const taskName = normalizeTaskName(body.taskName)
+  const limit = clamp(Number(body.limit || 24), 1, 60)
+  const query = limitText(body.query, 120).toLowerCase()
+  const docs = await loadReferenceLibrary(taskName, { limit: Math.max(limit, 24) })
+  const filtered = query
+    ? docs.filter((item) => [item.title, item.summary, item.id].join(' ').toLowerCase().includes(query))
+    : docs
+  return ok({ references: filtered.slice(0, limit) })
+}
+
 async function createJob(body: CreateJobBody, ctx: FunctionContext) {
   validateCreateBody(body)
   const normalizedBody = {
     ...body,
+    taskName: normalizeTaskName(body.taskName),
+    infographicCategory: limitText(body.infographicCategory, 80),
     mainModelName: normalizeModelName(body.provider, body.mainModelName),
     imageModelName: normalizeModelName(body.provider, body.imageModelName),
     referenceVisionModelName: normalizeModelName(body.provider, body.referenceVisionModelName || body.mainModelName),
     referenceImageMode: normalizeReferenceImageMode(body.referenceImageMode),
     referenceImages: normalizeReferenceImages(body.referenceImages || []),
     outputFormat: normalizeOutputFormat(body.outputFormat || body.output_format),
+    retrievalSetting: normalizeRetrievalSetting(body.retrievalSetting),
+    manualReferenceIds: normalizeManualReferenceIds(body.manualReferenceIds || []),
   }
   const apiKey = selectApiKey(normalizedBody.provider, normalizedBody.apiKeys)
   if (!apiKey) {
@@ -330,10 +448,13 @@ async function createJob(body: CreateJobBody, ctx: FunctionContext) {
     _id: jobId,
     status: 'queued' as JobStatus,
     provider: normalizedBody.provider,
+    configurationMode: limitText(normalizedBody.configurationMode, 40) || 'advanced',
+    taskName: normalizedBody.taskName,
     userId: normalizedBody.userId || '',
     userEmail: normalizedBody.userEmail || '',
     methodContent: normalizedBody.methodContent,
     caption: normalizedBody.caption,
+    infographicCategory: normalizedBody.infographicCategory,
     mainModelName: normalizedBody.mainModelName,
     imageModelName: normalizedBody.imageModelName,
     referenceVisionModelName: normalizedBody.referenceVisionModelName,
@@ -342,6 +463,12 @@ async function createJob(body: CreateJobBody, ctx: FunctionContext) {
     referenceImages: normalizedBody.referenceImages,
     outputFormat: normalizedBody.outputFormat,
     pipelineMode: normalizedBody.pipelineMode || 'planner_critic',
+    retrievalSetting: normalizedBody.retrievalSetting,
+    manualReferenceIds: normalizedBody.manualReferenceIds,
+    retrievedReferenceIds: [],
+    retrievedReferences: [],
+    stages: [],
+    criticMode: normalizedBody.outputFormat === 'svg' ? 'text' : 'image',
     aspectRatio: normalizedBody.aspectRatio || '16:9',
     numCandidates: safeNumCandidates,
     maxCriticRounds: safeCriticRounds,
@@ -362,6 +489,72 @@ async function createJob(body: CreateJobBody, ctx: FunctionContext) {
   // Laf 云函数是常驻 Node.js Runtime。API key 只保留在本次闭包中，
   // 不写入数据库，不进入日志。
   void runJob(jobId, jobBody, apiKey, safeNumCandidates, safeCriticRounds).catch(async (error) => {
+    await markFailed(jobId, error?.message || String(error))
+  })
+
+  return ok({ jobId, status: 'queued' })
+}
+
+async function refineImage(body: RefineImageBody, ctx: FunctionContext) {
+  validateRefineBody(body)
+  const normalizedBody = {
+    ...body,
+    mainModelName: normalizeModelName(body.provider, body.mainModelName || body.imageModelName),
+    imageModelName: normalizeModelName(body.provider, body.imageModelName),
+    aspectRatio: normalizeAspectRatio(body.aspectRatio),
+    imageSize: body.imageSize === '4K' ? '4K' as const : '2K' as const,
+  }
+  const apiKey = selectApiKey(normalizedBody.provider, normalizedBody.apiKeys)
+  if (!apiKey) {
+    return fail(`Missing API key for provider ${normalizedBody.provider}`, 400)
+  }
+
+  const now = new Date()
+  const jobId = `refine-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+  const record = {
+    _id: jobId,
+    status: 'queued' as JobStatus,
+    jobType: 'refine',
+    provider: normalizedBody.provider,
+    configurationMode: 'advanced',
+    taskName: 'diagram',
+    userId: normalizedBody.userId || '',
+    userEmail: normalizedBody.userEmail || '',
+    methodContent: normalizedBody.editInstruction,
+    caption: 'Refine existing PaperBanana image',
+    infographicCategory: '图片精修',
+    mainModelName: normalizedBody.mainModelName,
+    imageModelName: normalizedBody.imageModelName,
+    outputFormat: 'png',
+    pipelineMode: 'refine',
+    retrievalSetting: 'none',
+    manualReferenceIds: [],
+    retrievedReferenceIds: [],
+    retrievedReferences: [],
+    referenceImages: [],
+    resultImages: [],
+    stages: [],
+    criticMode: 'image',
+    aspectRatio: normalizedBody.aspectRatio,
+    imageSize: normalizedBody.imageSize,
+    numCandidates: 1,
+    maxCriticRounds: 0,
+    promptCharCount: normalizedBody.editInstruction.length,
+    sourceImageUrl: limitText(normalizedBody.sourceImageUrl, 1200),
+    sourceImageObjectKey: limitText(normalizedBody.sourceImageObjectKey, 300),
+    logs: [],
+    error: '',
+    clientIp: getClientIp(ctx),
+    userAgent: ctx.headers?.['user-agent'] || '',
+    createdAt: now,
+    updatedAt: now,
+    startedAt: null,
+    completedAt: null,
+  }
+
+  await jobs.insertOne(record)
+
+  void runRefineJob(jobId, normalizedBody, apiKey).catch(async (error) => {
     await markFailed(jobId, error?.message || String(error))
   })
 
@@ -498,49 +691,65 @@ async function runJob(
     { $set: { status: 'running', startedAt: new Date(), updatedAt: new Date() } },
   )
 
+  const retrievedReferences = await resolveRetrievedReferences(body, apiKey)
+  await jobs.updateOne(
+    { _id: jobId },
+    {
+      $set: {
+        retrievedReferenceIds: retrievedReferences.map((item) => item.id),
+        retrievedReferences,
+        updatedAt: new Date(),
+      },
+    },
+  )
+  if (retrievedReferences.length) {
+    await appendLog(jobId, `Retrieved ${retrievedReferences.length} PaperBanana reference example${retrievedReferences.length > 1 ? 's' : ''}`)
+  }
+
   let referenceAnalysis = ''
-  let sharedPlannerDescription = ''
+  let uploadedVisionInputs: VisionImageInput[] = []
 
   if ((body.referenceImages || []).length) {
     if (body.referenceImageModeUsed === 'main_model') {
       await appendLog(jobId, 'Reference mode: main model direct')
-      await appendLog(jobId, 'Reference planner: planning with main model')
-      const visionInputs = await buildVisionImageInputs(body.referenceImages || [])
-      sharedPlannerDescription = await planDiagramDescription(body, apiKey, maxCriticRounds, '', visionInputs, true)
-      await appendLog(jobId, 'Reference planner: plan ready')
+      uploadedVisionInputs = await buildVisionImageInputs(body.referenceImages || [])
     } else {
       await appendLog(jobId, 'Reference mode: independent vision model')
       referenceAnalysis = await analyzeReferenceImages(jobId, body, apiKey)
     }
   }
 
-  const results = []
-  for (let i = 0; i < numCandidates; i += 1) {
+  const retrievalContext = buildRetrievalContext(retrievedReferences)
+  const retrievedVisionInputs = await buildRetrievedVisionInputs(retrievedReferences)
+  const referenceVisionInputs = [...uploadedVisionInputs, ...retrievedVisionInputs]
+  const results: any[] = []
+  const candidateIndexes = Array.from({ length: numCandidates }, (_, index) => index)
+  const concurrency = clamp(Number(process.env.PAPERBANANA_CANDIDATE_CONCURRENCY || 1), 1, numCandidates)
+  await runWithConcurrency(candidateIndexes, concurrency, async (i) => {
     const candidateNo = i + 1
-    await appendLog(jobId, sharedPlannerDescription ? `Candidate ${candidateNo}: using shared plan` : `Candidate ${candidateNo}: planning`)
-    const result = await runCandidate(body, apiKey, maxCriticRounds, referenceAnalysis, sharedPlannerDescription, async (message) => {
+    await appendLog(jobId, `Candidate ${candidateNo}: planning`)
+    const result = await runCandidate(jobId, i, body, apiKey, maxCriticRounds, referenceAnalysis, retrievalContext, referenceVisionInputs, async (message) => {
       await appendLog(jobId, `Candidate ${candidateNo}: ${message}`)
     })
     await appendLog(jobId, `Candidate ${candidateNo}: saving result`)
     const saved = await saveResult(jobId, i, result.content, result.mimeType, result.encoding)
-    results.push({
+    results[i] = {
       candidateId: i,
       filename: saved.filename,
       url: saved.url,
       storage: saved.storage,
       mimeType: result.mimeType,
       description: result.description,
-    })
-  }
+    }
+  })
 
   await jobs.updateOne(
     { _id: jobId },
     {
       $set: {
         status: 'succeeded',
-        resultImages: results,
+        resultImages: results.filter(Boolean),
         referenceAnalysis,
-        referencePlannerDescription: sharedPlannerDescription,
         completedAt: new Date(),
         updatedAt: new Date(),
       },
@@ -549,55 +758,116 @@ async function runJob(
 }
 
 async function runCandidate(
+  jobId: string,
+  candidateId: number,
   body: CreateJobBody,
   apiKey: string,
   maxCriticRounds: number,
   referenceAnalysis = '',
-  sharedPlannerDescription = '',
+  retrievalContext = '',
+  referenceImages: VisionImageInput[] = [],
   logStage: (message: string) => Promise<void> = async () => {},
 ) {
   if (normalizeOutputFormat(body.outputFormat) === 'svg') {
-    const description = sharedPlannerDescription || await planDiagramDescription(body, apiKey, maxCriticRounds, referenceAnalysis)
+    const description = await buildVisualDescription(jobId, candidateId, body, apiKey, maxCriticRounds, referenceAnalysis, retrievalContext, referenceImages, true)
     await logStage('plan ready')
     await logStage('rendering SVG')
     const svg = await callSvgModel(body.provider, body.mainModelName, apiKey, description)
+    const stageImage = await saveStageImage(jobId, candidateId, 'svg-final', svg, 'image/svg+xml', 'utf8')
+    await recordStage(jobId, {
+      candidateId,
+      type: 'render',
+      title: 'SVG render',
+      text: 'Final SVG rendered from the current visual description.',
+      image: stageImage,
+    })
     return { content: svg, encoding: 'utf8' as const, mimeType: 'image/svg+xml', description }
   }
 
   if ((body.pipelineMode || 'planner_critic') === 'vanilla') {
-    if (sharedPlannerDescription) {
-      await logStage('plan ready')
-      await logStage('rendering PNG')
-      const base64 = await callImageModel(body.provider, body.imageModelName, apiKey, diagramPromptFromDescription(sharedPlannerDescription), body.aspectRatio || '16:9')
-      return { content: base64, encoding: 'base64' as const, mimeType: 'image/png', description: sharedPlannerDescription }
-    }
-    const prompt = diagramPrompt(body.methodContent, body.caption, referenceAnalysis)
+    const prompt = diagramPrompt(body.methodContent, body.caption, referenceAnalysis, retrievalContext)
+    await recordStage(jobId, {
+      candidateId,
+      type: 'planner',
+      title: 'Vanilla prompt',
+      text: prompt,
+    })
     await logStage('rendering PNG')
     const base64 = await callImageModel(body.provider, body.imageModelName, apiKey, prompt, body.aspectRatio || '16:9')
+    const stageImage = await saveStageImage(jobId, candidateId, 'vanilla-render', base64, 'image/png', 'base64')
+    await recordStage(jobId, {
+      candidateId,
+      type: 'render',
+      title: 'Vanilla render',
+      text: 'Initial image rendered without planner/stylist pipeline.',
+      image: stageImage,
+    })
     return { content: base64, encoding: 'base64' as const, mimeType: 'image/png', description: prompt }
   }
 
-  const description = sharedPlannerDescription || await planDiagramDescription(body, apiKey, maxCriticRounds, referenceAnalysis)
+  let description = await buildVisualDescription(jobId, candidateId, body, apiKey, 0, referenceAnalysis, retrievalContext, referenceImages, false)
   await logStage('plan ready')
-  const imagePrompt = diagramPromptFromDescription(description)
+  let imagePrompt = diagramPromptFromDescription(description)
   await logStage('rendering PNG')
-  const base64 = await callImageModel(body.provider, body.imageModelName, apiKey, imagePrompt, body.aspectRatio || '16:9')
+  let base64 = await callImageModel(body.provider, body.imageModelName, apiKey, imagePrompt, body.aspectRatio || '16:9')
+  let stageImage = await saveStageImage(jobId, candidateId, 'render-0', base64, 'image/png', 'base64')
+  await recordStage(jobId, {
+    candidateId,
+    type: 'render',
+    title: 'Initial render',
+    text: imagePrompt,
+    image: stageImage,
+  })
+
+  for (let round = 1; round <= maxCriticRounds; round += 1) {
+    await logStage(`critic round ${round}`)
+    const critique = await critiqueRenderedDiagram(body, apiKey, description, base64, referenceAnalysis, retrievalContext)
+    const noChanges = /no changes needed/i.test(critique)
+    await recordStage(jobId, {
+      candidateId,
+      type: 'critic',
+      title: `Image critic round ${round}`,
+      round,
+      text: critique,
+      suggestion: noChanges ? '' : critique,
+      image: stageImage,
+    })
+    if (noChanges) break
+
+    description = extractRevisedDescription(critique, description)
+    imagePrompt = diagramPromptFromDescription(description)
+    await logStage(`rerender round ${round}`)
+    base64 = await callImageModel(body.provider, body.imageModelName, apiKey, imagePrompt, body.aspectRatio || '16:9')
+    stageImage = await saveStageImage(jobId, candidateId, `render-${round}`, base64, 'image/png', 'base64')
+    await recordStage(jobId, {
+      candidateId,
+      type: 'render',
+      title: `Rerender round ${round}`,
+      round,
+      text: imagePrompt,
+      image: stageImage,
+    })
+  }
+
   return { content: base64, encoding: 'base64' as const, mimeType: 'image/png', description }
 }
 
-async function planDiagramDescription(
+async function buildVisualDescription(
+  jobId: string,
+  candidateId: number,
   body: CreateJobBody,
   apiKey: string,
-  maxCriticRounds: number,
+  textCriticRounds: number,
   referenceAnalysis = '',
+  retrievalContext = '',
   referenceImages: VisionImageInput[] = [],
-  forcePlanner = false,
+  includeTextCritic = false,
 ) {
-  if ((body.pipelineMode || 'planner_critic') === 'vanilla' && !forcePlanner) {
-    return withReferenceAnalysis(
+  if ((body.pipelineMode || 'planner_critic') === 'vanilla') {
+    return withRetrievalContext(withReferenceAnalysis(
       `Create an academic method diagram for this methodology:\n${body.methodContent}\n\nVisual intent:\n${body.caption}`,
       referenceAnalysis,
-    )
+    ), retrievalContext)
   }
 
   const planner = await callTextModel(
@@ -605,14 +875,17 @@ async function planDiagramDescription(
     body.mainModelName,
     apiKey,
     plannerSystemPrompt(),
-    plannerUserPrompt(body.methodContent, body.caption, referenceAnalysis),
+    plannerUserPrompt(body.methodContent, body.caption, referenceAnalysis, retrievalContext),
     referenceImages,
   )
+  await recordStage(jobId, {
+    candidateId,
+    type: 'planner',
+    title: 'Planner',
+    text: planner,
+  })
 
   let description = planner
-  if (forcePlanner && (body.pipelineMode || 'planner_critic') === 'vanilla') {
-    return description
-  }
 
   if ((body.pipelineMode || 'planner_critic') === 'full') {
     description = await callTextModel(
@@ -620,23 +893,231 @@ async function planDiagramDescription(
       body.mainModelName,
       apiKey,
       stylistSystemPrompt(),
-      stylistUserPrompt(body.methodContent, body.caption, planner, referenceAnalysis),
+      stylistUserPrompt(body.methodContent, body.caption, planner, referenceAnalysis, retrievalContext),
     )
+    await recordStage(jobId, {
+      candidateId,
+      type: 'stylist',
+      title: 'Stylist',
+      text: description,
+    })
   }
 
-  for (let round = 0; round < maxCriticRounds; round += 1) {
+  if (!includeTextCritic) return description
+
+  for (let round = 1; round <= textCriticRounds; round += 1) {
     const critique = await callTextModel(
       body.provider,
       body.mainModelName,
       apiKey,
       criticSystemPrompt(),
-      criticUserPrompt(body.methodContent, body.caption, description, referenceAnalysis),
+      criticUserPrompt(body.methodContent, body.caption, description, referenceAnalysis, retrievalContext),
     )
-    if (/no changes needed/i.test(critique)) break
+    const noChanges = /no changes needed/i.test(critique)
+    await recordStage(jobId, {
+      candidateId,
+      type: 'critic',
+      title: `Text critic round ${round}`,
+      round,
+      text: critique,
+      suggestion: noChanges ? '' : critique,
+    })
+    if (noChanges) break
     description = critique
   }
 
   return description
+}
+
+async function runRefineJob(jobId: string, body: RefineImageBody, apiKey: string) {
+  await jobs.updateOne(
+    { _id: jobId },
+    { $set: { status: 'running', startedAt: new Date(), updatedAt: new Date() } },
+  )
+
+  const sourceUrl = await resolveSourceImageUrl(body)
+  const sourceImage = {
+    filename: 'source-image',
+    mimeType: inferMimeTypeFromUrl(sourceUrl),
+    url: sourceUrl,
+  }
+
+  await appendLog(jobId, 'Refine: analyzing source image')
+  const description = await callTextModel(
+    body.provider,
+    body.mainModelName || body.imageModelName,
+    apiKey,
+    refineSystemPrompt(),
+    refineUserPrompt(body.editInstruction, body.imageSize || '2K'),
+    [sourceImage],
+  )
+  await recordStage(jobId, {
+    candidateId: 0,
+    type: 'planner',
+    title: 'Refine plan',
+    text: description,
+  })
+
+  await appendLog(jobId, 'Refine: rendering edited image')
+  const base64 = await callImageModel(body.provider, body.imageModelName, apiKey, diagramPromptFromDescription(description), body.aspectRatio || '16:9')
+  const stageImage = await saveStageImage(jobId, 0, 'refine-render', base64, 'image/png', 'base64')
+  await recordStage(jobId, {
+    candidateId: 0,
+    type: 'render',
+    title: 'Refined render',
+    text: body.editInstruction,
+    image: stageImage,
+  })
+
+  const saved = await saveResult(jobId, 0, base64, 'image/png', 'base64')
+  await jobs.updateOne(
+    { _id: jobId },
+    {
+      $set: {
+        status: 'succeeded',
+        resultImages: [{
+          candidateId: 0,
+          filename: saved.filename,
+          url: saved.url,
+          storage: saved.storage,
+          mimeType: 'image/png',
+          description,
+        }],
+        completedAt: new Date(),
+        updatedAt: new Date(),
+      },
+    },
+  )
+}
+
+async function resolveRetrievedReferences(body: CreateJobBody, apiKey: string): Promise<RetrievedReference[]> {
+  const setting = normalizeRetrievalSetting(body.retrievalSetting)
+  if (setting === 'none') return []
+
+  const taskName = normalizeTaskName(body.taskName)
+  const library = await loadReferenceLibrary(taskName, { limit: 200 })
+  if (!library.length) return []
+
+  if (setting === 'manual') {
+    const ids = new Set(normalizeManualReferenceIds(body.manualReferenceIds || []))
+    return library.filter((item) => ids.has(item.id)).slice(0, 10)
+  }
+
+  if (setting === 'random') {
+    return shuffle(library).slice(0, 10)
+  }
+
+  const selectedIds = await autoSelectReferenceIds(body, apiKey, library)
+  const selected = selectedIds
+    .map((id) => library.find((item) => item.id === id))
+    .filter(Boolean) as RetrievedReference[]
+  return (selected.length ? selected : library).slice(0, 10)
+}
+
+async function autoSelectReferenceIds(body: CreateJobBody, apiKey: string, library: RetrievedReference[]) {
+  const candidates = library.slice(0, 80).map((item) => ({
+    id: item.id,
+    title: item.title,
+    summary: item.summary.slice(0, 360),
+  }))
+  const raw = await callTextModel(
+    body.provider,
+    body.mainModelName,
+    apiKey,
+    retrievalSystemPrompt(),
+    retrievalUserPrompt(body.methodContent, body.caption, candidates),
+  )
+  const ids = parseReferenceIds(raw)
+  return ids.filter((id: string) => library.some((item: RetrievedReference) => item.id === id)).slice(0, 10)
+}
+
+async function loadReferenceLibrary(taskName: TaskName, options: { limit: number }): Promise<RetrievedReference[]> {
+  const limit = clamp(Number(options.limit || 24), 1, 200)
+  const rows = await references.find({ taskName }).sort({ createdAt: -1, _id: 1 }).limit(limit).toArray()
+  const normalizedRows = await Promise.all(rows.map(normalizeStoredReference))
+  const fallback = fallbackReferences.filter((item) => item.taskName === taskName)
+  const seen = new Set(normalizedRows.map((item) => item.id))
+  return [
+    ...normalizedRows,
+    ...fallback.filter((item) => !seen.has(item.id)),
+  ].slice(0, limit)
+}
+
+async function normalizeStoredReference(item: any): Promise<RetrievedReference> {
+  const imageObjectKey = item.imageObjectKey || item.image_object_key || item.objectKey || ''
+  let imageUrl = item.imageUrl || item.image_url || item.url || ''
+  if (!imageUrl && imageObjectKey) {
+    try {
+      imageUrl = await cloud.storage.bucket(bucketName).getDownloadUrl(imageObjectKey, 3600 * 24 * 7)
+    } catch {
+      imageUrl = ''
+    }
+  }
+  return {
+    id: String(item._id || item.id || ''),
+    taskName: normalizeTaskName(item.taskName || item.task_name),
+    title: limitText(item.title || item.visualIntent || item.caption || item.id, 160),
+    summary: limitText(item.summary || item.methodExcerpt || item.content || item.description, 1200),
+    imageUrl,
+    imageObjectKey,
+    source: limitText(item.source, 80) || 'paperbanana-bench',
+  }
+}
+
+async function buildRetrievedVisionInputs(items: RetrievedReference[]) {
+  const inputs: VisionImageInput[] = []
+  for (const item of items) {
+    let url = item.imageUrl
+    if (!url && item.imageObjectKey) {
+      try {
+        url = await cloud.storage.bucket(bucketName).getDownloadUrl(item.imageObjectKey, 3600)
+      } catch {
+        url = ''
+      }
+    }
+    if (!url) continue
+    inputs.push({
+      filename: `${item.id}.png`,
+      mimeType: inferMimeTypeFromUrl(url),
+      url,
+    })
+  }
+  return inputs
+}
+
+function buildRetrievalContext(items: RetrievedReference[]) {
+  if (!items.length) return ''
+  return items.map((item, index) => [
+    `Reference ${index + 1} (${item.id}): ${item.title}`,
+    item.summary,
+  ].filter(Boolean).join('\n')).join('\n\n')
+}
+
+async function critiqueRenderedDiagram(
+  body: CreateJobBody,
+  apiKey: string,
+  description: string,
+  imageBase64: string,
+  referenceAnalysis = '',
+  retrievalContext = '',
+) {
+  return await callTextModel(
+    body.provider,
+    body.mainModelName,
+    apiKey,
+    imageCriticSystemPrompt(),
+    imageCriticUserPrompt(body.methodContent, body.caption, description, referenceAnalysis, retrievalContext),
+    [{ filename: 'candidate.png', mimeType: 'image/png', url: `data:image/png;base64,${imageBase64}` }],
+  )
+}
+
+function extractRevisedDescription(critique: string, previous: string) {
+  const trimmed = String(critique || '').trim()
+  if (!trimmed || /no changes needed/i.test(trimmed)) return previous
+  const json = parseJsonObject(trimmed)
+  if (json?.revisedDescription) return String(json.revisedDescription)
+  if (json?.description) return String(json.description)
+  return trimmed
 }
 
 async function analyzeReferenceImages(jobId: string, body: CreateJobBody, apiKey: string) {
@@ -1004,6 +1485,38 @@ async function saveResult(
   }
 }
 
+async function saveStageImage(
+  jobId: string,
+  candidateId: number,
+  stageName: string,
+  content: string,
+  mimeType: string,
+  encoding: 'base64' | 'utf8',
+) {
+  const safeStageName = sanitizePathPart(stageName)
+  const filename = `${jobId}/candidate-${candidateId}-${safeStageName}.${resultExtension(mimeType)}`
+  const buffer = encoding === 'base64' ? Buffer.from(content, 'base64') : Buffer.from(content, 'utf8')
+  const base64 = encoding === 'base64' ? content : buffer.toString('base64')
+  try {
+    const bucket = cloud.storage.bucket(bucketName)
+    await bucket.writeFile(filename, buffer, { ContentType: mimeType })
+    return {
+      storage: 'bucket',
+      filename,
+      url: await bucket.getDownloadUrl(filename, 3600 * 24 * 7),
+      mimeType,
+    }
+  } catch (error: any) {
+    return {
+      storage: 'database-data-url',
+      filename,
+      url: `data:${mimeType};base64,${base64}`,
+      mimeType,
+      storageError: error?.message || String(error),
+    }
+  }
+}
+
 function resultExtension(mimeType: string) {
   if (mimeType === 'image/svg+xml') return 'svg'
   if (mimeType === 'image/webp') return 'webp'
@@ -1034,6 +1547,46 @@ async function appendLog(jobId: string, message: string) {
       $push: { logs: `${new Date().toISOString()} ${message}` },
     },
   )
+}
+
+async function recordStage(jobId: string, input: Partial<JobStage> & { candidateId: number; type: string; title: string }) {
+  const now = new Date()
+  const startedAt = input.startedAt || now
+  const completedAt = input.completedAt || now
+  const stage = {
+    id: input.id || `stage-${randomId()}`,
+    candidateId: Number(input.candidateId || 0),
+    type: input.type,
+    title: input.title,
+    round: Number(input.round || 0),
+    text: limitText(input.text, 12000),
+    suggestion: limitText(input.suggestion, 6000),
+    image: input.image || null,
+    startedAt,
+    completedAt,
+    durationMs: Number(input.durationMs || (completedAt.getTime() - startedAt.getTime())),
+    error: limitText(input.error, 1200),
+  }
+  await jobs.updateOne(
+    { _id: jobId },
+    {
+      $set: { updatedAt: new Date() },
+      $push: { stages: stage },
+    },
+  )
+  return stage
+}
+
+async function runWithConcurrency<T>(items: T[], concurrency: number, worker: (item: T) => Promise<void>) {
+  let index = 0
+  const workers = Array.from({ length: Math.max(1, concurrency) }, async () => {
+    while (index < items.length) {
+      const current = items[index]
+      index += 1
+      await worker(current)
+    }
+  })
+  await Promise.all(workers)
 }
 
 async function fetchWithRetry(url: string, options: RequestInit | undefined, label: string, attempts = 2) {
@@ -1205,11 +1758,11 @@ function plannerSystemPrompt() {
   ].join('\n')
 }
 
-function plannerUserPrompt(method: string, caption: string, referenceAnalysis = '') {
-  return withReferenceAnalysis(
+function plannerUserPrompt(method: string, caption: string, referenceAnalysis = '', retrievalContext = '') {
+  return withRetrievalContext(withReferenceAnalysis(
     `Methodology Section:\n${method}\n\nFigure Caption:\n${caption}\n\nDetailed description of the target figure:`,
     referenceAnalysis,
-  )
+  ), retrievalContext)
 }
 
 function stylistSystemPrompt() {
@@ -1218,14 +1771,17 @@ function stylistSystemPrompt() {
     'Refine the visual specification for a clean NeurIPS-style academic diagram.',
     'Preserve semantics. Improve layout clarity, typography, color harmony, line thickness, and whitespace.',
     'Use reference image analysis only for layout and style cues.',
+    '',
+    'NeurIPS 2025 diagram style guide excerpt:',
+    neuripsDiagramStyleGuide(),
   ].join('\n')
 }
 
-function stylistUserPrompt(method: string, caption: string, description: string, referenceAnalysis = '') {
-  return withReferenceAnalysis(
+function stylistUserPrompt(method: string, caption: string, description: string, referenceAnalysis = '', retrievalContext = '') {
+  return withRetrievalContext(withReferenceAnalysis(
     `Initial Description:\n${description}\n\nMethodology Section:\n${method}\n\nFigure Caption:\n${caption}\n\nPolished detailed description:`,
     referenceAnalysis,
-  )
+  ), retrievalContext)
 }
 
 function criticSystemPrompt() {
@@ -1237,19 +1793,35 @@ function criticSystemPrompt() {
   ].join('\n')
 }
 
-function criticUserPrompt(method: string, caption: string, description: string, referenceAnalysis = '') {
-  return withReferenceAnalysis(
+function criticUserPrompt(method: string, caption: string, description: string, referenceAnalysis = '', retrievalContext = '') {
+  return withRetrievalContext(withReferenceAnalysis(
     `Current Description:\n${description}\n\nMethodology Section:\n${method}\n\nFigure Caption:\n${caption}\n\nCritique or revised description:`,
     referenceAnalysis,
-  )
+  ), retrievalContext)
 }
 
-function diagramPrompt(method: string, caption: string, referenceAnalysis = '') {
+function imageCriticSystemPrompt() {
+  return [
+    'You are the image-aware Critic Agent for PaperBanana.',
+    'Inspect the rendered diagram image against the methodology, caption, and current visual description.',
+    'If it is already good, return exactly: No changes needed.',
+    'If changes are needed, return a revised detailed visual description only. Do not return a list of complaints without a complete revised description.',
+  ].join('\n')
+}
+
+function imageCriticUserPrompt(method: string, caption: string, description: string, referenceAnalysis = '', retrievalContext = '') {
+  return withRetrievalContext(withReferenceAnalysis(
+    `Rendered diagram is attached.\n\nCurrent Description:\n${description}\n\nMethodology Section:\n${method}\n\nFigure Caption:\n${caption}\n\nImage-aware critique or revised description:`,
+    referenceAnalysis,
+  ), retrievalContext)
+}
+
+function diagramPrompt(method: string, caption: string, referenceAnalysis = '', retrievalContext = '') {
   return diagramPromptFromDescription(
-    withReferenceAnalysis(
+    withRetrievalContext(withReferenceAnalysis(
       `Create an academic method diagram for this methodology:\n${method}\n\nVisual intent:\n${caption}`,
       referenceAnalysis,
-    ),
+    ), retrievalContext),
   )
 }
 
@@ -1310,6 +1882,59 @@ function referenceVisionUserPrompt(method: string, caption: string) {
   ].join('\n')
 }
 
+function retrievalSystemPrompt() {
+  return [
+    'You are the Retriever Agent for PaperBanana.',
+    'Select the most useful reference examples for generating a new academic diagram.',
+    'Return JSON only: {"ids":["id-1","id-2"]}. Select at most 10 ids.',
+  ].join('\n')
+}
+
+function retrievalUserPrompt(method: string, caption: string, candidates: any[]) {
+  return [
+    `Methodology Section:\n${method}`,
+    '',
+    `Figure Caption:\n${caption}`,
+    '',
+    'Candidate reference examples:',
+    JSON.stringify(candidates),
+    '',
+    'Choose examples whose layout and visual intent best match the target figure.',
+  ].join('\n')
+}
+
+function refineSystemPrompt() {
+  return [
+    'You are the PaperBanana Refine Agent.',
+    'The user provides an existing generated diagram image and an edit instruction.',
+    'Inspect the image, preserve its useful structure, and write a complete revised visual description for a new high-quality academic diagram.',
+    'Do not mention that you cannot edit pixels directly. The next model will render from your description.',
+  ].join('\n')
+}
+
+function refineUserPrompt(instruction: string, imageSize: string) {
+  return [
+    'Source image is attached.',
+    `Edit instruction:\n${instruction}`,
+    '',
+    `Target quality: ${imageSize}`,
+    '',
+    'Return the complete revised visual description only.',
+  ].join('\n')
+}
+
+function neuripsDiagramStyleGuide() {
+  return [
+    'Aesthetic: soft tech and scientific pastels; clean modularity with clear left-to-right narrative flow.',
+    'Use high-value light backgrounds and reserve saturated accents for critical active elements.',
+    'Group stages in very light desaturated containers; use dashed borders for logical scopes and optional paths.',
+    'Use rounded rectangles for process nodes, 3D stacks/grids for tensors, and cylinders only for databases or memory.',
+    'Use orthogonal connectors for architecture/data flow, curved connectors for feedback loops, dashed lines for auxiliary flow.',
+    'Use sans-serif labels, serif italic math variables, consistent line weight, readable spacing, and no PowerPoint-default heavy outlines.',
+    'Avoid saturated primary backgrounds, ambiguous arrows, inconsistent dimensions, and decorative clutter.',
+  ].join('\n')
+}
+
 function withReferenceAnalysis(text: string, referenceAnalysis = '') {
   if (!referenceAnalysis.trim()) return text
   return [
@@ -1319,6 +1944,18 @@ function withReferenceAnalysis(text: string, referenceAnalysis = '') {
     referenceAnalysis.trim(),
     '',
     'Use the reference to guide layout and style, but make the final diagram reflect the provided methodology and caption.',
+  ].join('\n')
+}
+
+function withRetrievalContext(text: string, retrievalContext = '') {
+  if (!retrievalContext.trim()) return text
+  return [
+    text,
+    '',
+    'Retrieved PaperBanana reference examples for layout/style guidance:',
+    retrievalContext.trim(),
+    '',
+    'Use these examples as high-level few-shot guidance. Do not copy their scientific content unless it matches the provided methodology.',
   ].join('\n')
 }
 
@@ -1511,6 +2148,7 @@ function randomId() {
 
 function validateCreateBody(body: CreateJobBody) {
   if (!['openrouter', 'gemini', 'openai', 'bailian'].includes(body.provider)) throw new Error('Invalid provider')
+  if (body.taskName && body.taskName !== 'diagram') throw new Error('Plot generation is not enabled yet. Please use diagram task.')
   if (!body.methodContent || body.methodContent.trim().length < 20) throw new Error('methodContent is too short')
   if (!body.caption || body.caption.trim().length < 3) throw new Error('caption is required')
   const requestedFormat = body.outputFormat || body.output_format
@@ -1518,6 +2156,19 @@ function validateCreateBody(body: CreateJobBody) {
   if (!body.mainModelName) throw new Error('mainModelName is required')
   if (!body.imageModelName) throw new Error('imageModelName is required')
   if (body.referenceImageMode && !['auto', 'main_model', 'vision_model'].includes(body.referenceImageMode)) throw new Error('Invalid referenceImageMode')
+  if (body.retrievalSetting && !allowedRetrievalSettings.has(body.retrievalSetting)) throw new Error('Invalid retrievalSetting')
+  if (body.retrievalSetting === 'manual' && !normalizeManualReferenceIds(body.manualReferenceIds || []).length) {
+    throw new Error('manualReferenceIds is required when retrievalSetting is manual')
+  }
+}
+
+function validateRefineBody(body: RefineImageBody) {
+  if (!['openrouter', 'gemini', 'openai', 'bailian'].includes(body.provider)) throw new Error('Invalid provider')
+  if (!body.imageModelName) throw new Error('imageModelName is required')
+  if (!body.sourceImageUrl && !body.sourceImageObjectKey) throw new Error('source image is required')
+  const instruction = String(body.editInstruction || '').trim()
+  if (instruction.length < 3) throw new Error('editInstruction is required')
+  if (instruction.length > 2000) throw new Error('editInstruction exceeds 2000 characters')
 }
 
 function selectApiKey(provider: Provider, apiKeys: ApiKeys) {
@@ -1533,10 +2184,14 @@ async function publicJob(job: any) {
     id: job._id,
     status: job.status,
     provider: job.provider,
+    jobType: job.jobType || 'generate',
     userId: job.userId || job.user_id || '',
     userEmail: job.userEmail || job.user_email || '',
+    configurationMode: job.configurationMode || 'advanced',
+    taskName: job.taskName || 'diagram',
     methodContent: job.methodContent,
     caption: job.caption,
+    infographicCategory: job.infographicCategory || '',
     outputFormat: job.outputFormat || 'png',
     mainModelName: job.mainModelName,
     imageModelName: job.imageModelName,
@@ -1544,7 +2199,14 @@ async function publicJob(job: any) {
     referenceImageMode: job.referenceImageMode || 'vision_model',
     referenceImageModeUsed: job.referenceImageModeUsed || ((job.referenceImages || []).length ? 'vision_model' : 'none'),
     pipelineMode: job.pipelineMode,
+    retrievalSetting: job.retrievalSetting || 'none',
+    manualReferenceIds: job.manualReferenceIds || [],
+    retrievedReferenceIds: job.retrievedReferenceIds || [],
+    retrievedReferences: job.retrievedReferences || [],
+    stages: await refreshStageImages(job.stages || []),
+    criticMode: job.criticMode || '',
     aspectRatio: job.aspectRatio,
+    imageSize: job.imageSize || '',
     numCandidates: job.numCandidates,
     maxCriticRounds: job.maxCriticRounds,
     promptCharCount: job.promptCharCount,
@@ -1558,6 +2220,15 @@ async function publicJob(job: any) {
     startedAt: job.startedAt,
     completedAt: job.completedAt,
   }
+}
+
+async function refreshStageImages(stages: any[]) {
+  if (!stages.length) return []
+  return await Promise.all(stages.map(async (stage) => {
+    if (!stage?.image) return stage
+    const refreshed = await refreshStoredImageUrls([stage.image])
+    return { ...stage, image: refreshed[0] || stage.image }
+  }))
 }
 
 async function refreshReferenceImageUrls(images: any[]) {
@@ -1632,6 +2303,24 @@ function normalizeOutputFormat(format?: string): OutputFormat {
   return format === 'svg' ? 'svg' : 'png'
 }
 
+function normalizeTaskName(taskName?: string): TaskName {
+  return taskName === 'plot' ? 'plot' : 'diagram'
+}
+
+function normalizeRetrievalSetting(setting?: string): RetrievalSetting {
+  return allowedRetrievalSettings.has(setting as RetrievalSetting) ? setting as RetrievalSetting : 'none'
+}
+
+function normalizeManualReferenceIds(ids: string[]) {
+  if (!Array.isArray(ids)) return []
+  return [...new Set(ids.map((id) => limitText(id, 120)).filter(Boolean))].slice(0, 10)
+}
+
+function normalizeAspectRatio(aspectRatio?: string): '16:9' | '21:9' | '3:2' | '1:1' {
+  if (aspectRatio === '21:9' || aspectRatio === '3:2' || aspectRatio === '1:1') return aspectRatio
+  return '16:9'
+}
+
 function normalizeReferenceImageMode(mode?: string): ReferenceImageMode {
   if (mode === 'auto' || mode === 'main_model' || mode === 'vision_model') return mode
   return 'vision_model'
@@ -1647,6 +2336,58 @@ function normalizeFeedbackPlatform(platform?: string): FeedbackPlatform | '' {
 
 function limitText(value: any, maxLength: number) {
   return String(value || '').trim().slice(0, maxLength)
+}
+
+async function resolveSourceImageUrl(body: RefineImageBody) {
+  const direct = limitText(body.sourceImageUrl, 1200)
+  if (direct) return direct
+  const objectKey = limitText(body.sourceImageObjectKey, 300)
+  if (!objectKey) throw new Error('source image is required')
+  return await cloud.storage.bucket(bucketName).getDownloadUrl(objectKey, 3600)
+}
+
+function inferMimeTypeFromUrl(url: string) {
+  const value = String(url || '').toLowerCase()
+  const dataMatch = value.match(/^data:([^;,]+)/)
+  if (dataMatch?.[1]) return dataMatch[1]
+  if (value.includes('.svg')) return 'image/svg+xml'
+  if (value.includes('.webp')) return 'image/webp'
+  if (value.includes('.jpg') || value.includes('.jpeg')) return 'image/jpeg'
+  return 'image/png'
+}
+
+function parseReferenceIds(raw: string): string[] {
+  const json = parseJsonObject(raw)
+  if (Array.isArray(json?.ids)) return json.ids.map((id: any) => String(id)).filter(Boolean)
+  if (Array.isArray(json)) return json.map((id: any) => String(id)).filter(Boolean)
+  return [...String(raw || '').matchAll(/[A-Za-z0-9][A-Za-z0-9._:-]{2,}/g)].map((match) => match[0])
+}
+
+function parseJsonObject(raw: string) {
+  const text = String(raw || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim()
+  const start = text.indexOf('{')
+  const end = text.lastIndexOf('}')
+  if (start < 0 || end < start) {
+    try {
+      return JSON.parse(text)
+    } catch {
+      return null
+    }
+  }
+  try {
+    return JSON.parse(text.slice(start, end + 1))
+  } catch {
+    return null
+  }
+}
+
+function shuffle<T>(items: T[]) {
+  const copy = [...items]
+  for (let i = copy.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[copy[i], copy[j]] = [copy[j], copy[i]]
+  }
+  return copy
 }
 
 function publicFeedback(item: any) {
