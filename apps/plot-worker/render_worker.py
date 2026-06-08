@@ -27,11 +27,12 @@ happens. The boundary that actually contains the damage is, in order:
   3. READ-ONLY ROOT FILESYSTEM + NON-ROOT UID + DROPPED CAPABILITIES, set at
      deploy time (see README). Escaped code cannot tamper with the image,
      write outside tmpfs, or escalate.
-  4. RESOURCE LIMITS (POSIX RLIMIT_CPU / RLIMIT_AS / RLIMIT_FSIZE /
-     RLIMIT_NPROC where available) cap CPU / memory / file-write / fork blast
-     radius. The PARENT additionally enforces a hard WALL-CLOCK timeout and
-     kills the child if it hangs (CPU-limit only fires on CPU time, not on
-     sleep()/blocking I/O).
+  4. RESOURCE LIMITS (POSIX RLIMIT_CPU / RLIMIT_FSIZE / RLIMIT_NPROC where
+     available) cap CPU / file-write / fork blast radius; the container cgroup
+     memory limit bounds RSS (RLIMIT_AS is intentionally NOT used — it breaks
+     numpy/OpenBLAS, which reserve huge virtual space). The PARENT additionally
+     enforces a hard WALL-CLOCK timeout and kills the child if it hangs
+     (CPU-limit only fires on CPU time, not on sleep()/blocking I/O).
 
 DEFENSE-IN-DEPTH ONLY (NOT the boundary): the child also forces matplotlib Agg,
 runs user code under a restricted __builtins__ whitelist, and uses a guarded
@@ -63,8 +64,12 @@ WALL_CLOCK_TIMEOUT_S = 20
 # CPU seconds the CHILD is allowed (RLIMIT_CPU). Lower than wall clock so CPU
 # spins die first; wall clock is the backstop for sleep()/blocking.
 CPU_LIMIT_S = 10
-# Address-space cap for the child (bytes). ~512 MB.
-ADDRESS_SPACE_LIMIT_BYTES = 512 * 1024 * 1024
+# NOTE: we deliberately do NOT cap RLIMIT_AS. numpy/OpenBLAS reserve a very large
+# *virtual* address space (independent of resident RSS), so an RLIMIT_AS cap makes
+# the BLAS allocator fail at import ("OpenBLAS: Memory allocation still failed
+# after 10 retries"), crashing the render child. The real memory bound is the
+# container cgroup memory limit (set at deploy); RLIMIT_CPU + the parent's
+# wall-clock kill bound CPU and time, and the child env pins BLAS to one thread.
 # Max bytes the child may write to any single file (RLIMIT_FSIZE). We do not
 # need disk at all, but matplotlib font caches etc. may touch tmp; keep a
 # small allowance rather than 0 so legitimate cache writes do not crash.
@@ -109,6 +114,17 @@ def _build_child_env() -> Dict[str, str]:
         "MPLCONFIGDIR": _MPLCONFIGDIR,
         "LANG": "C.UTF-8",
         "LC_ALL": "C.UTF-8",
+        # Pin BLAS/OpenMP to a single thread. Without this, OpenBLAS (pulled in by
+        # numpy, which matplotlib imports) sizes a per-thread memory arena to the
+        # host CPU count and fails to allocate ("Memory allocation still failed
+        # after 10 retries"), crashing the render child. One thread is plenty for
+        # rendering a plot and keeps the footprint small.
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "MKL_NUM_THREADS": "1",
+        "NUMEXPR_NUM_THREADS": "1",
+        "VECLIB_MAXIMUM_THREADS": "1",
+        "OPENBLAS_MAIN_FREE": "1",
     }
 
 
@@ -302,7 +318,9 @@ def _apply_resource_limits():
             pass  # Best effort; some limits may be unsettable in the sandbox.
 
     _set(resource.RLIMIT_CPU, CPU_LIMIT_S, CPU_LIMIT_S + 2)
-    _set(resource.RLIMIT_AS, ADDRESS_SPACE_LIMIT_BYTES)
+    # RLIMIT_AS intentionally NOT set — see note by ADDRESS_SPACE_LIMIT_BYTES /
+    # the removed constant: it breaks numpy/OpenBLAS. Memory is bounded by the
+    # container cgroup limit instead.
     _set(resource.RLIMIT_FSIZE, FSIZE_LIMIT_BYTES)
     # No core dumps.
     _set(resource.RLIMIT_CORE, 0)
