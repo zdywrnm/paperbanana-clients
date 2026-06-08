@@ -267,8 +267,8 @@ export default function App() {
     const canMock = isAdvancedMode && mock && health?.mock_enabled;
     const hasVisionModel = !needsReferenceVisionModel || Boolean((isAdvancedMode ? referenceVisionModelName : providerConfig.visionModel)?.trim());
     const hasManualReferences = !isAdvancedMode || retrievalSetting !== 'manual' || manualReferenceIds.length > 0;
-    return authReady && !isPlotCategory && hasManualReferences && hasVisionModel && !mainModelDirectUnsupported && (hasKey || canMock) && methodContent.trim().length >= 20 && caption.trim().length >= 3 && !isSubmitting && !isUploadingReferences;
-  }, [authReady, isPlotCategory, selectedKey, methodContent, caption, isSubmitting, mock, health, isAdvancedMode, retrievalSetting, manualReferenceIds.length, needsReferenceVisionModel, referenceVisionModelName, providerConfig.visionModel, isUploadingReferences, mainModelDirectUnsupported]);
+    return authReady && hasManualReferences && hasVisionModel && !mainModelDirectUnsupported && (hasKey || canMock) && methodContent.trim().length >= 20 && caption.trim().length >= 3 && !isSubmitting && !isUploadingReferences;
+  }, [authReady, selectedKey, methodContent, caption, isSubmitting, mock, health, isAdvancedMode, retrievalSetting, manualReferenceIds.length, needsReferenceVisionModel, referenceVisionModelName, providerConfig.visionModel, isUploadingReferences, mainModelDirectUnsupported]);
 
   const canSubmitRefine = useMemo(() => {
     const hasKey = selectedKey.trim();
@@ -471,7 +471,7 @@ export default function App() {
         configurationMode,
         provider,
         apiKeys: scopedApiKeys,
-        taskName: 'diagram',
+        taskName: isPlotCategory ? 'plot' : 'diagram',
         methodContent,
         caption,
         infographicCategory: selectedInfographicCategory[1],
@@ -920,8 +920,8 @@ export default function App() {
             <p>{selectedInfographicCategory[2]}</p>
           </div>
           {isPlotCategory ? (
-            <div className="plot-placeholder">
-              数据统计图需要独立 Python/matplotlib 渲染服务，当前网站先开放论文图解生成。请先选择方法框架图、流程图或系统架构图。
+            <div className="plot-note">
+              统计图由独立渲染服务生成，可能稍慢。
             </div>
           ) : null}
 

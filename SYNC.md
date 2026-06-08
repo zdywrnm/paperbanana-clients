@@ -36,10 +36,10 @@
 各端待办：
 - [x] laf-functions（prompt/robustness/plot 管线/importReferences/evaluateJob）
 - [x] packages/api（`taskName` 已白名单，无需改）
-- [ ] web（plot 提交放开——已改未提交，待 worker 上线后开）
-- [ ] auth-gateway（无需改：plot 走 createJob 既有转发；admin 动作直连 Laf）
+- [x] web（plot 提交放开：data_stat 类别 → `taskName:'plot'`）
+- [x] auth-gateway（无需改：plot 走 createJob 既有转发；admin 动作直连 Laf）
 - [ ] miniprogram/android/windows/macos（兼容 `taskName:'plot'`，后续补 plot UI）
-- [ ] plot-worker 部署到 Sealos + Laf 设 `PLOT_WORKER_URL`/`PLOT_WORKER_TOKEN`（进行中）
+- [x] plot-worker 已部署到 Sealos（Deployment+Service+NetworkPolicy，2Gi）+ Laf 已设 `PLOT_WORKER_URL`/`PLOT_WORKER_TOKEN`；`pingPlotWorker` 实测渲染通过
 
 ### [2026-06-08] PaperBanana 根项目 10 项功能对齐（diagram 主链路）— by Codex
 变更：补齐 web 主链路的参考检索、手选参考、图像 Critic、Stylist 风格指南、pipeline stages、候选阶段记录、Refine Image、下载全部、管理员诊断摘要；`data_stat/plot` 明确标为二阶段能力，避免假入口。
