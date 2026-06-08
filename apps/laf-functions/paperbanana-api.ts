@@ -387,6 +387,9 @@ export default async function (ctx: FunctionContext) {
     if (action === 'evaluateJob') {
       return await evaluateJob(body as EvaluateJobBody)
     }
+    if (action === 'pingPlotWorker') {
+      return await pingPlotWorker(body as any)
+    }
     return fail(`Unknown action: ${action}`, 400)
   } catch (error: any) {
     return fail(error?.message || String(error), 500)
@@ -1190,6 +1193,32 @@ async function renderPlotViaWorker(code: string): Promise<{ base64: string; erro
   const base64 = String(data?.image_base64 || '').trim()
   if (data?.ok && base64) return { base64, error: '' }
   return { base64, error: String(data?.error || (base64 ? '' : 'plot-worker returned no image')) }
+}
+
+// Admin-only diagnostic: render a trivial matplotlib snippet through the
+// plot-worker to verify the Laf -> worker network path, token, and rendering
+// without needing a BYOK key. Returns whether a PNG came back.
+async function pingPlotWorker(body: any) {
+  const expected = process.env.ADMIN_TOKEN || ''
+  if (!expected) return fail('Admin API disabled: ADMIN_TOKEN is not configured', 503)
+  if (!body || body.adminToken !== expected) return fail('Invalid admin token', 401)
+  const code = typeof body.code === 'string' && body.code.trim()
+    ? body.code
+    : "import matplotlib.pyplot as plt\nfig, ax = plt.subplots()\nax.plot([1, 2, 3], [2, 3, 1], marker='o')\nax.set_title('plot-worker ping')"
+  const workerUrl = String(process.env.PLOT_WORKER_URL || '').trim()
+  const startedAt = Date.now()
+  try {
+    const { base64, error } = await renderPlotViaWorker(code)
+    return ok({
+      workerUrl,
+      ok: Boolean(base64),
+      base64Length: base64.length,
+      error,
+      ms: Date.now() - startedAt,
+    })
+  } catch (error: any) {
+    return ok({ workerUrl, ok: false, base64Length: 0, error: error?.message || String(error), ms: Date.now() - startedAt })
+  }
 }
 
 // Plot critic: same image-critic loop shape as critiqueRenderedDiagram, but uses
