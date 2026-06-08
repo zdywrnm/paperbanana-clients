@@ -337,6 +337,21 @@ const fallbackReferences: RetrievedReference[] = [
   },
 ]
 
+// Actions that read or write a specific user's data while trusting
+// caller-supplied userId/userEmail. These must arrive through the auth-gateway
+// (which injects the shared PAPERBANANA_GATEWAY_TOKEN) or carry a valid
+// ADMIN_TOKEN. See requireTrustedCaller — this is the IDOR / direct-call guard.
+// Public read-only actions (health/modelCapability/referenceLibrary) and
+// ADMIN_TOKEN-gated actions are intentionally NOT listed here.
+const identityScopedActions = new Set([
+  'createJob',
+  'refineImage',
+  'submitFeedback',
+  'userJobs',
+  'getJob',
+  'prepareReferenceUpload',
+])
+
 export default async function (ctx: FunctionContext) {
   setCorsHeaders(ctx)
   if (ctx.request?.method === 'OPTIONS') {
@@ -348,6 +363,11 @@ export default async function (ctx: FunctionContext) {
   const action = body?.action || 'health'
 
   try {
+    if (identityScopedActions.has(action)) {
+      const denied = requireTrustedCaller(body)
+      if (denied) return denied
+    }
+
     if (action === 'health') {
       return ok({ ok: true, runtime: 'laf', version: '0.1.14' })
     }
@@ -1762,6 +1782,45 @@ function analysisObjectKeyForSvg(objectKey: string) {
   return /\.svg$/i.test(key) ? key.replace(/\.svg$/i, '-server-analysis.png') : `${key}-server-analysis.png`
 }
 
+// Bailian (DashScope OpenAI-compatible) only accepts image inputs through a
+// vision-capable model. A text-only main like qwen3.7-max rejects image
+// content entirely ([Unexpected item type in content.]). Route all bailian
+// image reads through this VL model regardless of the configured main model.
+function bailianVisionModel(): string {
+  return (process.env.BAILIAN_VISION_MODEL || 'qwen-vl-max').trim()
+}
+
+// Bailian REJECTS 'data:image/...;base64,...' URLs (400 "The image format is
+// illegal and cannot be opened"); it only accepts PUBLIC https URLs. So for the
+// bailian path we must materialize any data: URL into the bucket and hand back
+// a signed download URL. http(s) URLs are passed through unchanged.
+async function toBailianImageUrl(url: string): Promise<string> {
+  if (typeof url !== 'string') {
+    throw new Error('Bailian image url is missing')
+  }
+  if (!url.startsWith('data:')) {
+    return url
+  }
+  const match = /^data:([^;,]+)?(;base64)?,(.*)$/s.exec(url)
+  if (!match || !match[2]) {
+    throw new Error('Bailian image upload failed: unsupported data URL (expected base64)')
+  }
+  const mime = (match[1] || 'image/png').trim() || 'image/png'
+  const payload = match[3] || ''
+  try {
+    const bytes = Buffer.from(payload, 'base64')
+    if (!bytes.length) throw new Error('decoded image is empty')
+    const ext = resultExtension(mime)
+    const digest = crypto.createHash('sha1').update(bytes).digest('hex')
+    const key = `bailian-vision/${digest || Date.now()}.${ext}`
+    const bucket = cloud.storage.bucket(bucketName)
+    await bucket.writeFile(key, bytes, { ContentType: mime })
+    return await bucket.getDownloadUrl(key, 3600 * 24)
+  } catch (error: any) {
+    throw new Error(`Bailian image upload failed: ${error?.message || String(error)}`)
+  }
+}
+
 async function callVisionModel(
   provider: Provider,
   model: string,
@@ -1776,10 +1835,20 @@ async function callVisionModel(
   }
 
   const baseUrl = textApiBaseUrl(provider)
-  const actualModel = provider === 'openrouter' ? toOpenRouterModel(model) : model
+  // openrouter/openai keep their own model + raw url. bailian must use a
+  // VL-capable model (the passed-in model may be a non-VL text model) and a
+  // PUBLIC url (data: URLs are rejected) — so route each image url through the
+  // bucket first.
+  const actualModel =
+    provider === 'openrouter'
+      ? toOpenRouterModel(model)
+      : provider === 'bailian'
+        ? bailianVisionModel()
+        : model
   const content: any[] = [{ type: 'text', text: referenceVisionUserPrompt(methodContent, caption) }]
   for (const image of images) {
-    content.push({ type: 'image_url', image_url: { url: image.url } })
+    const imageUrl = provider === 'bailian' ? await toBailianImageUrl(image.url) : image.url
+    content.push({ type: 'image_url', image_url: { url: imageUrl } })
   }
 
   const response = await fetchWithRetry(`${baseUrl}/chat/completions`, {
@@ -1848,7 +1917,20 @@ async function callTextModel(
     }
   }
   const baseUrl = textApiBaseUrl(provider)
-  const actualModel = provider === 'openrouter' ? toOpenRouterModel(model) : model
+  let actualModel = provider === 'openrouter' ? toOpenRouterModel(model) : model
+  // Bailian image reads: data: URLs are rejected and a text-only main (e.g.
+  // qwen3.7-max) rejects image content entirely. When this bailian call carries
+  // images, materialize each url into a PUBLIC bucket url and route the call
+  // through a VL-capable model instead of the main model. Text-only bailian
+  // calls (no images) keep the main model unchanged. Non-bailian providers are
+  // untouched. Resolve urls before JSON.stringify.
+  let requestImages = images
+  if (provider === 'bailian' && images.length) {
+    requestImages = await Promise.all(
+      images.map(async (image) => ({ ...image, url: await toBailianImageUrl(image.url) })),
+    )
+    actualModel = bailianVisionModel()
+  }
   try {
     const response = await fetchWithRetry(`${baseUrl}/chat/completions`, {
       method: 'POST',
@@ -1860,7 +1942,7 @@ async function callTextModel(
         model: actualModel,
         messages: [
           { role: 'system', content: system },
-          { role: 'user', content: chatUserContent(user, images) },
+          { role: 'user', content: chatUserContent(user, requestImages) },
         ],
         temperature: 1,
       }),
@@ -2296,10 +2378,13 @@ function mainModelReferenceError(provider: Provider, model: string, error: any) 
 async function referenceModelCapability(provider: Provider, model: string): Promise<ModelCapabilityResult> {
   const normalizedModel = normalizeModelName(provider, model)
   if (provider === 'bailian') {
+    // Reference-image reading works for bailian regardless of the main model:
+    // image inputs are routed through a VL-capable vision model (qwen-vl-*),
+    // and data: URLs are materialized to public bucket URLs first.
     return {
-      status: 'unsupported',
-      supportsReferenceImages: false,
-      reason: '阿里百炼主模型直读参考图本轮暂未启用',
+      status: 'supported',
+      supportsReferenceImages: true,
+      reason: '阿里百炼参考图识别经 qwen-vl 视觉模型',
       source: 'paperbanana-static',
       cached: true,
     }
@@ -3401,6 +3486,45 @@ function ok(data: any) {
 
 function fail(message: string, status = 400) {
   return { code: status, error: message }
+}
+
+// ---------------------------------------------------------------------------
+// Gateway trust boundary (IDOR guard).
+//
+// The public Laf endpoint trusts caller-supplied userId/userEmail, so any
+// action that reads or writes a specific user's data must only be reachable
+// through the auth-gateway. The gateway proves it forwarded an authenticated
+// session by injecting the shared PAPERBANANA_GATEWAY_TOKEN; admin tooling may
+// also call these actions directly with ADMIN_TOKEN. Without this check anyone
+// can hit the Laf URL directly with a forged userId and read another user's
+// jobs (method_content / caption / result image URLs), bypassing the gateway's
+// session auth.
+//
+// Fail-open ONLY while PAPERBANANA_GATEWAY_TOKEN is unset, mirroring the
+// gateway's opt-in design (withGatewayToken injects the token only when it is
+// configured). Set the same secret on both the auth-gateway and this function
+// to enforce the gate; until then the warning below flags the open state.
+// ---------------------------------------------------------------------------
+function isValidGatewayToken(body: any) {
+  const expected = process.env.PAPERBANANA_GATEWAY_TOKEN || ''
+  return Boolean(expected && body?.gatewayToken === expected)
+}
+
+function isValidAdminToken(body: any) {
+  const expected = process.env.ADMIN_TOKEN || ''
+  return Boolean(expected && body?.adminToken === expected)
+}
+
+function requireTrustedCaller(body: any) {
+  const expected = process.env.PAPERBANANA_GATEWAY_TOKEN || ''
+  if (!expected) {
+    console.warn(
+      '[paperbanana-api] PAPERBANANA_GATEWAY_TOKEN is not set; identity-scoped actions are open to direct calls. Set it to the same value as the auth-gateway to enforce the gateway trust boundary.',
+    )
+    return null
+  }
+  if (isValidGatewayToken(body) || isValidAdminToken(body)) return null
+  return fail('Unauthorized: requests must go through the auth gateway.', 401)
 }
 
 function normalizeBody(body: any) {
