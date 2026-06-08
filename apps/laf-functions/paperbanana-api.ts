@@ -139,6 +139,16 @@ type UserJobsBody = {
   limit?: number
 }
 
+type ImportReferencesBody = {
+  action: 'importReferences'
+  adminToken: string
+  mode?: 'probe' | 'inspect' | 'import'
+  limit?: number
+  offset?: number
+  taskName?: string
+  zipUrl?: string
+}
+
 type ModelCapabilityBody = {
   action: 'modelCapability'
   provider: Provider
@@ -211,6 +221,7 @@ type RequestBody =
   | UserJobsBody
   | ModelCapabilityBody
   | ReferenceLibraryBody
+  | ImportReferencesBody
   | HealthBody
 
 const db = cloud.mongo.db
@@ -232,6 +243,18 @@ const allowedFeedbackPlatforms = new Set<FeedbackPlatform>(['web', 'miniprogram'
 const allowedRetrievalSettings = new Set<RetrievalSetting>(['none', 'auto', 'random', 'manual'])
 let openRouterModelCache: { expiresAt: number; modalities: Map<string, string[]> } | null = null
 let resvgWasmPromise: Promise<ResvgWasmModule> | null = null
+
+const benchZipUrlDefault = 'https://huggingface.co/datasets/dwzhu/PaperBananaBench/resolve/main/PaperBananaBench.zip'
+const benchZipCachePath = '/tmp/paperbananabench.zip'
+type BenchImportCache = {
+  zipUrl: string
+  zipBytes: number
+  entries: Record<string, Uint8Array>
+  entryNames: string[]
+  refDir: string
+  refItems: any[]
+}
+let importCache: BenchImportCache | null = null
 
 const openaiVisionMainModels = new Set([
   'gpt-4.1',
@@ -347,6 +370,9 @@ export default async function (ctx: FunctionContext) {
     }
     if (action === 'userJobs') {
       return await userJobs(body as UserJobsBody)
+    }
+    if (action === 'importReferences') {
+      return await importReferences(body as ImportReferencesBody)
     }
     return fail(`Unknown action: ${action}`, 400)
   } catch (error: any) {
@@ -3053,4 +3079,287 @@ function redactClientIp(ip: string) {
 function clamp(value: number, min: number, max: number) {
   if (Number.isNaN(value)) return min
   return Math.max(min, Math.min(value, max))
+}
+
+// ---------------------------------------------------------------------------
+// Admin-only: seed the reference library from the public PaperBananaBench zip.
+// Safe + re-runnable in batches. Loads even when fflate is absent (lazy require).
+// ---------------------------------------------------------------------------
+async function importReferences(body: ImportReferencesBody) {
+  // ADMIN-GATE first, mirroring adminJobs/adminFeedback.
+  const expected = process.env.ADMIN_TOKEN || ''
+  if (!expected) return fail('Admin API disabled: ADMIN_TOKEN is not configured', 503)
+  if (body.adminToken !== expected) return fail('Invalid admin token', 401)
+
+  const zipUrl = limitText(body.zipUrl, 600) || benchZipUrlDefault
+  const taskName = normalizeTaskName(body.taskName) // 'diagram' | 'plot', defaults to 'diagram'
+  const mode = body.mode === 'probe' || body.mode === 'inspect' ? body.mode : 'import'
+
+  // PROBE: must NOT require fflate. Range GET because HEAD may be unsupported.
+  if (mode === 'probe') {
+    try {
+      const response = await fetch(zipUrl, { method: 'GET', headers: { Range: 'bytes=0-0' } })
+      const contentRange = response.headers.get('content-range') || ''
+      const contentLength = response.headers.get('content-length') || ''
+      let totalBytes = ''
+      const rangeMatch = contentRange.match(/\/(\d+)\s*$/)
+      if (rangeMatch) totalBytes = rangeMatch[1]
+      else if (contentLength) totalBytes = contentLength
+      // Drain the tiny range body so the socket can be reused/released.
+      try { await response.arrayBuffer() } catch {}
+      return ok({
+        reachable: response.ok || response.status === 206 || response.status === 200,
+        status: response.status,
+        contentLength: totalBytes || contentLength || contentRange || null,
+        zipUrl,
+      })
+    } catch (error: any) {
+      return ok({ reachable: false, status: 0, contentLength: null, zipUrl, error: error?.message || String(error) })
+    }
+  }
+
+  // INSPECT + IMPORT both need the unzipped bench. Lazily require fflate.
+  let bench: BenchImportCache
+  try {
+    bench = await ensureBenchImport(zipUrl, taskName)
+  } catch (error: any) {
+    if (error && error.code === 'MISSING_FFLATE') {
+      return fail('Missing dependency fflate: add it in the Sealaf NPM deps panel', 503)
+    }
+    return fail(`importReferences failed: ${error?.message || String(error)}`, 500)
+  }
+
+  const totalRefs = bench.refItems.length
+
+  if (mode === 'inspect') {
+    return ok({
+      zipBytes: bench.zipBytes,
+      entryCount: bench.entryNames.length,
+      refCount: totalRefs,
+      refDir: bench.refDir,
+      sampleEntryNames: bench.entryNames.slice(0, 15),
+      sampleRef: bench.refItems[0] || null,
+      taskName,
+      zipUrl,
+    })
+  }
+
+  // mode === 'import'
+  const offset = Math.max(0, Number(body.offset) || 0)
+  const limit = clamp(Number(body.limit || 25), 1, 200)
+  const slice = bench.refItems.slice(offset, offset + limit)
+  const bucket = cloud.storage.bucket(bucketName)
+
+  let imported = 0
+  const skipped: Array<{ index: number; id: string; skipReason: string }> = []
+
+  for (let i = 0; i < slice.length; i++) {
+    const absoluteIndex = offset + i
+    const item = slice[i] || {}
+    const rawId = item.id || item.paper_id || item.uid || item.name || `${taskName}-${absoluteIndex}`
+    const id = limitText(rawId, 120)
+    try {
+      const relImagePath = item.path_to_gt_image || item.image_path || item.gt_image || ''
+      if (!relImagePath) {
+        skipped.push({ index: absoluteIndex, id, skipReason: 'no path_to_gt_image' })
+        continue
+      }
+      const entryName = resolveZipEntryPath(bench, String(relImagePath))
+      const bytes = entryName ? bench.entries[entryName] : undefined
+      if (!bytes) {
+        skipped.push({ index: absoluteIndex, id, skipReason: `image not found in zip: ${relImagePath}` })
+        continue
+      }
+      const mimeType = mimeTypeForPath(entryName || String(relImagePath))
+      const ext = resultExtension(mimeType)
+      const imageObjectKey = `references/bench/${sanitizePathPart(taskName)}/${sanitizePathPart(id)}.${ext}`
+
+      // Upload image bytes to the bucket; NEVER store base64 in Mongo.
+      await bucket.writeFile(imageObjectKey, Buffer.from(bytes), { ContentType: mimeType })
+      let imageUrl = ''
+      try {
+        imageUrl = await bucket.getDownloadUrl(imageObjectKey, 3600 * 24 * 7)
+      } catch {
+        imageUrl = ''
+      }
+
+      const content = item.content
+      const summary = limitText(typeof content === 'string' ? content : JSON.stringify(content ?? ''), 2000)
+      const title = limitText(item.visual_intent || id, 160)
+
+      // Idempotent upsert by id so batches/re-runs do not duplicate.
+      await references.updateOne(
+        { id },
+        {
+          $set: {
+            id,
+            title,
+            summary,
+            imageObjectKey,
+            imageUrl,
+            mimeType,
+            source: 'paperbanana-bench',
+            taskName,
+            updatedAt: new Date(),
+          },
+          $setOnInsert: { createdAt: new Date() },
+        },
+        { upsert: true },
+      )
+      imported++
+    } catch (error: any) {
+      skipped.push({ index: absoluteIndex, id, skipReason: error?.message || String(error) })
+    }
+  }
+
+  const nextOffset = offset + slice.length
+  return ok({
+    imported,
+    skipped,
+    totalRefs,
+    offset,
+    limit,
+    nextOffset,
+    done: nextOffset >= totalRefs,
+    taskName,
+    zipUrl,
+  })
+}
+
+// Ensure the bench zip is downloaded (cached to /tmp + in module memory) and
+// the requested task's ref.json is parsed. Lazily requires fflate; throws a
+// tagged error (code MISSING_FFLATE) when the dependency is absent.
+async function ensureBenchImport(zipUrl: string, taskName: TaskName): Promise<BenchImportCache> {
+  // Reuse the in-memory cache when it matches this zip. The zip entries are
+  // shared across tasks; only refDir/refItems are task-specific, so re-resolve
+  // ref.json from the already-unzipped entries when the task differs.
+  if (importCache && importCache.zipUrl === zipUrl && importCache.entryNames.length) {
+    if (importCache.refDir.endsWith(`/${taskName}`)) {
+      return importCache
+    }
+    const located = locateRefJson(importCache.entries, importCache.entryNames, taskName)
+    importCache.refDir = located.refDir
+    importCache.refItems = located.refItems
+    return importCache
+  }
+
+  const req: any = (globalThis as any).require || (typeof require !== 'undefined' ? require : null)
+  if (!req) {
+    const err: any = new Error('require unavailable')
+    err.code = 'MISSING_FFLATE'
+    throw err
+  }
+  const fs: any = req('fs')
+
+  // Download (or reuse the /tmp cache) the full zip.
+  let zipBuffer: Buffer
+  if (fs.existsSync(benchZipCachePath) && fs.statSync(benchZipCachePath).size > 0) {
+    zipBuffer = fs.readFileSync(benchZipCachePath)
+  } else {
+    const response = await fetch(zipUrl, { method: 'GET' })
+    if (!response.ok) throw new Error(`Failed to download zip: HTTP ${response.status}`)
+    const arrayBuffer = await response.arrayBuffer()
+    zipBuffer = Buffer.from(arrayBuffer)
+    try { fs.writeFileSync(benchZipCachePath, zipBuffer) } catch {}
+  }
+
+  // Lazily require fflate ONLY here (inspect/import path), never at module top.
+  let unzipSync: (data: Uint8Array) => Record<string, Uint8Array>
+  try {
+    const fflate = req('fflate')
+    unzipSync = fflate.unzipSync
+    if (typeof unzipSync !== 'function') throw new Error('unzipSync missing')
+  } catch {
+    const err: any = new Error('fflate not installed')
+    err.code = 'MISSING_FFLATE'
+    throw err
+  }
+
+  const entries = unzipSync(new Uint8Array(zipBuffer))
+  const entryNames = Object.keys(entries)
+  const located = locateRefJson(entries, entryNames, taskName)
+
+  importCache = {
+    zipUrl,
+    zipBytes: zipBuffer.length,
+    entries,
+    entryNames,
+    refDir: located.refDir,
+    refItems: located.refItems,
+  }
+  return importCache
+}
+
+// Find the requested task's ref.json (entry path ending /<task>/ref.json),
+// parse it into an array, and return both the items and its directory.
+function locateRefJson(
+  entries: Record<string, Uint8Array>,
+  entryNames: string[],
+  taskName: TaskName,
+): { refDir: string; refItems: any[] } {
+  const suffix = `/${taskName}/ref.json`
+  let refEntry =
+    entryNames.find((name) => name.endsWith(suffix)) ||
+    entryNames.find((name) => name.endsWith(`${taskName}/ref.json`)) ||
+    entryNames.find((name) => name.toLowerCase().endsWith('/ref.json') && name.toLowerCase().includes(`/${taskName}/`))
+  if (!refEntry) {
+    return { refDir: '', refItems: [] }
+  }
+  const refDir = refEntry.slice(0, refEntry.length - '/ref.json'.length).replace(/\/+$/, '')
+  let parsed: any
+  try {
+    const text = Buffer.from(entries[refEntry]).toString('utf8')
+    parsed = JSON.parse(text)
+  } catch {
+    return { refDir, refItems: [] }
+  }
+  let items: any[] = []
+  if (Array.isArray(parsed)) items = parsed
+  else if (Array.isArray(parsed?.data)) items = parsed.data
+  else if (Array.isArray(parsed?.items)) items = parsed.items
+  else if (Array.isArray(parsed?.references)) items = parsed.references
+  else if (parsed && typeof parsed === 'object') {
+    // Mapping of id -> item; flatten to an array while preserving the key as id.
+    items = Object.entries(parsed).map(([key, value]: [string, any]) =>
+      value && typeof value === 'object' ? { id: value.id || key, ...value } : { id: key, value })
+  }
+  return { refDir, refItems: items }
+}
+
+// Resolve an image path that is relative to the ref.json directory into a real
+// zip entry name. Tries the joined path plus a few normalized fallbacks.
+function resolveZipEntryPath(bench: BenchImportCache, relPath: string): string | null {
+  const cleaned = String(relPath || '').replace(/^\.\//, '').replace(/^\/+/, '')
+  const candidates: string[] = []
+  if (bench.refDir) candidates.push(`${bench.refDir}/${cleaned}`)
+  candidates.push(cleaned)
+  // Collapse any ../ segments against the ref dir.
+  if (bench.refDir && cleaned.includes('../')) {
+    const dirParts = bench.refDir.split('/')
+    const relParts = cleaned.split('/')
+    for (const part of relParts) {
+      if (part === '..') dirParts.pop()
+      else if (part !== '.') dirParts.push(part)
+    }
+    candidates.push(dirParts.join('/'))
+  }
+  for (const candidate of candidates) {
+    if (bench.entries[candidate]) return candidate
+  }
+  // Last resort: match by basename suffix.
+  const base = cleaned.split('/').pop() || ''
+  if (base) {
+    const hit = bench.entryNames.find((name) => name.endsWith(`/${base}`) || name === base)
+    if (hit) return hit
+  }
+  return null
+}
+
+function mimeTypeForPath(path: string) {
+  const value = String(path || '').toLowerCase()
+  if (value.endsWith('.svg')) return 'image/svg+xml'
+  if (value.endsWith('.webp')) return 'image/webp'
+  if (value.endsWith('.jpg') || value.endsWith('.jpeg')) return 'image/jpeg'
+  if (value.endsWith('.gif')) return 'image/png' // store gif frames as png-extension safe default
+  return 'image/png'
 }
