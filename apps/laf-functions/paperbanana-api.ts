@@ -45,6 +45,7 @@ type CreateJobBody = {
   retrievalSetting?: RetrievalSetting
   manualReferenceIds?: string[]
   aspectRatio?: '16:9' | '21:9' | '3:2' | '1:1'
+  imageSize?: '2K' | '4K'
   numCandidates?: number
   maxCriticRounds?: number
 }
@@ -55,6 +56,7 @@ type RefineImageBody = {
   apiKeys: ApiKeys
   mainModelName?: string
   imageModelName: string
+  referenceVisionModelName?: string
   sourceImageUrl?: string
   sourceImageObjectKey?: string
   editInstruction: string
@@ -492,6 +494,7 @@ async function createJob(body: CreateJobBody, ctx: FunctionContext) {
     referenceImageMode: normalizeReferenceImageMode(body.referenceImageMode),
     referenceImages: normalizeReferenceImages(body.referenceImages || []),
     outputFormat: normalizeOutputFormat(body.outputFormat || body.output_format),
+    imageSize: body.imageSize === '4K' ? '4K' as const : '2K' as const,
     retrievalSetting: normalizeRetrievalSetting(body.retrievalSetting),
     manualReferenceIds: normalizeManualReferenceIds(body.manualReferenceIds || []),
   }
@@ -541,6 +544,7 @@ async function createJob(body: CreateJobBody, ctx: FunctionContext) {
     stages: [],
     criticMode: normalizedBody.outputFormat === 'svg' ? 'text' : 'image',
     aspectRatio: normalizedBody.aspectRatio || '16:9',
+    imageSize: normalizedBody.imageSize,
     numCandidates: safeNumCandidates,
     maxCriticRounds: safeCriticRounds,
     promptCharCount: normalizedBody.methodContent.length + normalizedBody.caption.length,
@@ -572,6 +576,9 @@ async function refineImage(body: RefineImageBody, ctx: FunctionContext) {
     ...body,
     mainModelName: normalizeModelName(body.provider, body.mainModelName || body.imageModelName),
     imageModelName: normalizeModelName(body.provider, body.imageModelName),
+    referenceVisionModelName: body.referenceVisionModelName
+      ? normalizeModelName(body.provider, body.referenceVisionModelName)
+      : undefined,
     aspectRatio: normalizeAspectRatio(body.aspectRatio),
     imageSize: body.imageSize === '4K' ? '4K' as const : '2K' as const,
   }
@@ -596,6 +603,7 @@ async function refineImage(body: RefineImageBody, ctx: FunctionContext) {
     infographicCategory: '图片精修',
     mainModelName: normalizedBody.mainModelName,
     imageModelName: normalizedBody.imageModelName,
+    referenceVisionModelName: normalizedBody.referenceVisionModelName || '',
     outputFormat: 'png',
     pipelineMode: 'refine',
     retrievalSetting: 'none',
@@ -875,7 +883,7 @@ async function runCandidate(
     })
     await logStage('rendering PNG')
     const vanillaRenderStartedAt = new Date()
-    const base64 = await callImageModel(body.provider, body.imageModelName, apiKey, prompt, body.aspectRatio || '16:9')
+    const base64 = await callImageModel(body.provider, body.imageModelName, apiKey, prompt, body.aspectRatio || '16:9', '', body.imageSize || '2K')
     const stageImage = await saveStageImage(jobId, candidateId, 'vanilla-render', base64, 'image/png', 'base64')
     await recordStage(jobId, {
       candidateId,
@@ -894,7 +902,7 @@ async function runCandidate(
   let imagePrompt = diagramPromptFromDescription(description)
   await logStage('rendering PNG')
   const initialRenderStartedAt = new Date()
-  let base64 = await callImageModel(body.provider, body.imageModelName, apiKey, imagePrompt, body.aspectRatio || '16:9')
+  let base64 = await callImageModel(body.provider, body.imageModelName, apiKey, imagePrompt, body.aspectRatio || '16:9', '', body.imageSize || '2K')
   let stageImage = await saveStageImage(jobId, candidateId, 'render-0', base64, 'image/png', 'base64')
   await recordStage(jobId, {
     candidateId,
@@ -935,7 +943,7 @@ async function runCandidate(
     await logStage(`rerender round ${round}`)
     const rerenderStartedAt = new Date()
     try {
-      base64 = await callImageModel(body.provider, body.imageModelName, apiKey, imagePrompt, body.aspectRatio || '16:9')
+      base64 = await callImageModel(body.provider, body.imageModelName, apiKey, imagePrompt, body.aspectRatio || '16:9', '', body.imageSize || '2K')
       stageImage = await saveStageImage(jobId, candidateId, `render-${round}`, base64, 'image/png', 'base64')
       await recordStage(jobId, {
         candidateId,
@@ -1424,9 +1432,14 @@ async function runRefineJob(jobId: string, body: RefineImageBody, apiKey: string
     // image, then regenerate from the description.
     await appendLog(jobId, 'Refine: analyzing source image')
     const planStartedAt = new Date()
+    // This analysis step reads the source image as a CHAT/VISION request — it
+    // must NEVER use the image-gen model (DashScope rejects image-gen models as
+    // chat models). Prefer the explicit vision model, then the main chat model.
+    // For bailian the existing toBailianImageUrl + isBailianImageContentError
+    // fallback to qwen-vl in callTextModel handles the image read.
     description = await callTextModel(
       body.provider,
-      body.mainModelName || body.imageModelName,
+      body.referenceVisionModelName || body.mainModelName,
       apiKey,
       refineSystemPrompt(),
       refineUserPrompt(body.editInstruction, body.imageSize || '2K'),
@@ -2012,6 +2025,7 @@ async function callImageModel(
   prompt: string,
   aspectRatio: string,
   sourceImage = '',
+  imageSize = '2K',
 ): Promise<string> {
   // When a source image is supplied, route to a true image-to-image / edit
   // request for providers that support image input. Otherwise fall back to
@@ -2042,13 +2056,13 @@ async function callImageModel(
   }
 
   if (provider === 'gemini') {
-    return callGeminiImage(model, apiKey, prompt, aspectRatio, source)
+    return callGeminiImage(model, apiKey, prompt, aspectRatio, source, imageSize)
   }
 
   if (provider === 'bailian') {
     // Bailian image model does not support a conditioned edit here; fall back
     // to the describe-then-regenerate path (source image is ignored).
-    return callBailianImage(model, apiKey, prompt, aspectRatio)
+    return callBailianImage(model, apiKey, prompt, aspectRatio, imageSize)
   }
 
   const userContent: any[] = [{ type: 'text', text: prompt }]
@@ -2167,7 +2181,7 @@ async function callGeminiText(
   return data.candidates?.[0]?.content?.parts?.map((part: any) => part.text || '').join('') || ''
 }
 
-async function callGeminiImage(model: string, apiKey: string, prompt: string, aspectRatio: string, source: NormalizedSourceImage | null = null): Promise<string> {
+async function callGeminiImage(model: string, apiKey: string, prompt: string, aspectRatio: string, source: NormalizedSourceImage | null = null, imageSize = '2K'): Promise<string> {
   const actualModel = normalizeModelName('gemini', model)
   const parts: any[] = [{ text: prompt }]
   if (source) {
@@ -2180,7 +2194,11 @@ async function callGeminiImage(model: string, apiKey: string, prompt: string, as
       contents: [{ role: 'user', parts }],
       generationConfig: {
         responseModalities: ['IMAGE'],
-        imageConfig: { aspectRatio, imageSize: '1K' },
+        // Gemini imageConfig.imageSize accepts '1K'/'2K'. Map our '2K'/'4K' to a
+        // safe accepted value: '2K' → '2K', '4K' → '2K' (4K not supported here),
+        // anything else (incl. legacy '1K') → '1K'. A wrong size must not break
+        // generation, so keep to known-good Gemini values.
+        imageConfig: { aspectRatio, imageSize: geminiImageSize(imageSize) },
       },
     }),
   }, `gemini image model ${actualModel}`)
@@ -2192,7 +2210,15 @@ async function callGeminiImage(model: string, apiKey: string, prompt: string, as
   throw new Error('Gemini image model did not return image data')
 }
 
-async function callBailianImage(model: string, apiKey: string, prompt: string, aspectRatio: string): Promise<string> {
+// Gemini imageConfig.imageSize only accepts '1K'/'2K'. Map our resolution
+// setting onto a known-good value; never emit '4K' (unsupported → would 400).
+function geminiImageSize(imageSize: string) {
+  if (imageSize === '4K') return '2K'
+  if (imageSize === '2K') return '2K'
+  return '1K'
+}
+
+async function callBailianImage(model: string, apiKey: string, prompt: string, aspectRatio: string, imageSize = '2K'): Promise<string> {
   const response = await fetchWithRetry('https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation', {
     method: 'POST',
     headers: {
@@ -2210,7 +2236,7 @@ async function callBailianImage(model: string, apiKey: string, prompt: string, a
         ],
       },
       parameters: {
-        size: bailianImageSize(aspectRatio),
+        size: bailianImageSize(aspectRatio, imageSize),
         n: 1,
         watermark: false,
       },
@@ -2231,11 +2257,17 @@ function extractDashScopeImageUrl(data: any) {
   return ''
 }
 
-function bailianImageSize(aspectRatio: string) {
-  if (aspectRatio === '21:9') return '1792*768'
-  if (aspectRatio === '3:2') return '1536*1024'
-  if (aspectRatio === '1:1') return '1024*1024'
-  return '1536*864'
+// Resolve a model-SAFE pixel size for DashScope wan/qwen-image. The '2K' sizes
+// below are the existing known-good values already used in production. The '4K'
+// sizes are modestly larger but still inside the wan/qwen-image limit (long side
+// <= 1664, total area ~< 1.6M px) so a higher resolution never breaks generation.
+// When unsure, fall through to the safe 2K size.
+function bailianImageSize(aspectRatio: string, imageSize = '2K') {
+  const hires = imageSize === '4K'
+  if (aspectRatio === '21:9') return hires ? '1664*720' : '1792*768'
+  if (aspectRatio === '3:2') return hires ? '1664*1108' : '1536*1024'
+  if (aspectRatio === '1:1') return hires ? '1328*1328' : '1024*1024'
+  return hires ? '1664*936' : '1536*864'
 }
 
 async function fetchImageAsBase64(url: string, label = 'image download') {
