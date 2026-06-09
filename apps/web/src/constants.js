@@ -1,3 +1,14 @@
+export function mainModelCanReadImages(provider, model) {
+  const m = String(model || '').toLowerCase()
+  // 阿里百炼"图像理解"模型(可直读参考图):qwen3.7-plus / qwen3.5-omni-plus / kimi-k2.6,
+  // 外加 omni、遗留 qwen-vl/qvq 容错。纯文本模型(qwen3.7-max、deepseek、glm、MiniMax…)不能直读。
+  if (provider === 'bailian') return /qwen3\.7-plus|qwen3\.5-omni|omni|kimi-k2\.6|qwen-?vl|qwen3-?vl|-vl-|qvq/.test(m)
+  if (provider === 'gemini') return true
+  if (provider === 'openai') return /gpt-4|gpt-5|o4|gpt-4o|gpt-4.1/.test(m)
+  if (provider === 'openrouter') return true
+  return false
+}
+
 export const PROVIDERS = {
   openrouter: {
     label: 'OpenRouter',
@@ -169,32 +180,25 @@ export const PROVIDERS = {
     keyPlaceholder: 'sk-...',
     mainModel: 'qwen3.7-max',
     imageModel: 'wan2.7-image-pro',
-    visionModel: 'qwen-vl-max',
+    visionModel: 'qwen3.7-plus',
     mainModels: [
       ['qwen3.7-max', 'Qwen3.7 Max', '通义千问'],
-      ['qwen3.6-plus', 'Qwen3.6 Plus', '通义千问'],
+      ['qwen3.7-plus', 'Qwen3.7 Plus（可直读图）', '通义千问'],
       ['qwen3.6-flash', 'Qwen3.6 Flash', '通义千问'],
       ['deepseek-v4-pro', 'DeepSeek V4 Pro', '百炼第三方'],
       ['deepseek-v4-flash', 'DeepSeek V4 Flash', '百炼第三方'],
-      ['deepseek-v3.2', 'DeepSeek V3.2', '百炼第三方'],
-      ['kimi-k2.6', 'Kimi K2.6', '百炼第三方'],
-      ['kimi-k2.5', 'Kimi K2.5', '百炼第三方'],
+      ['kimi-k2.6', 'Kimi K2.6（可直读图）', '百炼第三方'],
       ['glm-5.1', 'GLM 5.1', '百炼第三方'],
-      ['glm-5', 'GLM 5', '百炼第三方'],
-      ['MiniMax-M2.5', 'MiniMax M2.5', '百炼第三方'],
+      ['MiniMax/MiniMax-M2.7', 'MiniMax M2.7', '百炼第三方'],
     ],
     imageModels: [
       ['wan2.7-image-pro', 'Wan 2.7 Image Pro', '通义万相'],
-      ['wan2.7-image', 'Wan 2.7 Image', '通义万相'],
       ['qwen-image-2.0-pro', 'Qwen Image 2.0 Pro', '通义千问 Image'],
-      ['qwen-image-2.0', 'Qwen Image 2.0', '通义千问 Image'],
     ],
     visionModels: [
-      ['qwen-vl-max', 'Qwen VL Max（视觉）', '通义千问 VL'],
-      ['qwen-vl-plus', 'Qwen VL Plus（视觉）', '通义千问 VL'],
-      ['qwen3-vl-plus', 'Qwen3 VL Plus（视觉）', '通义千问 VL'],
-      ['qwen3.6-plus', 'Qwen3.6 Plus', '通义千问'],
-      ['qwen3.6-flash', 'Qwen3.6 Flash', '通义千问'],
+      ['qwen3.7-plus', 'Qwen3.7 Plus（图像理解）', '通义千问'],
+      ['qwen3.5-omni-plus', 'Qwen3.5 Omni Plus（全模态）', '通义千问'],
+      ['kimi-k2.6', 'Kimi K2.6（图像理解）', '百炼第三方'],
     ],
     guideUrl: 'https://help.aliyun.com/zh/model-studio/get-api-key',
     guideSteps: [
@@ -231,7 +235,6 @@ export const OUTPUT_FORMATS = [
 ];
 
 export const REFERENCE_IMAGE_MODES = [
-  ['auto', '自动选择'],
   ['main_model', '主模型直读'],
   ['vision_model', '独立识别模型'],
 ];

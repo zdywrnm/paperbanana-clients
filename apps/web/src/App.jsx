@@ -51,6 +51,7 @@ import {
   REFERENCE_IMAGE_MODES,
   REFERENCE_IMAGE_LIMITS,
   SAMPLE_METHOD,
+  mainModelCanReadImages,
 } from './constants';
 import ApiKeyGuide from './components/ApiKeyGuide';
 import AdminFeedbackTable from './components/AdminFeedbackTable';
@@ -84,7 +85,7 @@ export default function App() {
   const [mainModelName, setMainModelName] = useState(PROVIDERS.bailian.mainModel);
   const [imageGenModelName, setImageGenModelName] = useState(PROVIDERS.bailian.imageModel);
   const [referenceVisionModelName, setReferenceVisionModelName] = useState(PROVIDERS.bailian.visionModel);
-  const [referenceImageMode, setReferenceImageMode] = useState('auto');
+  const [referenceImageMode, setReferenceImageMode] = useState('vision_model');
   const [referenceImages, setReferenceImages] = useState([]);
   const [mainModelCapability, setMainModelCapability] = useState(null);
   const referenceImagesRef = useRef([]);
@@ -140,13 +141,21 @@ export default function App() {
   const defaultImageModelLabel = findModelLabel(providerConfig.imageModels, providerConfig.imageModel);
   const defaultVisionModelLabel = findModelLabel(providerConfig.visionModels || [], providerConfig.visionModel);
   const activeMainModelName = isAdvancedMode ? mainModelName : providerConfig.mainModel;
-  const activeReferenceImageMode = isAdvancedMode ? referenceImageMode : 'auto';
+  // 固定能力：主模型能否直读参考图由 mainModelCanReadImages 同步判定（不再依赖异步探测/自动选择）。
+  const mainModelCanRead = mainModelCanReadImages(provider, activeMainModelName);
+  const activeReferenceImageMode = isAdvancedMode
+    ? referenceImageMode
+    : (mainModelCanRead ? 'main_model' : 'vision_model');
   const mainModelDirectUnsupported = referenceImages.length > 0
     && activeReferenceImageMode === 'main_model'
-    && mainModelCapability?.status === 'unsupported';
+    && !mainModelCanRead;
   const needsReferenceVisionModel = referenceImages.length > 0 && activeReferenceImageMode !== 'main_model';
-  const canSelectMainModelDirect = mainModelCapability?.status !== 'unsupported';
-  const referenceCapabilityNote = referenceImages.length ? describeReferenceCapability(mainModelCapability) : '';
+  const canSelectMainModelDirect = mainModelCanRead;
+  const referenceCapabilityNote = referenceImages.length
+    ? (mainModelCanRead
+        ? '当前主模型支持图像理解，将用主模型直读参考图。'
+        : '当前主模型为文本模型，将使用独立识别模型读取参考图。')
+    : '';
 
   useEffect(() => {
     let cancelled = false;
@@ -166,8 +175,13 @@ export default function App() {
     setMainModelName(PROVIDERS[provider].mainModel);
     setImageGenModelName(PROVIDERS[provider].imageModel);
     setReferenceVisionModelName(PROVIDERS[provider].visionModel);
-    setReferenceImageMode('auto');
   }, [provider]);
+
+  // 参考图模式按固定能力派生：主模型能直读→主模型直读，否则→独立识别模型。
+  // provider/主模型变化时重算（之后用户仍可手动切换两种模式）。
+  useEffect(() => {
+    setReferenceImageMode(mainModelCanReadImages(provider, mainModelName) ? 'main_model' : 'vision_model');
+  }, [provider, mainModelName]);
 
   useEffect(() => {
     if (!referenceImages.length) {
@@ -479,7 +493,7 @@ export default function App() {
         mainModelName: isAdvancedMode ? mainModelName : providerConfig.mainModel,
         imageGenModelName: isAdvancedMode ? imageGenModelName : providerConfig.imageModel,
         referenceVisionModelName: isAdvancedMode ? referenceVisionModelName : providerConfig.visionModel,
-        referenceImageMode: uploadedReferenceImages.length ? (isAdvancedMode ? referenceImageMode : 'auto') : undefined,
+        referenceImageMode: uploadedReferenceImages.length ? activeReferenceImageMode : undefined,
         referenceImages: uploadedReferenceImages,
         pipelineMode: isAdvancedMode ? pipelineMode : 'demo_planner_critic',
         retrievalSetting: isAdvancedMode ? retrievalSetting : 'none',
