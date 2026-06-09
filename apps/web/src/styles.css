@@ -1298,16 +1298,25 @@ figure img {
   background: var(--surface-muted);
 }
 
-/* 结果面板里回显的参考图是上下文，应当明显比结果图小、作为次要信息排成一条紧凑缩略图。 */
+/* 结果面板里回显的参考图是上下文，应当明显比结果图小、与候选图同形（16:9）并左对齐，读作结果图的“缩小版”而非另一种图块。 */
+.echo-label {
+  margin: 0;
+  color: var(--muted-2);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
 .image-grid.reference-echo {
-  grid-template-columns: repeat(auto-fit, minmax(150px, 220px));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 240px));
   justify-content: start;
   gap: 10px;
+  margin-top: -2px;
 }
 
 .image-grid.reference-echo figure img {
-  aspect-ratio: 4 / 3;
-  max-height: 160px;
+  aspect-ratio: 16 / 9;
+  max-height: 150px;
 }
 
 .image-grid.reference-echo figcaption {

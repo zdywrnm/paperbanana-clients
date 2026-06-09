@@ -33,11 +33,14 @@ export default function JobStatus({ job, apiBase }) {
       ) : null}
       {job.error ? <div className="error-line"><AlertTriangle size={16} /> {formatErrorMessage(job.error)}</div> : null}
       {(job.reference_images || []).some((image) => image.url) ? (
-        <div className="image-grid reference-echo">
-          {(job.reference_images || []).filter((image) => image.url).map((image, index) => (
-            <ResultFigure key={image.object_key || image.filename || index} image={{ ...image, candidate_id: index }} apiBase={apiBase} labelPrefix="参考图" />
-          ))}
-        </div>
+        <>
+          <p className="echo-label">参考回显（仅作风格参考，不决定版式）</p>
+          <div className="image-grid reference-echo">
+            {(job.reference_images || []).filter((image) => image.url).map((image, index) => (
+              <ResultFigure key={image.object_key || image.filename || index} image={{ ...image, candidate_id: index }} apiBase={apiBase} labelPrefix="参考图" />
+            ))}
+          </div>
+        </>
       ) : null}
       <div className="image-grid">
         {(job.result_images || []).map((image) => (
