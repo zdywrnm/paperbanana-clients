@@ -3295,10 +3295,10 @@ function withReferenceAnalysis(text: string, referenceAnalysis = '') {
   return [
     text,
     '',
-    'Reference image analysis for structure/style guidance:',
+    'Reference image analysis for VISUAL STYLE guidance (not structure):',
     referenceAnalysis.trim(),
     '',
-    'You MUST strongly adopt the visual identity described above — closely match its color palette, shape/line language, iconography, typography, and overall layout structure — so the final figure is clearly and strongly visually consistent with the reference, while keeping the semantic content faithful to the provided methodology and caption.',
+    'Adopt the reference\'s visual style — its color palette, shape/line language, iconography, and typography — so the final figure clearly and strongly feels stylistically consistent with the reference. However, do NOT copy the reference\'s spatial layout or composition: the figure\'s structure — the number, type, and arrangement of blocks and the overall flow — MUST be derived from the provided methodology and caption, not from the reference. Let the content drive the layout so the result stays internally coherent, even when the reference depicts an unrelated subject.',
   ].join('\n')
 }
 
@@ -3311,7 +3311,7 @@ function withReferenceImageInstruction(text: string, hasReferenceImages = false)
   return [
     text,
     '',
-    'IMPORTANT: One or more reference images are ATTACHED to this request. You MUST closely adopt their visual style — color palette, shape/line language, iconography, typography, and overall LAYOUT STRUCTURE — so that the generated figure is clearly, strongly visually consistent with the reference. At the same time, keep the semantic content faithful to the provided methodology/data and caption. Treat the attached reference as a binding style and layout target, not an optional hint.',
+    'IMPORTANT: One or more reference images are ATTACHED to this request. Treat them as VISUAL STYLE references only: distil a single coherent visual style from them — color palette, shape/line language, iconography, and typography — so the generated figure feels clearly and strongly stylistically consistent. Do NOT replicate any reference\'s spatial layout or composition, and when several references are attached do not merge their structures. The figure\'s layout — the number, type, and arrangement of blocks and the overall flow — MUST be derived from the provided methodology/data and caption, never from the references, so the result stays internally coherent even when a reference depicts an unrelated subject. Keep the semantic content faithful to the methodology/data and caption.',
   ].join('\n')
 }
 
