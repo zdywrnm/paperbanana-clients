@@ -45,7 +45,7 @@ type CreateJobBody = {
   retrievalSetting?: RetrievalSetting
   manualReferenceIds?: string[]
   aspectRatio?: '16:9' | '21:9' | '3:2' | '1:1'
-  imageSize?: '2K' | '4K'
+  imageSize?: '1K' | '2K' | '4K'
   numCandidates?: number
   maxCriticRounds?: number
 }
@@ -494,7 +494,9 @@ async function createJob(body: CreateJobBody, ctx: FunctionContext) {
     referenceImageMode: normalizeReferenceImageMode(body.referenceImageMode),
     referenceImages: normalizeReferenceImages(body.referenceImages || []),
     outputFormat: normalizeOutputFormat(body.outputFormat || body.output_format),
-    imageSize: body.imageSize === '4K' ? '4K' as const : '2K' as const,
+    // 清晰度三档：1K = 仅基础渲染；2K/4K = 基础渲染后再自动精修放大到该分辨率。
+    // 默认 1K（最快、最省），未知值同样归一到 1K。
+    imageSize: body.imageSize === '4K' ? '4K' as const : body.imageSize === '2K' ? '2K' as const : '1K' as const,
     retrievalSetting: normalizeRetrievalSetting(body.retrievalSetting),
     manualReferenceIds: normalizeManualReferenceIds(body.manualReferenceIds || []),
   }
@@ -978,6 +980,12 @@ async function runCandidate(
     }
   }
 
+  // 清晰度驱动的自动精修：1K 仅基础渲染；2K/4K 在 PNG 图（非 SVG）最终图上再跑一遍
+  // 升清放大。失败时 enhanceCandidateToResolution 内部已回退到基础图。
+  if (body.imageSize === '2K' || body.imageSize === '4K') {
+    base64 = await enhanceCandidateToResolution(jobId, candidateId, body, apiKey, base64, description, body.imageSize, logStage)
+  }
+
   return { content: base64, encoding: 'base64' as const, mimeType: 'image/png', description }
 }
 
@@ -1115,7 +1123,92 @@ async function runPlotCandidate(
   if (!base64) {
     throw new Error(`Plot generation failed: the plot-worker could not render the matplotlib code${rendered.error ? ` (${rendered.error})` : ''}`)
   }
+
+  // 清晰度驱动的自动精修（plot）：仅对支持图生图的 provider 做"像素级升清"——把
+  // plot-worker 渲染出的 PNG 直接放大；不支持图生图的 provider 跳过（避免用图描述
+  // 重画统计图导致内容失真）。1K 不做额外处理。
+  if ((body.imageSize === '2K' || body.imageSize === '4K') && providerSupportsImageEdit(body.provider)) {
+    base64 = await enhanceCandidateToResolution(jobId, candidateId, body, apiKey, base64, description, body.imageSize, logStage)
+  }
+
   return { content: base64, encoding: 'base64' as const, mimeType: 'image/png', description }
+}
+
+// 清晰度驱动的自动精修放大。在 2K/4K 模式下，基础候选图渲染完成后再跑一遍
+// "升清"：能做图生图的 provider（gemini/openrouter/openai）直接以基础图为输入做
+// 高清重绘（保内容、保排版、保文字、保配色，仅提升清晰度与分辨率）；不支持图生图
+// 的 provider（bailian）则用既有的最终描述以更大尺寸重渲染一次。
+//
+// 该步永远不能让整个候选失败：任何错误都回退到 baseBase64 并记录日志。返回值是新的
+// base64（成功）或 baseBase64（失败回退）。
+async function enhanceCandidateToResolution(
+  jobId: string,
+  candidateId: number,
+  body: CreateJobBody,
+  apiKey: string,
+  baseBase64: string,
+  baseDescription: string,
+  targetSize: string,
+  logStage: (message: string) => Promise<void> = async () => {},
+): Promise<string> {
+  const startedAt = new Date()
+  try {
+    await logStage(`enhancing candidate to ${targetSize}`)
+    let upscaled: string
+    if (providerSupportsImageEdit(body.provider)) {
+      // 图生图升清：把基础图作为源图直接交给图像模型，只让它提升清晰度/分辨率。
+      const editPrompt = refineEditPrompt(
+        'Upscale and sharpen this academic diagram; preserve ALL content, text, layout and colors exactly — only increase resolution and crispness.',
+        targetSize,
+      )
+      upscaled = await callImageModel(
+        body.provider,
+        body.imageModelName,
+        apiKey,
+        editPrompt,
+        body.aspectRatio || '16:9',
+        'data:image/png;base64,' + baseBase64,
+        targetSize,
+      )
+    } else {
+      // 无图生图能力（bailian）：用最终描述以更大的安全尺寸重渲染一次。
+      upscaled = await callImageModel(
+        body.provider,
+        body.imageModelName,
+        apiKey,
+        diagramPromptFromDescription(baseDescription),
+        body.aspectRatio || '16:9',
+        '',
+        targetSize,
+      )
+    }
+    if (!upscaled) throw new Error('enhance pass returned no image data')
+    const stageImage = await saveStageImage(jobId, candidateId, `enhance-${targetSize}`, upscaled, 'image/png', 'base64')
+    await recordStage(jobId, {
+      candidateId,
+      type: 'render',
+      title: `精修放大（${targetSize}）`,
+      text: `Auto-enhance pass to reach ${targetSize} resolution.`,
+      image: stageImage,
+      startedAt,
+      completedAt: new Date(),
+    })
+    return upscaled
+  } catch (error: any) {
+    // 升清失败绝不连累整张候选图：回退到基础图并记录。
+    const message = error?.message || String(error)
+    await logStage(`enhance to ${targetSize} failed, keeping base image: ${message}`)
+    await recordStage(jobId, {
+      candidateId,
+      type: 'render',
+      title: `精修放大（${targetSize}，已回退）`,
+      text: `Auto-enhance pass to reach ${targetSize} resolution.`,
+      startedAt,
+      completedAt: new Date(),
+      error: message,
+    })
+    return baseBase64
+  }
 }
 
 // Plot planner(+optional stylist). Mirrors buildVisualDescription's structure
@@ -2045,6 +2138,9 @@ async function callImageModel(
       body: JSON.stringify({
         model,
         prompt,
+        // OpenAI gpt-image sizes are an enum; '1536x1024' is the largest safe
+        // landscape value. Higher imageSize requests are served by the separate
+        // auto-refine pass, so we keep a known-good size here (never 400).
         size: '1536x1024',
         quality: 'high',
         background: 'opaque',
@@ -2210,8 +2306,9 @@ async function callGeminiImage(model: string, apiKey: string, prompt: string, as
   throw new Error('Gemini image model did not return image data')
 }
 
-// Gemini imageConfig.imageSize only accepts '1K'/'2K'. Map our resolution
-// setting onto a known-good value; never emit '4K' (unsupported → would 400).
+// Gemini imageConfig.imageSize only accepts '1K'/'2K'. CLAMP our resolution
+// setting onto a known-good value: '4K' → '2K' (4K unsupported here), '2K' → '2K',
+// '1K'/unknown → '1K'. Never emit '4K' (unsupported → would 400).
 function geminiImageSize(imageSize: string) {
   if (imageSize === '4K') return '2K'
   if (imageSize === '2K') return '2K'
@@ -2257,12 +2354,15 @@ function extractDashScopeImageUrl(data: any) {
   return ''
 }
 
-// Resolve a model-SAFE pixel size for DashScope wan/qwen-image. The '2K' sizes
-// below are the existing known-good values already used in production. The '4K'
-// sizes are modestly larger but still inside the wan/qwen-image limit (long side
-// <= 1664, total area ~< 1.6M px) so a higher resolution never breaks generation.
-// When unsure, fall through to the safe 2K size.
-function bailianImageSize(aspectRatio: string, imageSize = '2K') {
+// Resolve a model-SAFE pixel size for DashScope wan/qwen-image. The non-hires
+// sizes below are the existing known-good values already used in production and
+// are also reused for '1K' (the base render just uses the safe default size).
+// The '4K' sizes are modestly larger but are CLAMPED to stay inside the
+// wan/qwen-image limit (long side <= ~1664 px, total area < ~1.6M px) so a
+// too-large request can NEVER 400. When unsure, fall through to the safe size.
+function bailianImageSize(aspectRatio: string, imageSize = '1K') {
+  // Only '4K' bumps to the larger (still clamped) size; '1K'/'2K'/unknown use
+  // the conservative base size.
   const hires = imageSize === '4K'
   if (aspectRatio === '21:9') return hires ? '1664*720' : '1792*768'
   if (aspectRatio === '3:2') return hires ? '1664*1108' : '1536*1024'
