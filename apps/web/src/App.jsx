@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Apple,
+  BookOpen,
   Eye,
   FileText,
   Github,
@@ -11,6 +12,7 @@ import {
   MessageCircle,
   MessageSquare,
   MonitorDown,
+  QrCode,
   RefreshCcw,
   Send,
   Settings2,
@@ -18,6 +20,7 @@ import {
   Smartphone,
   Sparkles,
   Users,
+  X,
 } from 'lucide-react';
 import {
   adminFeedbackRequest,
@@ -61,6 +64,7 @@ import AuthPanel from './components/AuthPanel';
 import AuthUnavailablePanel from './components/AuthUnavailablePanel';
 import ExampleTemplates from './components/ExampleTemplates';
 import FeedbackDialog from './components/FeedbackDialog';
+import GuidePanel from './components/GuidePanel';
 import JobStatus from './components/JobStatus';
 import JobTable from './components/JobTable';
 import ReferenceLibraryPanel from './components/ReferenceLibraryPanel';
@@ -73,6 +77,8 @@ import { formatErrorMessage, formatOutputFormat } from './utils';
 export default function App() {
   const authSession = useAuthSession();
   const [activeTab, setActiveTab] = useState('generate');
+  const [showContactDialog, setShowContactDialog] = useState(false);
+  const [contactQrFailed, setContactQrFailed] = useState(false);
   const [showAuthPanel, setShowAuthPanel] = useState(false);
   const [apiBase, setApiBase] = useState(API_BASE_DEFAULT);
   const [configurationMode, setConfigurationMode] = useState('simple');
@@ -596,6 +602,9 @@ export default function App() {
           </div>
         </div>
         <div className="header-links">
+          <button type="button" className="contact-author-button" onClick={() => setShowContactDialog(true)}>
+            <QrCode size={16} /> 联系作者
+          </button>
           <a href="https://huggingface.co/papers/2601.23265" target="_blank" rel="noreferrer">
             <FileText size={16} /> 论文
           </a>
@@ -639,6 +648,26 @@ export default function App() {
         onSubmit={handleSubmitFeedback}
       />
 
+      {showContactDialog ? (
+        <div className="feedback-dialog-backdrop" onClick={() => setShowContactDialog(false)}>
+          <div className="contact-dialog" onClick={(event) => event.stopPropagation()}>
+            <button type="button" className="contact-dialog-close" aria-label="关闭" onClick={() => setShowContactDialog(false)}>
+              <X size={18} />
+            </button>
+            <h2>联系作者</h2>
+            <p>使用中有任何问题、建议或合作意向，欢迎扫码添加作者微信。</p>
+            {contactQrFailed ? (
+              <div className="contact-qr-fallback">二维码即将上线，可先点右下角「意见反馈」联系作者。</div>
+            ) : (
+              <>
+                <img className="contact-qr" src="/contact-qr.png" alt="作者微信二维码" onError={() => setContactQrFailed(true)} />
+                <span className="contact-qr-tip">扫二维码，添加我为朋友。</span>
+              </>
+            )}
+          </div>
+        </div>
+      ) : null}
+
       <button type="button" className="feedback-fab" onClick={openFeedbackDialog}>
         <MessageSquare size={18} />
         <span>意见反馈</span>
@@ -647,6 +676,7 @@ export default function App() {
       <nav className="paper-tabs">
         <button type="button" className={activeTab === 'generate' ? 'active' : ''} onClick={() => setActiveTab('generate')}>生成候选图</button>
         <button type="button" className={activeTab === 'records' ? 'active' : ''} onClick={() => setActiveTab('records')}>任务记录</button>
+        <button type="button" className={activeTab === 'guide' ? 'active' : ''} onClick={() => setActiveTab('guide')}>使用教程</button>
         {isAdmin ? (
           <button type="button" className={activeTab === 'admin' ? 'active' : ''} onClick={() => setActiveTab('admin')}>站长</button>
         ) : null}
@@ -957,6 +987,8 @@ export default function App() {
             <JobTable jobs={adminJobs} showUser apiBase={apiBaseNormalized} />
           </div>
         </section>
+      ) : activeTab === 'guide' ? (
+        <GuidePanel onStart={() => setActiveTab('generate')} onContact={() => setShowContactDialog(true)} />
       ) : (
         <TaskRecordsPanel
           authEnabled={AUTH_ENABLED}

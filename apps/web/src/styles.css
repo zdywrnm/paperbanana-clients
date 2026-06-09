@@ -148,7 +148,8 @@ button {
 }
 
 .header-links a,
-.auth-entry-button {
+.auth-entry-button,
+.contact-author-button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -163,12 +164,21 @@ button {
   text-decoration: none;
 }
 
-.auth-entry-button {
+.auth-entry-button,
+.contact-author-button {
   cursor: pointer;
 }
 
+/* 「联系作者」是顶栏主行动按钮，给一点强调色让它更醒目。 */
+.contact-author-button {
+  color: var(--accent);
+  background: var(--accent-wash);
+  border-color: var(--accent-soft);
+}
+
 .header-links a:hover,
-.auth-entry-button:hover {
+.auth-entry-button:hover,
+.contact-author-button:hover {
   border-color: var(--hairline-strong);
   background: #ffffff;
   color: var(--ink);
@@ -2243,4 +2253,260 @@ figcaption {
   .feedback-fab {
     right: max(calc(14px + env(safe-area-inset-right)), calc(100vw - 376px));
   }
+}
+
+/* ===== 联系作者二维码弹窗 ===== */
+.contact-dialog {
+  position: relative;
+  width: min(380px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  padding: 26px 24px 24px;
+  text-align: center;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-panel);
+  box-shadow: 0 24px 72px rgba(23, 21, 19, 0.22);
+}
+
+.contact-dialog h2 {
+  margin: 0 0 6px;
+  font-size: 19px;
+}
+
+.contact-dialog > p {
+  margin: 0 auto 16px;
+  max-width: 300px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.contact-dialog-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  color: var(--muted);
+  background: var(--surface-muted);
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+}
+
+.contact-dialog-close:hover {
+  color: var(--ink);
+  border-color: var(--hairline-strong);
+}
+
+.contact-qr {
+  display: block;
+  width: min(280px, 100%);
+  margin: 0 auto;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.contact-qr-tip {
+  display: block;
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.contact-qr-fallback {
+  padding: 28px 16px;
+  color: var(--muted);
+  background: var(--surface-muted);
+  border: 1px dashed var(--hairline);
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* ===== 使用教程 ===== */
+.guide-panel {
+  width: 100%;
+  padding: 26px;
+  background: rgba(255, 255, 251, 0.9);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-soft);
+}
+
+.guide-head {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.guide-head svg {
+  flex: 0 0 auto;
+  margin-top: 4px;
+  color: var(--accent);
+}
+
+.guide-head h2 {
+  margin: 0 0 6px;
+  font-size: 22px;
+}
+
+.guide-head p {
+  margin: 0;
+  max-width: 880px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.guide-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 18px 0 6px;
+}
+
+.guide-cta-primary,
+.guide-cta-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 9px 18px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.guide-cta-primary {
+  color: #fff;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+}
+
+.guide-cta-primary:hover {
+  filter: brightness(1.05);
+}
+
+.guide-cta-ghost {
+  color: var(--ink-soft);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+}
+
+.guide-cta-ghost:hover {
+  border-color: var(--hairline-strong);
+  color: var(--ink);
+}
+
+.guide-section {
+  margin-top: 26px;
+  padding-top: 22px;
+  border-top: 1px solid var(--hairline);
+}
+
+.guide-section > h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-size: 16px;
+}
+
+.guide-section > h3 svg {
+  color: var(--accent);
+}
+
+.guide-section > p,
+.guide-note {
+  margin: 0 0 12px;
+  max-width: 920px;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.guide-note {
+  padding: 10px 14px;
+  color: var(--ink-soft);
+  background: var(--accent-wash);
+  border: 1px solid var(--accent-soft);
+  border-radius: 10px;
+}
+
+.guide-steps,
+.guide-flow,
+.guide-faq {
+  margin: 0;
+  padding-left: 22px;
+  max-width: 920px;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.guide-steps li,
+.guide-flow li,
+.guide-faq li {
+  margin-bottom: 7px;
+}
+
+.guide-flow {
+  display: grid;
+  gap: 4px;
+}
+
+.guide-term {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 3px;
+  padding: 11px 14px;
+  margin-bottom: 9px;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+}
+
+.guide-term strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.guide-term p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.guide-term em {
+  color: var(--ink-soft);
+  font-style: normal;
+  font-weight: 650;
+}
+
+.guide-foot {
+  margin-top: 26px;
+  padding-top: 18px;
+  border-top: 1px solid var(--hairline);
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.guide-link {
+  padding: 0;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.guide-link:hover {
+  text-decoration: underline;
 }
