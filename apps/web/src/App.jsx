@@ -914,60 +914,64 @@ export default function App() {
         </form>
 
         <section className="input-results">
-          <div className="section-head">
-            <FileText size={20} />
-            <div>
-              <h2>输入内容</h2>
-              <p>选择信息图类别，再粘贴论文方法部分和目标图注。</p>
+          <div className="input-col">
+            <div className="section-head">
+              <FileText size={20} />
+              <div>
+                <h2>输入内容</h2>
+                <p>选择信息图类别，再粘贴论文方法部分和目标图注。</p>
+              </div>
             </div>
-          </div>
 
-          <ExampleTemplates examples={QUICK_START_EXAMPLES} onApply={applyQuickStartExample} />
+            <ExampleTemplates examples={QUICK_START_EXAMPLES} onApply={applyQuickStartExample} />
 
-          <div className="input-options">
-            <Select
-              label="信息图类别"
-              value={infographicCategory}
-              onChange={setInfographicCategory}
-              options={INFOGRAPHIC_CATEGORIES.map(([id, label]) => [id, label])}
+            <div className="input-options">
+              <Select
+                label="信息图类别"
+                value={infographicCategory}
+                onChange={setInfographicCategory}
+                options={INFOGRAPHIC_CATEGORIES.map(([id, label]) => [id, label])}
+              />
+              <p>{selectedInfographicCategory[2]}</p>
+            </div>
+            {isPlotCategory ? (
+              <div className="plot-note">
+                统计图由独立渲染服务生成，可能稍慢。
+              </div>
+            ) : null}
+
+            <ReferenceUploadPanel
+              images={referenceImages}
+              error={referenceUploadError}
+              disabled={isSubmitting}
+              isUploading={isUploadingReferences}
+              onAddFiles={addReferenceFiles}
+              onRemove={removeReferenceImage}
             />
-            <p>{selectedInfographicCategory[2]}</p>
-          </div>
-          {isPlotCategory ? (
-            <div className="plot-note">
-              统计图由独立渲染服务生成，可能稍慢。
-            </div>
-          ) : null}
 
-          <ReferenceUploadPanel
-            images={referenceImages}
-            error={referenceUploadError}
-            disabled={isSubmitting}
-            isUploading={isUploadingReferences}
-            onAddFiles={addReferenceFiles}
-            onRemove={removeReferenceImage}
-          />
+            <div className="two-col input-copy">
+              <label className="field">
+                <span>论文方法内容</span>
+                <textarea value={methodContent} onChange={(event) => setMethodContent(event.target.value)} rows={12} />
+              </label>
 
-          <div className="two-col input-copy">
-            <label className="field">
-              <span>论文方法内容</span>
-              <textarea value={methodContent} onChange={(event) => setMethodContent(event.target.value)} rows={12} />
-            </label>
-
-            <label className="field">
-              <span>目标图注</span>
-              <textarea value={caption} onChange={(event) => setCaption(event.target.value)} rows={12} />
-            </label>
-          </div>
-
-          <div className="section-head results-head">
-            <ImageIcon size={20} />
-            <div>
-              <h2>生成结果</h2>
-              <p>{currentJobId ? `任务编号 ${currentJobId}` : '提交任务后显示生成结果。'}</p>
+              <label className="field">
+                <span>目标图注</span>
+                <textarea value={caption} onChange={(event) => setCaption(event.target.value)} rows={12} />
+              </label>
             </div>
           </div>
-          <JobStatus job={job} apiBase={apiBaseNormalized} onUseForRefine={useImageForRefine} />
+
+          <div className="results-col">
+            <div className="section-head results-head">
+              <ImageIcon size={20} />
+              <div>
+                <h2>生成结果</h2>
+                <p>{currentJobId ? `任务编号 ${currentJobId}` : '提交任务后显示生成结果。'}</p>
+              </div>
+            </div>
+            <JobStatus job={job} apiBase={apiBaseNormalized} onUseForRefine={useImageForRefine} />
+          </div>
         </section>
         </section>
       ) : activeTab === 'refine' ? (

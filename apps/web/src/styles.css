@@ -279,34 +279,21 @@ button {
 .input-results {
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(380px, 0.95fr);
-  grid-auto-rows: min-content;
-  gap: 14px 18px;
+  align-items: start;
+  gap: 18px;
   padding: 24px;
 }
 
-.input-results > .section-head:not(.results-head),
-.input-results > .example-panel,
-.input-results > .input-options,
-.input-results > .reference-upload-panel,
-.input-results > .input-copy {
-  grid-column: 1;
+.input-col,
+.results-col {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
 }
 
-.input-results > .section-head:not(.results-head) {
+.input-col > .section-head {
   margin-bottom: 2px;
-}
-
-.input-results > .results-head {
-  grid-column: 2;
-  grid-row: 1;
-  margin: 0 0 2px;
-}
-
-.input-results > .job-detail,
-.input-results > .empty-state {
-  grid-column: 2;
-  grid-row: 2 / span 4;
-  min-height: 0;
 }
 
 .admin-panel {
@@ -492,7 +479,7 @@ button {
 }
 
 .section-head.results-head {
-  margin-top: 14px;
+  margin: 0 0 2px;
 }
 
 .section-head svg {
@@ -1987,18 +1974,6 @@ figcaption {
 
   .input-results {
     grid-template-columns: 1fr;
-  }
-
-  .input-results > .section-head:not(.results-head),
-  .input-results > .example-panel,
-  .input-results > .input-options,
-  .input-results > .reference-upload-panel,
-  .input-results > .input-copy,
-  .input-results > .results-head,
-  .input-results > .job-detail,
-  .input-results > .empty-state {
-    grid-column: 1;
-    grid-row: auto;
   }
 
   .generator,

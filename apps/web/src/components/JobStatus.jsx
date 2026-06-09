@@ -28,7 +28,9 @@ export default function JobStatus({ job, apiBase, onUseForRefine }) {
         {job.critic_mode ? <span>{job.critic_mode === 'image' ? '图像评审' : '文本评审'}</span> : null}
         <span>{job.num_candidates} 张候选图</span>
       </div>
-      <DownloadJobZipButton job={job} apiBase={apiBase} />
+      {(job.result_images || []).length > 0 ? (
+        <DownloadJobZipButton job={job} apiBase={apiBase} />
+      ) : null}
       {job.error ? <div className="error-line"><AlertTriangle size={16} /> {formatErrorMessage(job.error)}</div> : null}
       {(job.reference_images || []).some((image) => image.url) ? (
         <div className="image-grid reference-echo">
