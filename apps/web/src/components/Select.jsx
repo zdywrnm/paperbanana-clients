@@ -1,4 +1,4 @@
-export default function Select({ label, value, onChange, options }) {
+export default function Select({ label, value, onChange, options, disabled = false, hint = '' }) {
   const hasGroups = options.some((option) => option[2]);
   const groups = hasGroups
     ? options.reduce((acc, option) => {
@@ -12,7 +12,7 @@ export default function Select({ label, value, onChange, options }) {
   return (
     <label className="field compact">
       <span>{label}</span>
-      <select value={value} onChange={(event) => onChange(event.target.value)}>
+      <select value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)}>
         {groups
           ? Object.entries(groups).map(([group, items]) => (
               <optgroup key={group} label={group}>
@@ -21,6 +21,7 @@ export default function Select({ label, value, onChange, options }) {
             ))
           : options.map(([id, text]) => <option key={id} value={id}>{text}</option>)}
       </select>
+      {hint ? <small className="field-hint">{hint}</small> : null}
     </label>
   );
 }

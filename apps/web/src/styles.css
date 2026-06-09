@@ -551,6 +551,19 @@ button {
   font-weight: 680;
 }
 
+.field-hint {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.field select:disabled {
+  color: var(--muted);
+  background: var(--surface-muted);
+  cursor: not-allowed;
+  opacity: 1;
+}
+
 .field input,
 .field textarea,
 .field select,

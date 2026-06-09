@@ -248,13 +248,13 @@ export default function App() {
   }, [apiBaseNormalized, currentJobId, health]);
 
   useEffect(() => {
-    if (!isAdvancedMode || retrievalSetting !== 'manual') return undefined;
+    if (!isAdvancedMode || retrievalSetting !== 'manual' || referenceImages.length) return undefined;
     let cancelled = false;
     loadReferenceLibrary({ silent: true, cancelledRef: () => cancelled });
     return () => {
       cancelled = true;
     };
-  }, [apiBaseNormalized, health, isAdvancedMode, retrievalSetting, isPlotCategory]);
+  }, [apiBaseNormalized, health, isAdvancedMode, retrievalSetting, isPlotCategory, referenceImages.length]);
 
   const canSubmit = useMemo(() => {
     const hasKey = selectedKey.trim();
@@ -465,8 +465,9 @@ export default function App() {
         referenceImageMode: uploadedReferenceImages.length ? activeReferenceImageMode : undefined,
         referenceImages: uploadedReferenceImages,
         pipelineMode: isAdvancedMode ? pipelineMode : 'demo_planner_critic',
-        retrievalSetting: isAdvancedMode ? retrievalSetting : 'none',
-        manualReferenceIds: isAdvancedMode && retrievalSetting === 'manual' ? manualReferenceIds : [],
+        // 上传参考图时以图为唯一风格来源，前端同步关闭检索（后端亦强制，二者一致）。
+        retrievalSetting: isAdvancedMode && !uploadedReferenceImages.length ? retrievalSetting : 'none',
+        manualReferenceIds: isAdvancedMode && retrievalSetting === 'manual' && !uploadedReferenceImages.length ? manualReferenceIds : [],
         aspectRatio: isAdvancedMode ? aspectRatio : '16:9',
         numCandidates: isAdvancedMode ? Number(numCandidates) : 1,
         maxCriticRounds: isAdvancedMode ? Number(maxCriticRounds) : 1,
@@ -772,7 +773,12 @@ export default function App() {
                   ['demo_full', '完整流程'],
                   ['vanilla', '基础生成'],
                 ]} />
-                <Select label="检索设置" value={retrievalSetting} onChange={setRetrievalSetting} options={[
+                <Select label="检索设置"
+                  value={referenceImages.length ? 'none' : retrievalSetting}
+                  onChange={setRetrievalSetting}
+                  disabled={referenceImages.length > 0}
+                  hint={referenceImages.length ? '已上传参考图，检索自动关闭（以参考图为唯一风格来源）' : ''}
+                  options={[
                   ['none', '不使用检索'],
                   ['auto', '自动检索'],
                   ['random', '随机参考'],
@@ -830,7 +836,7 @@ export default function App() {
                 </label>
               ) : null}
 
-              {retrievalSetting === 'manual' ? (
+              {retrievalSetting === 'manual' && !referenceImages.length ? (
                 <ReferenceLibraryPanel
                   references={referenceLibrary}
                   selectedIds={manualReferenceIds}
