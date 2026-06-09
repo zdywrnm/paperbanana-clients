@@ -60,3 +60,4 @@ captures/
 DerivedData/
 xcuserdata/
 *.xcuserstate
+.gstack/
