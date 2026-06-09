@@ -5,7 +5,7 @@ import ResultFigure from './ResultFigure';
 import StageTimeline from './StageTimeline';
 import StatusBadge from './StatusBadge';
 
-export default function JobStatus({ job, apiBase, onUseForRefine }) {
+export default function JobStatus({ job, apiBase }) {
   if (!job) {
     return (
       <div className="empty-state">
@@ -41,7 +41,7 @@ export default function JobStatus({ job, apiBase, onUseForRefine }) {
       ) : null}
       <div className="image-grid">
         {(job.result_images || []).map((image) => (
-          <ResultFigure key={image.filename} image={image} apiBase={apiBase} outputFormat={job.output_format} onUseForRefine={onUseForRefine} />
+          <ResultFigure key={image.filename} image={image} apiBase={apiBase} outputFormat={job.output_format} />
         ))}
       </div>
       <StageTimeline job={job} apiBase={apiBase} />

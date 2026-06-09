@@ -18,7 +18,6 @@ import {
   Smartphone,
   Sparkles,
   Users,
-  X,
 } from 'lucide-react';
 import {
   adminFeedbackRequest,
@@ -31,7 +30,6 @@ import {
   modelCapabilityRequest,
   prepareReferenceUploadRequest,
   referenceLibraryRequest,
-  refineImageRequest,
   submitFeedbackRequest,
   userJobsRequest,
 } from '@paperbanana/api';
@@ -54,6 +52,7 @@ import {
   RESOLUTION_OPTIONS,
   SAMPLE_METHOD,
   mainModelCanReadImages,
+  supportedResolutions,
 } from './constants';
 import ApiKeyGuide from './components/ApiKeyGuide';
 import AdminFeedbackTable from './components/AdminFeedbackTable';
@@ -66,7 +65,6 @@ import JobStatus from './components/JobStatus';
 import JobTable from './components/JobTable';
 import ReferenceLibraryPanel from './components/ReferenceLibraryPanel';
 import ReferenceUploadPanel from './components/ReferenceUploadPanel';
-import RefinePanel from './components/RefinePanel';
 import Select from './components/Select';
 import TaskRecordsPanel from './components/TaskRecordsPanel';
 import { useAuthSession } from './hooks/useAuthSession';
@@ -84,7 +82,7 @@ export default function App() {
   const [caption, setCaption] = useState('图 1：所提出的多智能体学术图示生成框架总览。');
   const [infographicCategory, setInfographicCategory] = useState('method_framework');
   const [outputFormat, setOutputFormat] = useState('png');
-  const [imageSize, setImageSize] = useState('2K');
+  const [imageSize, setImageSize] = useState('1K');
   const [mainModelName, setMainModelName] = useState(PROVIDERS.bailian.mainModel);
   const [imageGenModelName, setImageGenModelName] = useState(PROVIDERS.bailian.imageModel);
   const [referenceVisionModelName, setReferenceVisionModelName] = useState(PROVIDERS.bailian.visionModel);
@@ -123,16 +121,6 @@ export default function App() {
   const [feedbackError, setFeedbackError] = useState('');
   const [feedbackSuccess, setFeedbackSuccess] = useState(false);
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
-  const [refineSourceUrl, setRefineSourceUrl] = useState('');
-  const [refineInstruction, setRefineInstruction] = useState('');
-  const [refineImageSize, setRefineImageSize] = useState('2K');
-  const [refineAspectRatio, setRefineAspectRatio] = useState('16:9');
-  const [refineJobId, setRefineJobId] = useState('');
-  const [refineJob, setRefineJob] = useState(null);
-  const [refineError, setRefineError] = useState('');
-  const [isSubmittingRefine, setIsSubmittingRefine] = useState(false);
-  const [showRefineDialog, setShowRefineDialog] = useState(false);
-
   const currentUser = AUTH_ENABLED ? authSession.session?.user : null;
   const authReady = !AUTH_REQUIRED || Boolean(!authSession.isPending && currentUser);
   const providerConfig = PROVIDERS[provider];
@@ -145,6 +133,10 @@ export default function App() {
   const defaultImageModelLabel = findModelLabel(providerConfig.imageModels, providerConfig.imageModel);
   const defaultVisionModelLabel = findModelLabel(providerConfig.visionModels || [], providerConfig.visionModel);
   const activeMainModelName = isAdvancedMode ? mainModelName : providerConfig.mainModel;
+  const activeImageGenModelName = isAdvancedMode ? imageGenModelName : providerConfig.imageModel;
+  // 输出清晰度可选项随 provider/图像生成模型变化（自动精修由清晰度档位驱动）。
+  const resolutionValues = supportedResolutions(provider, activeImageGenModelName);
+  const resolutionOptions = RESOLUTION_OPTIONS.filter(([value]) => resolutionValues.includes(value));
   // 固定能力：主模型能否直读参考图由 mainModelCanReadImages 同步判定（不再依赖异步探测/自动选择）。
   const mainModelCanRead = mainModelCanReadImages(provider, activeMainModelName);
   const activeReferenceImageMode = isAdvancedMode
@@ -180,6 +172,12 @@ export default function App() {
     setImageGenModelName(PROVIDERS[provider].imageModel);
     setReferenceVisionModelName(PROVIDERS[provider].visionModel);
   }, [provider]);
+
+  // provider / 图像生成模型变化时，若当前清晰度不再被支持则收敛到第一档。
+  useEffect(() => {
+    const supported = supportedResolutions(provider, activeImageGenModelName);
+    if (!supported.includes(imageSize)) setImageSize(supported[0]);
+  }, [provider, activeImageGenModelName, imageSize]);
 
   // 参考图模式按固定能力派生：主模型能直读→主模型直读，否则→独立识别模型。
   // provider/主模型变化时重算（之后用户仍可手动切换两种模式）。
@@ -250,28 +248,6 @@ export default function App() {
   }, [apiBaseNormalized, currentJobId, health]);
 
   useEffect(() => {
-    if (!refineJobId) return undefined;
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const data = await getJobRequest(apiBaseNormalized, health, refineJobId);
-        if (!cancelled) {
-          setRefineJob(data);
-          setRefineError('');
-        }
-      } catch (err) {
-        if (!cancelled) setRefineError(err.message);
-      }
-    };
-    load();
-    const timer = setInterval(load, 3000);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, [apiBaseNormalized, refineJobId, health]);
-
-  useEffect(() => {
     if (!isAdvancedMode || retrievalSetting !== 'manual') return undefined;
     let cancelled = false;
     loadReferenceLibrary({ silent: true, cancelledRef: () => cancelled });
@@ -287,11 +263,6 @@ export default function App() {
     const hasManualReferences = !isAdvancedMode || retrievalSetting !== 'manual' || manualReferenceIds.length > 0;
     return authReady && hasManualReferences && hasVisionModel && !mainModelDirectUnsupported && (hasKey || canMock) && methodContent.trim().length >= 20 && caption.trim().length >= 3 && !isSubmitting && !isUploadingReferences;
   }, [authReady, selectedKey, methodContent, caption, isSubmitting, mock, health, isAdvancedMode, retrievalSetting, manualReferenceIds.length, needsReferenceVisionModel, referenceVisionModelName, providerConfig.visionModel, isUploadingReferences, mainModelDirectUnsupported]);
-
-  const canSubmitRefine = useMemo(() => {
-    const hasKey = selectedKey.trim();
-    return authReady && hasKey && refineSourceUrl.trim() && refineInstruction.trim().length >= 3 && !isSubmittingRefine;
-  }, [authReady, selectedKey, refineSourceUrl, refineInstruction, isSubmittingRefine]);
 
   useEffect(() => {
     if (!AUTH_ENABLED || !currentUser) return undefined;
@@ -463,13 +434,6 @@ export default function App() {
     });
   }
 
-  function useImageForRefine(url) {
-    setRefineSourceUrl(url);
-    setRefineInstruction((current) => current || '提升标签可读性，优化留白和箭头关系，保持论文图示风格。');
-    setRefineAspectRatio(aspectRatio);
-    setShowRefineDialog(true);
-  }
-
   async function submitJob(event) {
     event.preventDefault();
     setError('');
@@ -515,39 +479,6 @@ export default function App() {
       setError(err.message);
     } finally {
       setIsSubmitting(false);
-    }
-  }
-
-  async function submitRefine(event) {
-    event.preventDefault();
-    setRefineError('');
-    setIsSubmittingRefine(true);
-    setRefineJob(null);
-    try {
-      const scopedApiKeys = {
-        openrouter: '',
-        gemini: '',
-        openai: '',
-        bailian: '',
-        [providerConfig.keyName]: selectedKey,
-      };
-      const created = await refineImageRequest(apiBaseNormalized, health, {
-        provider,
-        apiKeys: scopedApiKeys,
-        mainModelName: isAdvancedMode ? mainModelName : providerConfig.mainModel,
-        imageModelName: isAdvancedMode ? imageGenModelName : providerConfig.imageModel,
-        referenceVisionModelName: isAdvancedMode ? referenceVisionModelName : providerConfig.visionModel,
-        sourceImageUrl: refineSourceUrl.trim(),
-        editInstruction: refineInstruction,
-        aspectRatio: refineAspectRatio,
-        imageSize: refineImageSize,
-      });
-      setRefineJobId(created.id);
-      if (currentUser) void loadUserJobs({ silent: true });
-    } catch (err) {
-      setRefineError(err.message);
-    } finally {
-      setIsSubmittingRefine(false);
     }
   }
 
@@ -707,37 +638,6 @@ export default function App() {
         onSubmit={handleSubmitFeedback}
       />
 
-      {showRefineDialog ? (
-        <div className="refine-dialog-backdrop" role="presentation">
-          <section className="refine-dialog" role="dialog" aria-modal="true" aria-label="精修图片">
-            <button
-              type="button"
-              className="refine-dialog-close"
-              onClick={() => setShowRefineDialog(false)}
-              aria-label="关闭精修"
-            >
-              <X size={18} />
-            </button>
-            <RefinePanel
-              sourceUrl={refineSourceUrl}
-              instruction={refineInstruction}
-              imageSize={refineImageSize}
-              aspectRatio={refineAspectRatio}
-              canSubmit={canSubmitRefine}
-              isSubmitting={isSubmittingRefine}
-              error={refineError}
-              job={refineJob}
-              apiBase={apiBaseNormalized}
-              onSourceUrlChange={setRefineSourceUrl}
-              onInstructionChange={setRefineInstruction}
-              onImageSizeChange={setRefineImageSize}
-              onAspectRatioChange={setRefineAspectRatio}
-              onSubmit={submitRefine}
-            />
-          </section>
-        </div>
-      ) : null}
-
       <button type="button" className="feedback-fab" onClick={openFeedbackDialog}>
         <MessageSquare size={18} />
         <span>意见反馈</span>
@@ -828,7 +728,7 @@ export default function App() {
 
           <div className="output-format-field">
             <Select label="导出格式" value={outputFormat} onChange={setOutputFormat} options={OUTPUT_FORMATS} />
-            <Select label="输出清晰度" value={imageSize} onChange={setImageSize} options={RESOLUTION_OPTIONS} />
+            <Select label="输出清晰度" value={imageSize} onChange={setImageSize} options={resolutionOptions} />
           </div>
 
           <details className="api-keys-panel" open>
@@ -1007,7 +907,7 @@ export default function App() {
                 <p>{currentJobId ? `任务编号 ${currentJobId}` : '提交任务后显示生成结果。'}</p>
               </div>
             </div>
-            <JobStatus job={job} apiBase={apiBaseNormalized} onUseForRefine={useImageForRefine} />
+            <JobStatus job={job} apiBase={apiBaseNormalized} />
           </div>
         </section>
         </section>
@@ -1048,7 +948,7 @@ export default function App() {
               <span>{adminJobs.length ? `${adminJobs.length} 条任务` : '暂无任务数据'}</span>
             </div>
             {adminError ? <div className="error-line"><AlertTriangle size={16} /> {formatErrorMessage(adminError)}</div> : null}
-            <JobTable jobs={adminJobs} showUser apiBase={apiBaseNormalized} onUseForRefine={useImageForRefine} />
+            <JobTable jobs={adminJobs} showUser apiBase={apiBaseNormalized} />
           </div>
         </section>
       ) : (
@@ -1061,7 +961,6 @@ export default function App() {
           apiBase={apiBaseNormalized}
           onLogin={() => setShowAuthPanel(true)}
           onRefresh={() => loadUserJobs()}
-          onUseForRefine={useImageForRefine}
         />
       )}
         </>

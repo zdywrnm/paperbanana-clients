@@ -234,7 +234,16 @@ export const OUTPUT_FORMATS = [
   ['svg', 'SVG 矢量图'],
 ];
 
-export const RESOLUTION_OPTIONS = [['2K', '2K（高清）'], ['4K', '4K（超清）']];
+export const RESOLUTION_OPTIONS = [['1K', '1K（标准）'], ['2K', '2K（高清）'], ['4K', '4K（超清）']];
+
+// 不同图像生成模型支持的清晰度子集（自动精修由清晰度档位驱动）。
+export function supportedResolutions(provider, imageModel) {
+  if (provider === 'bailian') return ['1K', '2K'];
+  if (provider === 'gemini') return ['1K', '2K'];
+  if (provider === 'openai') return ['1K', '2K', '4K'];
+  if (provider === 'openrouter') return ['1K', '2K', '4K'];
+  return ['1K', '2K'];
+}
 
 export const REFERENCE_IMAGE_MODES = [
   ['main_model', '主模型直读'],
