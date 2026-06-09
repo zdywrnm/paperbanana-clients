@@ -484,6 +484,10 @@ async function referenceLibrary(body: ReferenceLibraryBody) {
 
 async function createJob(body: CreateJobBody, ctx: FunctionContext) {
   validateCreateBody(body)
+  const normalizedReferenceImages = normalizeReferenceImages(body.referenceImages || [])
+  // 二选一：用户上传了参考图时，以上传图为唯一视觉风格锚点，自动关闭检索
+  // （否则检索到的多张图会与上传图的风格相互打架）。检索一律不跑、不附检索图、徽标显示“不检索”。
+  const hasUploadedReference = normalizedReferenceImages.length > 0
   const normalizedBody = {
     ...body,
     taskName: normalizeTaskName(body.taskName),
@@ -492,13 +496,13 @@ async function createJob(body: CreateJobBody, ctx: FunctionContext) {
     imageModelName: normalizeModelName(body.provider, body.imageModelName),
     referenceVisionModelName: normalizeModelName(body.provider, body.referenceVisionModelName || body.mainModelName),
     referenceImageMode: normalizeReferenceImageMode(body.referenceImageMode),
-    referenceImages: normalizeReferenceImages(body.referenceImages || []),
+    referenceImages: normalizedReferenceImages,
     outputFormat: normalizeOutputFormat(body.outputFormat || body.output_format),
     // 清晰度三档：1K = 仅基础渲染；2K/4K = 基础渲染后再自动精修放大到该分辨率。
     // 默认 1K（最快、最省），未知值同样归一到 1K。
     imageSize: body.imageSize === '4K' ? '4K' as const : body.imageSize === '2K' ? '2K' as const : '1K' as const,
-    retrievalSetting: normalizeRetrievalSetting(body.retrievalSetting),
-    manualReferenceIds: normalizeManualReferenceIds(body.manualReferenceIds || []),
+    retrievalSetting: hasUploadedReference ? ('none' as const) : normalizeRetrievalSetting(body.retrievalSetting),
+    manualReferenceIds: hasUploadedReference ? [] : normalizeManualReferenceIds(body.manualReferenceIds || []),
   }
   const apiKey = selectApiKey(normalizedBody.provider, normalizedBody.apiKeys)
   if (!apiKey) {
