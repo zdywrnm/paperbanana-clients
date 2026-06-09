@@ -344,6 +344,49 @@ button {
   box-shadow: 0 24px 72px rgba(23, 21, 19, 0.22);
 }
 
+.refine-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(23, 21, 19, 0.36);
+  backdrop-filter: blur(6px);
+}
+
+.refine-dialog {
+  position: relative;
+  width: min(760px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-panel);
+  box-shadow: 0 24px 72px rgba(23, 21, 19, 0.22);
+}
+
+.refine-dialog-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 1;
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  color: var(--muted);
+  background: var(--surface-muted);
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+}
+
+.refine-dialog-close:hover {
+  color: var(--ink);
+  background: #ffffff;
+}
+
 .feedback-fab {
   position: fixed;
   right: calc(22px + env(safe-area-inset-right));
@@ -1097,6 +1140,10 @@ button {
 }
 
 .output-format-field {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-items: end;
   margin: 0 0 14px;
 }
 

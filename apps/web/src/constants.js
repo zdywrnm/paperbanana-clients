@@ -234,6 +234,8 @@ export const OUTPUT_FORMATS = [
   ['svg', 'SVG 矢量图'],
 ];
 
+export const RESOLUTION_OPTIONS = [['2K', '2K（高清）'], ['4K', '4K（超清）']];
+
 export const REFERENCE_IMAGE_MODES = [
   ['main_model', '主模型直读'],
   ['vision_model', '独立识别模型'],

@@ -18,6 +18,7 @@ import {
   Smartphone,
   Sparkles,
   Users,
+  X,
 } from 'lucide-react';
 import {
   adminFeedbackRequest,
@@ -50,6 +51,7 @@ import {
   QUICK_START_EXAMPLES,
   REFERENCE_IMAGE_MODES,
   REFERENCE_IMAGE_LIMITS,
+  RESOLUTION_OPTIONS,
   SAMPLE_METHOD,
   mainModelCanReadImages,
 } from './constants';
@@ -82,6 +84,7 @@ export default function App() {
   const [caption, setCaption] = useState('图 1：所提出的多智能体学术图示生成框架总览。');
   const [infographicCategory, setInfographicCategory] = useState('method_framework');
   const [outputFormat, setOutputFormat] = useState('png');
+  const [imageSize, setImageSize] = useState('2K');
   const [mainModelName, setMainModelName] = useState(PROVIDERS.bailian.mainModel);
   const [imageGenModelName, setImageGenModelName] = useState(PROVIDERS.bailian.imageModel);
   const [referenceVisionModelName, setReferenceVisionModelName] = useState(PROVIDERS.bailian.visionModel);
@@ -128,6 +131,7 @@ export default function App() {
   const [refineJob, setRefineJob] = useState(null);
   const [refineError, setRefineError] = useState('');
   const [isSubmittingRefine, setIsSubmittingRefine] = useState(false);
+  const [showRefineDialog, setShowRefineDialog] = useState(false);
 
   const currentUser = AUTH_ENABLED ? authSession.session?.user : null;
   const authReady = !AUTH_REQUIRED || Boolean(!authSession.isPending && currentUser);
@@ -463,7 +467,7 @@ export default function App() {
     setRefineSourceUrl(url);
     setRefineInstruction((current) => current || '提升标签可读性，优化留白和箭头关系，保持论文图示风格。');
     setRefineAspectRatio(aspectRatio);
-    setActiveTab('refine');
+    setShowRefineDialog(true);
   }
 
   async function submitJob(event) {
@@ -490,6 +494,7 @@ export default function App() {
         caption,
         infographicCategory: selectedInfographicCategory[1],
         outputFormat,
+        imageSize,
         mainModelName: isAdvancedMode ? mainModelName : providerConfig.mainModel,
         imageGenModelName: isAdvancedMode ? imageGenModelName : providerConfig.imageModel,
         referenceVisionModelName: isAdvancedMode ? referenceVisionModelName : providerConfig.visionModel,
@@ -531,6 +536,7 @@ export default function App() {
         apiKeys: scopedApiKeys,
         mainModelName: isAdvancedMode ? mainModelName : providerConfig.mainModel,
         imageModelName: isAdvancedMode ? imageGenModelName : providerConfig.imageModel,
+        referenceVisionModelName: isAdvancedMode ? referenceVisionModelName : providerConfig.visionModel,
         sourceImageUrl: refineSourceUrl.trim(),
         editInstruction: refineInstruction,
         aspectRatio: refineAspectRatio,
@@ -701,6 +707,37 @@ export default function App() {
         onSubmit={handleSubmitFeedback}
       />
 
+      {showRefineDialog ? (
+        <div className="refine-dialog-backdrop" role="presentation">
+          <section className="refine-dialog" role="dialog" aria-modal="true" aria-label="精修图片">
+            <button
+              type="button"
+              className="refine-dialog-close"
+              onClick={() => setShowRefineDialog(false)}
+              aria-label="关闭精修"
+            >
+              <X size={18} />
+            </button>
+            <RefinePanel
+              sourceUrl={refineSourceUrl}
+              instruction={refineInstruction}
+              imageSize={refineImageSize}
+              aspectRatio={refineAspectRatio}
+              canSubmit={canSubmitRefine}
+              isSubmitting={isSubmittingRefine}
+              error={refineError}
+              job={refineJob}
+              apiBase={apiBaseNormalized}
+              onSourceUrlChange={setRefineSourceUrl}
+              onInstructionChange={setRefineInstruction}
+              onImageSizeChange={setRefineImageSize}
+              onAspectRatioChange={setRefineAspectRatio}
+              onSubmit={submitRefine}
+            />
+          </section>
+        </div>
+      ) : null}
+
       <button type="button" className="feedback-fab" onClick={openFeedbackDialog}>
         <MessageSquare size={18} />
         <span>意见反馈</span>
@@ -708,7 +745,6 @@ export default function App() {
 
       <nav className="paper-tabs">
         <button type="button" className={activeTab === 'generate' ? 'active' : ''} onClick={() => setActiveTab('generate')}>生成候选图</button>
-        <button type="button" className={activeTab === 'refine' ? 'active' : ''} onClick={() => setActiveTab('refine')}>精修图片</button>
         <button type="button" className={activeTab === 'records' ? 'active' : ''} onClick={() => setActiveTab('records')}>任务记录</button>
         {isAdmin ? (
           <button type="button" className={activeTab === 'admin' ? 'active' : ''} onClick={() => setActiveTab('admin')}>站长</button>
@@ -792,6 +828,7 @@ export default function App() {
 
           <div className="output-format-field">
             <Select label="导出格式" value={outputFormat} onChange={setOutputFormat} options={OUTPUT_FORMATS} />
+            <Select label="输出清晰度" value={imageSize} onChange={setImageSize} options={RESOLUTION_OPTIONS} />
           </div>
 
           <details className="api-keys-panel" open>
@@ -974,23 +1011,6 @@ export default function App() {
           </div>
         </section>
         </section>
-      ) : activeTab === 'refine' ? (
-        <RefinePanel
-          sourceUrl={refineSourceUrl}
-          instruction={refineInstruction}
-          imageSize={refineImageSize}
-          aspectRatio={refineAspectRatio}
-          canSubmit={canSubmitRefine}
-          isSubmitting={isSubmittingRefine}
-          error={refineError}
-          job={refineJob}
-          apiBase={apiBaseNormalized}
-          onSourceUrlChange={setRefineSourceUrl}
-          onInstructionChange={setRefineInstruction}
-          onImageSizeChange={setRefineImageSize}
-          onAspectRatioChange={setRefineAspectRatio}
-          onSubmit={submitRefine}
-        />
       ) : activeTab === 'admin' && isAdmin ? (
         <section className="admin-panel">
           <div className="section-head">
