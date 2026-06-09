@@ -735,11 +735,12 @@ async function resolveReferenceImageMode(body: CreateJobBody & { referenceImageM
   }
 
   if (capability.status === 'unsupported') {
+    // Silent fallback: the user picked 主模型直读 but the main model is text-only.
+    // Serve them via the independent vision model instead of failing the request.
     return {
       referenceImageMode: requestedMode,
       referenceImageModeUsed: 'vision_model' as ReferenceImageModeUsed,
       capability,
-      error: `当前主模型不支持直接理解参考图，请改用独立识别模型或更换主模型。${capability.reason ? `（${capability.reason}）` : ''}`,
     }
   }
 
@@ -855,7 +856,7 @@ async function runCandidate(
     await recordStage(jobId, {
       candidateId,
       type: 'render',
-      title: 'SVG render',
+      title: 'SVG 渲染',
       text: 'Final SVG rendered from the current visual description.',
       image: stageImage,
       startedAt: svgRenderStartedAt,
@@ -869,7 +870,7 @@ async function runCandidate(
     await recordStage(jobId, {
       candidateId,
       type: 'planner',
-      title: 'Vanilla prompt',
+      title: '直出提示',
       text: prompt,
     })
     await logStage('rendering PNG')
@@ -879,7 +880,7 @@ async function runCandidate(
     await recordStage(jobId, {
       candidateId,
       type: 'render',
-      title: 'Vanilla render',
+      title: '直出渲染',
       text: 'Initial image rendered without planner/stylist pipeline.',
       image: stageImage,
       startedAt: vanillaRenderStartedAt,
@@ -898,7 +899,7 @@ async function runCandidate(
   await recordStage(jobId, {
     candidateId,
     type: 'render',
-    title: 'Initial render',
+    title: '初次渲染',
     text: imagePrompt,
     image: stageImage,
     startedAt: initialRenderStartedAt,
@@ -919,7 +920,7 @@ async function runCandidate(
     await recordStage(jobId, {
       candidateId,
       type: 'critic',
-      title: `Image critic round ${round}`,
+      title: `图像评审（第${round}轮）`,
       round,
       text: critique,
       suggestion: noChanges ? '' : critique,
@@ -939,7 +940,7 @@ async function runCandidate(
       await recordStage(jobId, {
         candidateId,
         type: 'render',
-        title: `Rerender round ${round}`,
+        title: `重渲染（第${round}轮）`,
         round,
         text: imagePrompt,
         image: stageImage,
@@ -956,7 +957,7 @@ async function runCandidate(
       await recordStage(jobId, {
         candidateId,
         type: 'render',
-        title: `Rerender round ${round} (rolled back)`,
+        title: `重渲染（第${round}轮，已回滚）`,
         round,
         text: imagePrompt,
         startedAt: rerenderStartedAt,
@@ -1005,7 +1006,7 @@ async function runPlotCandidate(
   await recordStage(jobId, {
     candidateId,
     type: 'render',
-    title: 'Initial plot render',
+    title: '统计图初次渲染',
     text: code,
     image: stageImage,
     startedAt: renderStartedAt,
@@ -1029,7 +1030,7 @@ async function runPlotCandidate(
     await recordStage(jobId, {
       candidateId,
       type: 'critic',
-      title: `Plot critic round ${round}`,
+      title: `统计图评审（第${round}轮）`,
       round,
       text: critique,
       suggestion: noChanges ? '' : critique,
@@ -1056,7 +1057,7 @@ async function runPlotCandidate(
         await recordStage(jobId, {
           candidateId,
           type: 'render',
-          title: `Plot rerender round ${round} (failed)`,
+          title: `统计图重渲染（第${round}轮，失败）`,
           round,
           text: code,
           startedAt: renderStartedAt,
@@ -1070,7 +1071,7 @@ async function runPlotCandidate(
       await recordStage(jobId, {
         candidateId,
         type: 'render',
-        title: `Plot rerender round ${round}`,
+        title: `统计图重渲染（第${round}轮）`,
         round,
         text: code,
         image: stageImage,
@@ -1087,7 +1088,7 @@ async function runPlotCandidate(
       await recordStage(jobId, {
         candidateId,
         type: 'render',
-        title: `Plot rerender round ${round} (rolled back)`,
+        title: `统计图重渲染（第${round}轮，已回滚）`,
         round,
         text: code,
         startedAt: renderStartedAt,
@@ -1133,7 +1134,7 @@ async function buildPlotDescription(
   await recordStage(jobId, {
     candidateId,
     type: 'planner',
-    title: 'Plot planner',
+    title: '统计图规划',
     text: planner,
     startedAt: plannerStartedAt,
     completedAt: new Date(),
@@ -1153,7 +1154,7 @@ async function buildPlotDescription(
     await recordStage(jobId, {
       candidateId,
       type: 'stylist',
-      title: 'Plot stylist',
+      title: '统计图风格',
       text: description,
       startedAt: stylistStartedAt,
       completedAt: new Date(),
@@ -1325,7 +1326,7 @@ async function buildVisualDescription(
   await recordStage(jobId, {
     candidateId,
     type: 'planner',
-    title: 'Planner',
+    title: '规划',
     text: planner,
     startedAt: plannerStartedAt,
     completedAt: new Date(),
@@ -1345,7 +1346,7 @@ async function buildVisualDescription(
     await recordStage(jobId, {
       candidateId,
       type: 'stylist',
-      title: 'Stylist',
+      title: '风格',
       text: description,
       startedAt: stylistStartedAt,
       completedAt: new Date(),
@@ -1368,7 +1369,7 @@ async function buildVisualDescription(
     await recordStage(jobId, {
       candidateId,
       type: 'critic',
-      title: `Text critic round ${round}`,
+      title: `文本评审（第${round}轮）`,
       round,
       text: critique,
       suggestion: noChanges ? '' : critique,
@@ -1410,7 +1411,7 @@ async function runRefineJob(jobId: string, body: RefineImageBody, apiKey: string
     await recordStage(jobId, {
       candidateId: 0,
       type: 'render',
-      title: 'Refined render',
+      title: '精修渲染',
       text: body.editInstruction,
       image: stageImage,
       startedAt: renderStartedAt,
@@ -1432,7 +1433,7 @@ async function runRefineJob(jobId: string, body: RefineImageBody, apiKey: string
     await recordStage(jobId, {
       candidateId: 0,
       type: 'planner',
-      title: 'Refine plan',
+      title: '精修规划',
       text: description,
       startedAt: planStartedAt,
       completedAt: new Date(),
@@ -1445,7 +1446,7 @@ async function runRefineJob(jobId: string, body: RefineImageBody, apiKey: string
     await recordStage(jobId, {
       candidateId: 0,
       type: 'render',
-      title: 'Refined render',
+      title: '精修渲染',
       text: body.editInstruction,
       image: stageImage,
       startedAt: renderStartedAt,
@@ -2414,13 +2415,16 @@ function mainModelReferenceError(provider: Provider, model: string, error: any) 
 async function referenceModelCapability(provider: Provider, model: string): Promise<ModelCapabilityResult> {
   const normalizedModel = normalizeModelName(provider, model)
   if (provider === 'bailian') {
-    // Reference-image reading works for bailian regardless of the main model:
-    // image inputs are routed through a VL-capable vision model (qwen-vl-*),
-    // and data: URLs are materialized to public bucket URLs first.
+    // 阿里百炼"图像理解"模型可直读参考图:qwen3.7-plus / qwen3.5-omni-plus / kimi-k2.6
+    // (+ omni、遗留 qwen-vl/qvq 容错)。纯文本模型(qwen3.7-max、deepseek、glm、MiniMax…)
+    // 需经独立识别模型读图。
+    const isVisionModel = /qwen3\.7-plus|qwen3\.5-omni|omni|kimi-k2\.6|qwen-?vl|qwen3-?vl|-vl-|qvq/i.test(normalizedModel)
     return {
-      status: 'supported',
-      supportsReferenceImages: true,
-      reason: '阿里百炼参考图识别经 qwen-vl 视觉模型',
+      status: isVisionModel ? 'supported' : 'unsupported',
+      supportsReferenceImages: isVisionModel,
+      reason: isVisionModel
+        ? '该主模型支持图像理解，可直读参考图'
+        : '该主模型为文本模型，已自动改用独立识别模型读参考图',
       source: 'paperbanana-static',
       cached: true,
     }
