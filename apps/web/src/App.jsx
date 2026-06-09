@@ -659,10 +659,7 @@ export default function App() {
             {contactQrFailed ? (
               <div className="contact-qr-fallback">二维码即将上线，可先点右下角「意见反馈」联系作者。</div>
             ) : (
-              <>
-                <img className="contact-qr" src="/contact-qr.png" alt="作者微信二维码" onError={() => setContactQrFailed(true)} />
-                <span className="contact-qr-tip">扫二维码，添加我为朋友。</span>
-              </>
+              <img className="contact-qr" src="/contact-qr.png" alt="作者微信二维码（赵）" onError={() => setContactQrFailed(true)} />
             )}
           </div>
         </div>
