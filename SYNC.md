@@ -24,6 +24,18 @@
 
 ## 条目（最新在上）
 
+### [2026-06-09] 输出清晰度 + 精修内联化 + 精修模型 bug 修复 — by Claude
+变更：① 生成新增"输出清晰度"`imageSize`('2K'/'4K');② 精修分析步骤的模型选择修 bug;③ web 移除独立"精修图片"页签,改结果图"精修"按钮弹内联模态(纯前端)。
+契约（影响其他端 / 共享）：
+- `createJob` 新增可选字段 **`imageSize`('2K'|'4K',默认 2K)** —— 出图分辨率。`packages/api` 的 `createJobRequest` 已白名单;后端 `callImageModel(...,imageSize)` 按 provider 映射安全尺寸(bailian `bailianImageSize(aspectRatio,imageSize)`、gemini `geminiImageSize`:4K→2K 因 imageConfig 仅收 1K/2K)。各端可在生成参数里加该选项。
+- `refineImage` 动作:**修复**——之前 `refineImageRequest` 漏传 `mainModelName`/`referenceVisionModelName`,后端退化用出图模型(如 wan2.7-image-pro)做"读源图"分析 → DashScope 报 `messages.0.role` 错。现在两字段都转发;后端 `runRefineJob` 非图生图分支的源图分析用 `referenceVisionModelName || mainModelName`(绝不用 imageModelName)。各端精修请求需带这两个模型名。
+- 精修 UI 改为内联模态(web 单端),非契约;其他端可自行决定精修入口,但请求字段同上。
+各端待办：
+- [x] laf-functions（imageSize 接 callImageModel;refine 分析改视觉/主模型）
+- [x] packages/api（createJobRequest 加 imageSize;refineImageRequest 转发 mainModelName/referenceVisionModelName）
+- [x] web（输出清晰度 Select;精修内联模态;移除页签）
+- [ ] miniprogram/android/windows/macos（生成加 imageSize 可选;精修请求补 mainModelName/referenceVisionModelName）
+
 ### [2026-06-08] 阿里百炼模型列表更正 + 参考图模式按固定能力 — by Claude
 变更：之前 bailian 模型常量含**不存在/未激活**的名字;改为官方模型广场的真实模型,并把"参考图识别能力"按**模型**固定。
 契约（影响其他端 / 共享 model 列表）：
