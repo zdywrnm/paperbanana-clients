@@ -1221,8 +1221,12 @@ button {
 
 .job-detail {
   display: grid;
+  /* 单列网格必须用 minmax(0,1fr)，否则隐式 auto 列会被 nowrap 检索参考/候选图撑成 max-content，
+     导致整列内容溢出结果列右边界（右侧排版错乱）。min-width:0 让它作为 flex 子项也能收缩。 */
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
   align-self: stretch;
+  min-width: 0;
 }
 
 .status-strip {
@@ -1401,16 +1405,20 @@ figcaption {
 
 .stage-timeline {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   padding: 12px;
   background: rgba(255, 255, 251, 0.72);
   border: 1px solid var(--hairline);
   border-radius: 10px;
+  min-width: 0;
 }
 
 .retrieved-reference-strip {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
+  min-width: 0;
 }
 
 .retrieved-reference-strip strong,
@@ -1441,6 +1449,7 @@ figcaption {
 
 .stage-list {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
 }
 
