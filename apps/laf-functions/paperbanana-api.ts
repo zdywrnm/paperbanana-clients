@@ -1122,13 +1122,14 @@ async function buildPlotDescription(
   retrievalContext = '',
   referenceImages: VisionImageInput[] = [],
 ) {
+  const hasReferenceImages = referenceImages.length > 0
   const plannerStartedAt = new Date()
   const planner = await callTextModel(
     body.provider,
     body.mainModelName,
     apiKey,
     plotPlannerSystemPrompt(),
-    plotPlannerUserPrompt(body.methodContent, body.caption, referenceAnalysis, retrievalContext),
+    plotPlannerUserPrompt(body.methodContent, body.caption, referenceAnalysis, retrievalContext, hasReferenceImages),
     referenceImages,
   )
   await recordStage(jobId, {
@@ -1149,7 +1150,7 @@ async function buildPlotDescription(
       body.mainModelName,
       apiKey,
       plotStylistSystemPrompt(),
-      plotStylistUserPrompt(body.methodContent, body.caption, planner, referenceAnalysis, retrievalContext),
+      plotStylistUserPrompt(body.methodContent, body.caption, planner, referenceAnalysis, retrievalContext, hasReferenceImages),
     )
     await recordStage(jobId, {
       candidateId,
@@ -1314,13 +1315,14 @@ async function buildVisualDescription(
   }
 
   const infographicCategory = limitText(body.infographicCategory, 80)
+  const hasReferenceImages = referenceImages.length > 0
   const plannerStartedAt = new Date()
   const planner = await callTextModel(
     body.provider,
     body.mainModelName,
     apiKey,
     plannerSystemPrompt(),
-    plannerUserPrompt(body.methodContent, body.caption, referenceAnalysis, retrievalContext, infographicCategory),
+    plannerUserPrompt(body.methodContent, body.caption, referenceAnalysis, retrievalContext, infographicCategory, hasReferenceImages),
     referenceImages,
   )
   await recordStage(jobId, {
@@ -1341,7 +1343,7 @@ async function buildVisualDescription(
       body.mainModelName,
       apiKey,
       stylistSystemPrompt(),
-      stylistUserPrompt(body.methodContent, body.caption, planner, referenceAnalysis, retrievalContext, infographicCategory),
+      stylistUserPrompt(body.methodContent, body.caption, planner, referenceAnalysis, retrievalContext, infographicCategory, hasReferenceImages),
     )
     await recordStage(jobId, {
       candidateId,
@@ -2553,11 +2555,11 @@ function plannerSystemPrompt() {
   ].join('\n')
 }
 
-function plannerUserPrompt(method: string, caption: string, referenceAnalysis = '', retrievalContext = '', infographicCategory = '') {
-  return withInfographicCategory(withRetrievalContext(withReferenceAnalysis(
+function plannerUserPrompt(method: string, caption: string, referenceAnalysis = '', retrievalContext = '', infographicCategory = '', hasReferenceImages = false) {
+  return withReferenceImageInstruction(withInfographicCategory(withRetrievalContext(withReferenceAnalysis(
     `Methodology Section:\n${method}\n\nFigure Caption:\n${caption}\n\nDetailed description of the target figure:`,
     referenceAnalysis,
-  ), retrievalContext), infographicCategory)
+  ), retrievalContext), infographicCategory), hasReferenceImages)
 }
 
 function stylistSystemPrompt() {
@@ -2591,11 +2593,11 @@ function stylistSystemPrompt() {
   ].join('\n')
 }
 
-function stylistUserPrompt(method: string, caption: string, description: string, referenceAnalysis = '', retrievalContext = '', infographicCategory = '') {
-  return withInfographicCategory(withRetrievalContext(withReferenceAnalysis(
+function stylistUserPrompt(method: string, caption: string, description: string, referenceAnalysis = '', retrievalContext = '', infographicCategory = '', hasReferenceImages = false) {
+  return withReferenceImageInstruction(withInfographicCategory(withRetrievalContext(withReferenceAnalysis(
     `Initial Description:\n${description}\n\nMethodology Section:\n${method}\n\nFigure Caption:\n${caption}\n\nPolished detailed description:`,
     referenceAnalysis,
-  ), retrievalContext), infographicCategory)
+  ), retrievalContext), infographicCategory), hasReferenceImages)
 }
 
 function criticSystemPrompt() {
@@ -2681,11 +2683,11 @@ function plotPlannerSystemPrompt() {
   ].join('\n')
 }
 
-function plotPlannerUserPrompt(rawData: string, visualIntent: string, referenceAnalysis = '', retrievalContext = '') {
-  return withRetrievalContext(withReferenceAnalysis(
+function plotPlannerUserPrompt(rawData: string, visualIntent: string, referenceAnalysis = '', retrievalContext = '', hasReferenceImages = false) {
+  return withReferenceImageInstruction(withRetrievalContext(withReferenceAnalysis(
     `Plot Raw Data:\n${rawData}\n\nVisual Intent of the Desired Plot:\n${visualIntent}\n\nDetailed description of the target figure to be generated:`,
     referenceAnalysis,
-  ), retrievalContext)
+  ), retrievalContext), hasReferenceImages)
 }
 
 function plotStylistSystemPrompt() {
@@ -2717,11 +2719,11 @@ function plotStylistSystemPrompt() {
   ].join('\n')
 }
 
-function plotStylistUserPrompt(rawData: string, visualIntent: string, description: string, referenceAnalysis = '', retrievalContext = '') {
-  return withRetrievalContext(withReferenceAnalysis(
+function plotStylistUserPrompt(rawData: string, visualIntent: string, description: string, referenceAnalysis = '', retrievalContext = '', hasReferenceImages = false) {
+  return withReferenceImageInstruction(withRetrievalContext(withReferenceAnalysis(
     `Detailed Description: ${description}\nRaw Data: ${rawData}\nVisual Intent of the Desired Plot: ${visualIntent}\nYour Output:`,
     referenceAnalysis,
-  ), retrievalContext)
+  ), retrievalContext), hasReferenceImages)
 }
 
 function plotCriticSystemPrompt() {
@@ -3161,10 +3163,23 @@ function withReferenceAnalysis(text: string, referenceAnalysis = '') {
   return [
     text,
     '',
-    'Reference image analysis for structure/style guidance only:',
+    'Reference image analysis for structure/style guidance:',
     referenceAnalysis.trim(),
     '',
-    'Use the reference to guide layout and style, but make the final diagram reflect the provided methodology and caption.',
+    'You MUST strongly adopt the visual identity described above — closely match its color palette, shape/line language, iconography, typography, and overall layout structure — so the final figure is clearly and strongly visually consistent with the reference, while keeping the semantic content faithful to the provided methodology and caption.',
+  ].join('\n')
+}
+
+// When reference images are attached to the model call, the prompt itself must
+// explicitly instruct the model to adopt them — otherwise the model sees the
+// image with zero instruction to use it (e.g. main_model mode, where no textual
+// analysis is produced). No-op when no images are attached.
+function withReferenceImageInstruction(text: string, hasReferenceImages = false) {
+  if (!hasReferenceImages) return text
+  return [
+    text,
+    '',
+    'IMPORTANT: One or more reference images are ATTACHED to this request. You MUST closely adopt their visual style — color palette, shape/line language, iconography, typography, and overall LAYOUT STRUCTURE — so that the generated figure is clearly, strongly visually consistent with the reference. At the same time, keep the semantic content faithful to the provided methodology/data and caption. Treat the attached reference as a binding style and layout target, not an optional hint.',
   ].join('\n')
 }
 

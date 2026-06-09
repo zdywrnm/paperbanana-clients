@@ -31,7 +31,7 @@ export default function JobStatus({ job, apiBase, onUseForRefine }) {
       <DownloadJobZipButton job={job} apiBase={apiBase} />
       {job.error ? <div className="error-line"><AlertTriangle size={16} /> {formatErrorMessage(job.error)}</div> : null}
       {(job.reference_images || []).some((image) => image.url) ? (
-        <div className="image-grid">
+        <div className="image-grid reference-echo">
           {(job.reference_images || []).filter((image) => image.url).map((image, index) => (
             <ResultFigure key={image.object_key || image.filename || index} image={{ ...image, candidate_id: index }} apiBase={apiBase} labelPrefix="参考图" />
           ))}

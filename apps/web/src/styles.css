@@ -1240,7 +1240,9 @@ button {
 
 .image-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  /* 单张时不再铺满超宽的结果列，封顶约 520px 并居中；多张候选图仍能换行平铺。 */
+  grid-template-columns: repeat(auto-fit, minmax(260px, 520px));
+  justify-content: center;
   gap: 12px;
 }
 
@@ -1257,9 +1259,26 @@ figure img {
   display: block;
   aspect-ratio: 16 / 9;
   /* 限制高度，避免在较宽的结果列里把结果图/参考图撑得过大、整体不协调。 */
-  max-height: 56vh;
+  max-height: 46vh;
   object-fit: contain;
   background: var(--surface-muted);
+}
+
+/* 结果面板里回显的参考图是上下文，应当明显比结果图小、作为次要信息排成一条紧凑缩略图。 */
+.image-grid.reference-echo {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 220px));
+  justify-content: start;
+  gap: 10px;
+}
+
+.image-grid.reference-echo figure img {
+  aspect-ratio: 4 / 3;
+  max-height: 160px;
+}
+
+.image-grid.reference-echo figcaption {
+  padding: 6px 9px;
+  font-size: 12px;
 }
 
 figcaption {
@@ -2127,6 +2146,21 @@ figcaption {
 
   .job-record-images {
     justify-items: stretch;
+  }
+
+  /* 窄屏让结果图/参考图直接占满一列、左对齐，避免 minmax 下限造成横向溢出。 */
+  .image-grid,
+  .image-grid.reference-echo {
+    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+    justify-content: stretch;
+  }
+
+  .image-grid.reference-echo {
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  }
+
+  .image-grid.reference-echo figure img {
+    max-height: 140px;
   }
 
   .stage-item {
