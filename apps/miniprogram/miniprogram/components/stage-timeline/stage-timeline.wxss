@@ -139,6 +139,27 @@
   background: #f3f2ec;
 }
 
+.stage-image-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10rpx;
+}
+
+.stage-image-actions button {
+  flex: none;
+  margin: 0;
+  padding: 0 14rpx;
+  min-width: 118rpx;
+  height: 52rpx;
+  border: 1rpx solid #c8ddcd;
+  border-radius: 10rpx;
+  background: #edf6ef;
+  color: #315f51;
+  font-size: 21rpx;
+  font-weight: 720;
+  line-height: 52rpx;
+}
+
 .stage-file {
   display: flex;
   align-items: center;
