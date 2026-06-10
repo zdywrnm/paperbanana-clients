@@ -24,6 +24,17 @@
 
 ## 条目（最新在上）
 
+### [2026-06-10] 更正：getJob"非法 JSON"系误报，后端无需修改 — by Claude (miniprogram)
+变更：此前怀疑 `getJob` 响应含未转义控制字符——**已排除，系测试脚本误报**。复现验证：响应本身是合法 JSON（含 229 个正确的 `\n`/`\t` 转义序列）；测试脚本用 zsh 的 `echo "$RESP"` 中转响应，zsh echo 默认解释反斜杠转义，把合法的 `\n` 二字符序列变成裸换行字节，才导致严格解析失败。`printf '%s'` 对照实验解析通过，失败位置（char 936）与原报错完全一致。
+契约（影响其他端 / 共享）：
+- **laf-functions 无需任何修改**；各端无需为此排查。
+- 经验：shell 脚本中转 JSON 一律用 `printf '%s'`，勿用 zsh/sh 的 `echo`。
+- miniprogram 顺手加的防御解析 `coerceJsonResponse`（解析失败时清洗控制字符重试）保留——对网关/代理异常返回（HTML 错误页等）仍是合理兜底，非必须项。
+各端待办：
+- [x] laf-functions（无需修改）
+- [x] miniprogram（防御解析保留，注释已更正为通用兜底说明）
+- [x] web/android/windows/macos（无需行动）
+
 ### [2026-06-10] 新增原生 iOS 客户端 v1 — by Codex
 变更：新增 `apps/ios` SwiftUI 原生客户端，最低 iOS 26.0，采用 Liquid Glass 风格并默认连接 auth-gateway `https://yifbnnzrwmxn.sealoshzh.site`。
 契约（影响其他端 / 共享）：
@@ -37,6 +48,8 @@
 - iOS API Key 申请指南使用与 Web 相同的 provider guide URL/steps，并提示模型密钥不会保存到站点数据库。
 - iOS 新增原生「指南」tab，对齐 Web `GuidePanel` 的三步上手、多智能体流程、模型/参数/检索/结果术语、常见问题和资源链接；联系作者入口落到设置里的意见反馈。
 - iOS 任务详情展示与 Web 记录卡片一致的关键元数据：时间、模式、类别、平台、格式、比例、检索、参考图处理、主模型、图像模型、识别模型、评审模式、候选图和阶段数，并回显方法内容/图注。
+- iOS 任务详情对齐 Web `JobStatus` 的参考回显规则：只展示后端返回了 `url` 的 `referenceImages`，支持 PNG/JPG/WebP/SVG 预览和分享导出。
+- iOS 生成演化阶段图对齐 Web/小程序下载能力：每个带图阶段可单独保存/分享，并显示候选编号和评审轮次。
 - iOS 任务详情新增整单 ZIP 分享，打包 `metadata.json`、`results/`、`references/`、`stages/`，对齐 Web `DownloadJobZipButton` 的下载全部能力。
 - iOS 意见反馈类别与 Web 固定枚举一致：`bug` / `feature` / `experience` / `other`；反馈内容限制 2000 字，联系方式限制 300 字。
 - iOS API Key 只存本机 Keychain；身份动作走 auth-gateway，不直连 Laf，不包含或下发 `PAPERBANANA_GATEWAY_TOKEN`。
@@ -56,7 +69,8 @@
 各端待办：
 - [x] laf-functions（归一化处：有上传图则 retrievalSetting→none、manualReferenceIds→[]）
 - [x] web（检索设置 Select 在有参考图时锁为"不使用检索"+disabled+提示；payload 同步发 none；隐藏手动参考面板）
-- [ ] miniprogram/android/windows/macos（UI 可选同步：上传参考图后提示"检索已自动关闭"；不改也不会出错，后端已强制）
+- [x] miniprogram（已同步：上传参考图后"检索设置"锁为"不使用检索"+提示文案；payload 双保险发 none/[]）
+- [ ] android/windows/macos（UI 可选同步：上传参考图后提示"检索已自动关闭"；不改也不会出错，后端已强制）
 
 ### [2026-06-09] 输出清晰度 + 精修内联化 + 精修模型 bug 修复 — by Claude
 变更：① 生成新增"输出清晰度"`imageSize`('2K'/'4K');② 精修分析步骤的模型选择修 bug;③ web 移除独立"精修图片"页签,改结果图"精修"按钮弹内联模态(纯前端)。
@@ -68,7 +82,8 @@
 - [x] laf-functions（imageSize 接 callImageModel;refine 分析改视觉/主模型）
 - [x] packages/api（createJobRequest 加 imageSize;refineImageRequest 转发 mainModelName/referenceVisionModelName）
 - [x] web（输出清晰度 Select;精修内联模态;移除页签）
-- [ ] miniprogram/android/windows/macos（生成加 imageSize 可选;精修请求补 mainModelName/referenceVisionModelName）
+- [x] miniprogram（生成已加"输出清晰度"1K/2K/4K，按 provider/图像模型过滤并自动收敛；与 web 一致无手动精修 UI（精修由清晰度自动驱动），故无精修请求需补字段）
+- [ ] android/windows/macos（生成加 imageSize 可选;精修请求补 mainModelName/referenceVisionModelName）
 
 ### [2026-06-08] 阿里百炼模型列表更正 + 参考图模式按固定能力 — by Claude
 变更：之前 bailian 模型常量含**不存在/未激活**的名字;改为官方模型广场的真实模型,并把"参考图识别能力"按**模型**固定。
@@ -80,7 +95,8 @@
 各端待办：
 - [x] laf-functions（能力正则、静默兜底、stage 标题中文）
 - [x] web（真实模型常量、删自动选择、修图过大 CSS）
-- [ ] miniprogram/android/windows/macos（同步 bailian provider/model 常量到真实模型 + 识别模型能力;去掉 auto 入口）
+- [x] miniprogram（已同步 bailian 真实模型常量 + mainModelCanReadImages 固定能力;参考图模式按能力派生缺省，已去掉 auto 入口，展示层保留旧记录 auto 兼容）
+- [ ] android/windows/macos（同步 bailian provider/model 常量到真实模型 + 识别模型能力;去掉 auto 入口）
 
 ### [2026-06-08] 修复越权(IDOR)：Laf 校验网关共享 token — by Claude
 变更：公开的 Laf 端点(`https://sdswgya641.sealoshzh.site/paperbanana-api`)此前完全信任调用方传入的 `userId`/`userEmail`,任何人直连即可用受害者 `userId` 读其任务历史(`method_content`/`caption`/结果图 URL),绕过网关会话鉴权。现在 Laf 对「依赖调用方身份」的非管理员动作校验网关注入的共享 token。
@@ -96,7 +112,7 @@
 - [x] laf-functions（校验 `gatewayToken`/`adminToken`,fail-open 兜底）
 - [x] auth-gateway（无需改：`withGatewayToken` 已注入;仅需在 Sealos 配置 `PAPERBANANA_GATEWAY_TOKEN` env）
 - [x] web（默认 `VITE_API_BASE` 指向网关,经网关转发,无需改）
-- [ ] miniprogram（确认 `API_BASE` 指向网关域名,勿直连 Laf）
+- [x] miniprogram（已确认：`miniprogram/utils/config.ts` 的 `API_BASE` 指向网关域名 `https://yifbnnzrwmxn.sealoshzh.site`，未直连 Laf）
 - [ ] android（确认 `API_BASE_DEFAULT` 指向网关域名,勿直连 Laf）
 - [ ] windows（确认 `DefaultApiBase` 指向网关域名,勿直连 Laf）
 - [ ] macos（默认 `sealosAPIBase` 指向网关;若用户把"网关地址"改成 Laf 域名,身份动作将被拒——属预期）
@@ -115,7 +131,8 @@
 - [x] packages/api（`taskName` 已白名单，无需改）
 - [x] web（plot 提交放开：data_stat 类别 → `taskName:'plot'`）
 - [x] auth-gateway（无需改：plot 走 createJob 既有转发；admin 动作直连 Laf）
-- [ ] miniprogram/android/windows/macos（兼容 `taskName:'plot'`，后续补 plot UI）
+- [x] miniprogram（已接入：信息图类别选"数据统计图"时 `taskName:'plot'` + 提示"统计图由独立渲染服务生成"；参考库检索 taskName 同步切 plot）
+- [ ] android/windows/macos（兼容 `taskName:'plot'`，后续补 plot UI）
 - [x] plot-worker 已部署到 Sealos（Deployment+Service+NetworkPolicy，2Gi）+ Laf 已设 `PLOT_WORKER_URL`/`PLOT_WORKER_TOKEN`；`pingPlotWorker` 实测渲染通过
 
 ### [2026-06-08] PaperBanana 根项目 10 项功能对齐（diagram 主链路）— by Codex
@@ -131,7 +148,7 @@
 - [x] auth-gateway
 - [x] packages/api
 - [x] web（manual 参考、timeline、zip、refine、plot 占位）
-- [ ] miniprogram（兼容新增字段；后续补 UI）
+- [x] miniprogram（已兼容新增字段并补全 UI：检索设置 none/auto/random/manual、手动参考库选卡（≤10）、stages 生成演化时间线、检索参考展示、任务记录新徽标）
 - [ ] android（兼容新增字段；后续补 UI）
 - [ ] windows（兼容新增字段；后续补 UI）
 - [ ] macos（兼容新增字段；后续补 UI）
@@ -144,7 +161,7 @@
 - [x] auth-gateway
 - [x] web
 - [x] packages/api
-- [ ] miniprogram（如有 admin 入口）
+- [x] miniprogram（无 admin 入口，无需改）
 - [ ] 其它端无 admin UI 暂不涉及
 
 ### [2026-06-07] 用户意见反馈 submitFeedback — by Codex

@@ -1,4 +1,9 @@
 {
+  "navigationBarTitleText": "PaperBanana",
   "usingComponents": {
+    "auth-panel": "/components/auth-panel/auth-panel",
+    "feedback-panel": "/components/feedback-panel/feedback-panel",
+    "reference-library": "/components/reference-library/reference-library",
+    "stage-timeline": "/components/stage-timeline/stage-timeline"
   }
 }

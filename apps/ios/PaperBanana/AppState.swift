@@ -127,6 +127,7 @@ final class AppModel {
   var exportedResultFile: ExportedResultFile?
   var exportingResultImageID: ResultImage.ID?
   var exportingReferenceImageID: ReferenceImageAsset.ID?
+  var exportingStageImageID: JobStage.ID?
   var exportingJobArchiveID: Job.ID?
   var alertMessage = ""
   var isAlertPresented = false
@@ -582,6 +583,27 @@ final class AppModel {
     }
   }
 
+  func exportStageImage(_ stage: JobStage, index: Int) async {
+    exportingStageImageID = stage.id
+    defer { exportingStageImageID = nil }
+
+    do {
+      guard let image = stage.image, let resolvedURL = resolvedImageURL(image.url) else {
+        throw PaperBananaAPIError.invalidURL(stage.image?.url ?? "")
+      }
+      let data = try await resultImageData(from: resolvedURL)
+      let filename = exportFilename(for: stage, index: index)
+      let directory = FileManager.default.temporaryDirectory.appendingPathComponent("PaperBananaExports", isDirectory: true)
+      try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+      let fileURL = directory.appendingPathComponent(filename)
+      try data.write(to: fileURL, options: .atomic)
+      exportedResultFile = ExportedResultFile(url: fileURL, filename: filename)
+    } catch {
+      alertMessage = formatUserFacingError(error)
+      isAlertPresented = true
+    }
+  }
+
   func exportJobArchive(_ job: Job) async {
     exportingJobArchiveID = job.id
     defer { exportingJobArchiveID = nil }
@@ -707,6 +729,15 @@ final class AppModel {
     let existingExtension = URL(fileURLWithPath: image.filename).pathExtension
     let fileExtension = existingExtension.isEmpty ? image.displayFormat : existingExtension
     return "paperbanana-reference-\(index + 1).\(fileExtension)"
+  }
+
+  private func exportFilename(for stage: JobStage, index: Int) -> String {
+    let existingExtension = URL(fileURLWithPath: stage.image?.filename ?? "").pathExtension
+    let fileExtension = existingExtension.isEmpty ? (stage.image?.displayFormat ?? "png") : existingExtension
+    let stageType = stage.type
+      .replacingOccurrences(of: "/", with: "-")
+      .replacingOccurrences(of: " ", with: "-")
+    return "paperbanana-stage-\(String(format: "%02d", index + 1))-\(stageType.isEmpty ? "stage" : stageType).\(fileExtension)"
   }
 
   private func loadSelectedProviderKey() {

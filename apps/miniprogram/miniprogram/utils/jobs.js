@@ -1,0 +1,324 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.normalizeJob = normalizeJob;
+exports.normalizeRetrievedReference = normalizeRetrievedReference;
+exports.normalizeJobStage = normalizeJobStage;
+exports.formatRetrievalSetting = formatRetrievalSetting;
+exports.resolveImageUrl = resolveImageUrl;
+exports.cacheDataImage = cacheDataImage;
+exports.cleanupCachedImages = cleanupCachedImages;
+exports.hydrateRecordJobs = hydrateRecordJobs;
+exports.readLocalJobs = readLocalJobs;
+exports.appendLocalJob = appendLocalJob;
+exports.clearLocalJobs = clearLocalJobs;
+exports.toCurrentJobSummary = toCurrentJobSummary;
+exports.toRecordJobSummary = toRecordJobSummary;
+exports.toLocalJobSummary = toLocalJobSummary;
+exports.formatDate = formatDate;
+const config_1 = require("./config");
+const api_1 = require("./api");
+const constants_1 = require("./constants");
+const job_assets_1 = require("./job-assets");
+const reference_mode_1 = require("./reference-mode");
+const media_1 = require("./media");
+function normalizeJob(input) {
+    const job = (input || {});
+    const jobId = String(job.id || job._id || '');
+    const methodContent = String(job.method_content || job.methodContent || '');
+    const outputFormat = (0, job_assets_1.normalizeOutputFormat)(job.output_format || job.outputFormat);
+    const resultImages = (job.result_images || job.resultImages || []).map((image, index) => ({
+        ...(0, job_assets_1.formatImageAsset)({
+            ...image,
+            url: resolveImageUrl(String(image.url || ''), jobId, index, image.mime_type || image.mimeType || '', outputFormat),
+        }, {
+            fallbackFilename: `candidate-${index + 1}.${outputFormat}`,
+            fallbackFormat: outputFormat,
+        }),
+        candidate_id: Number(image.candidate_id != null ? image.candidate_id : image.candidateId != null ? image.candidateId : index),
+    }));
+    const referenceImages = (job.reference_images || job.referenceImages || []).map((image, index) => (0, job_assets_1.formatImageAsset)({
+        ...image,
+        url: resolveImageUrl(String(image.url || ''), `${jobId}-ref`, index, image.mime_type || image.mimeType || '', image.mime_type || image.mimeType || ''),
+    }, {
+        fallbackFilename: String(image.filename || `reference-${index + 1}`),
+        fallbackFormat: image.mime_type || image.mimeType || '',
+    }));
+    const status = String(job.status || 'queued');
+    const referenceModeUsed = normalizeReferenceImageModeUsed(job.reference_image_mode_used || job.referenceImageModeUsed);
+    const referenceVisionModelName = String(job.reference_vision_model_name || job.referenceVisionModelName || '');
+    const referenceImageCount = Number(job.reference_image_count || job.referenceImageCount || referenceImages.length || 0);
+    const retrievalSetting = String(job.retrieval_setting || job.retrievalSetting || 'none');
+    return {
+        id: jobId,
+        status,
+        provider: String(job.provider || ''),
+        user_email: String(job.user_email || job.userEmail || ''),
+        configuration_mode: String(job.configuration_mode || job.configurationMode || 'simple'),
+        output_format: outputFormat,
+        output_format_text: (0, job_assets_1.formatOutputFormat)(outputFormat),
+        method_content: methodContent,
+        method_preview: methodContent.length > 86 ? `${methodContent.slice(0, 86)}...` : methodContent,
+        caption: String(job.caption || ''),
+        infographic_category: String(job.infographic_category || job.infographicCategory || '方法框架图'),
+        task_name: String(job.task_name || job.taskName || 'diagram'),
+        image_size: String(job.image_size || job.imageSize || ''),
+        retrieval_setting: retrievalSetting,
+        retrieval_setting_text: formatRetrievalSetting(retrievalSetting),
+        retrieved_references: (job.retrieved_references || job.retrievedReferences || []).map(normalizeRetrievedReference),
+        stages: (job.stages || []).map((stage, index) => normalizeJobStage(stage, jobId, index)),
+        critic_mode: String(job.critic_mode || job.criticMode || ''),
+        main_model_name: String(job.main_model_name || job.mainModelName || ''),
+        image_gen_model_name: String(job.image_gen_model_name || job.imageModelName || ''),
+        reference_vision_model_name: referenceVisionModelName,
+        reference_vision_model_text: referenceModeUsed === 'vision_model' ? referenceVisionModelName || '未记录' : '未使用',
+        reference_image_mode: String(job.reference_image_mode || job.referenceImageMode || ''),
+        reference_image_mode_used: referenceModeUsed,
+        reference_image_mode_text: (0, reference_mode_1.formatReferenceImageModeUsed)(referenceModeUsed),
+        reference_image_count: referenceImageCount,
+        reference_images: referenceImages,
+        aspect_ratio: String(job.aspect_ratio || job.aspectRatio || '16:9'),
+        num_candidates: Number(job.num_candidates || job.numCandidates || 0),
+        result_image_count: Number(job.result_image_count || job.resultImageCount || resultImages.length || 0),
+        result_images: resultImages,
+        logs_tail: String(job.logs_tail || (Array.isArray(job.logs) ? job.logs.slice(-10).join('\n') : '')),
+        error: String(job.error || ''),
+        created_at: job.created_at || job.createdAt,
+        updated_at: job.updated_at || job.updatedAt,
+        completed_at: job.completed_at || job.completedAt,
+        created_text: formatDate(job.created_at || job.createdAt),
+        status_text: constants_1.STATUS_LABELS[status] || status || '未知',
+    };
+}
+function normalizeRetrievedReference(input) {
+    const item = (input || {});
+    return {
+        id: String(item.id || item._id || ''),
+        task_name: String(item.task_name || item.taskName || 'diagram'),
+        title: String(item.title || item.visualIntent || item.caption || ''),
+        summary: String(item.summary || item.content || item.methodExcerpt || ''),
+        image_url: String(item.image_url || item.imageUrl || item.url || ''),
+        source: String(item.source || 'paperbanana-bench'),
+    };
+}
+function normalizeJobStage(input, jobId = '', index = 0) {
+    const stage = (input || {});
+    const image = (stage.image || {});
+    const mimeType = String(image.mime_type || image.mimeType || '');
+    // stage 图与结果图分开命名（jobId 加 -stage 后缀），避免 cacheDataImage 落盘文件互相覆盖。
+    const imageUrl = resolveImageUrl(String(image.url || ''), `${jobId}-stage`, index, mimeType, mimeType);
+    const candidateId = Number(stage.candidate_id != null ? stage.candidate_id : stage.candidateId != null ? stage.candidateId : 0);
+    const type = String(stage.type || '');
+    const title = String(stage.title || stage.type || '');
+    return {
+        id: String(stage.id || stage._id || `stage-${index}`),
+        candidate_id: candidateId,
+        candidate_number: candidateId + 1,
+        type,
+        marker: stageMarker(type, title),
+        title,
+        round: Number(stage.round || 0),
+        text: String(stage.text || stage.description || stage.message || ''),
+        suggestion: String(stage.suggestion || stage.criticSuggestion || ''),
+        image_url: imageUrl,
+        image_can_preview: Boolean(imageUrl) && !mimeType.includes('svg'),
+        error: String(stage.error || ''),
+    };
+}
+function stageMarker(type, title = '') {
+    // 精修放大阶段后端用 type:'render'，靠标题区分（含"精修"/"放大"）
+    if (title.includes('精修') || title.includes('放大') || type.includes('refine') || type.includes('upscale') || type.includes('enhance'))
+        return '修';
+    if (type === 'plan' || type === 'planner')
+        return '规';
+    if (type === 'render')
+        return '绘';
+    if (type === 'critic')
+        return '审';
+    if (type.includes('retriev'))
+        return '检';
+    return '步';
+}
+function formatRetrievalSetting(setting) {
+    if (setting === 'auto')
+        return '自动检索';
+    if (setting === 'random')
+        return '随机参考';
+    if (setting === 'manual')
+        return '手动参考';
+    return '不检索';
+}
+function resolveImageUrl(url, jobId = 'image', index = 0, mimeType = '', fallbackFormat = '') {
+    if (!url)
+        return '';
+    if (/^https?:\/\//i.test(url))
+        return stabilizeRemoteUrl(url);
+    if (/^data:image\//i.test(url))
+        return cacheDataImage(url, jobId, index, mimeType, fallbackFormat);
+    // 已落盘的本地缓存路径（如本机记录 round-trip）原样返回，不能拼到 API_BASE 上
+    if (/^wxfile:/i.test(url) || (userDataPath() && url.indexOf(userDataPath()) === 0))
+        return url;
+    return `${config_1.API_BASE}${url}`;
+}
+// 桶签名 URL 每次 getJob 都重新签发（查询串变化）。轮询期间 src 频变会让 <image>
+// 反复重载闪烁——按"去查询串的路径"为键，在缓存期内复用首次拿到的签名 URL 保持 src 稳定。
+// 缓存期取 30 分钟，远小于后端最短签名有效期（stage 图 1 小时），过期后换用新签名（仅闪一次）。
+const STABLE_URL_TTL_MS = 30 * 60 * 1000;
+const stableUrlCache = new Map();
+function stabilizeRemoteUrl(url) {
+    const pathKey = url.split('?')[0];
+    if (pathKey === url)
+        return url;
+    const now = Date.now();
+    const cached = stableUrlCache.get(pathKey);
+    if (cached && now - cached.cachedAt < STABLE_URL_TTL_MS)
+        return cached.url;
+    if (stableUrlCache.size > 500)
+        stableUrlCache.clear();
+    stableUrlCache.set(pathKey, { url, cachedAt: now });
+    return url;
+}
+function userDataPath() {
+    const env = wx.env;
+    return env && env.USER_DATA_PATH ? String(env.USER_DATA_PATH) : '';
+}
+const DATA_IMAGE_PATTERN = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/;
+// 本会话已写过的缓存文件：轮询每 3s normalize 一次，避免同一图片反复同步写盘造成卡顿
+const writtenCacheFiles = new Set();
+// data:URL 一律落盘成本地文件路径，避免 base64 进 setData（SYNC.md 用户反馈红线）。
+function cacheDataImage(dataUrl, jobId, index, hintedMimeType = '', fallbackFormat = '') {
+    const base64Match = dataUrl.match(DATA_IMAGE_PATTERN);
+    const utf8Match = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+)(?:;charset=[^;,]+)?(?:;utf8|;utf-8)?,(.*)$/i);
+    if (!base64Match && !utf8Match)
+        return '';
+    const mimeType = base64Match ? base64Match[1] : (utf8Match ? utf8Match[1] : hintedMimeType);
+    const extension = (0, media_1.imageExtension)(mimeType || hintedMimeType || String(fallbackFormat || ''));
+    const safeJobId = jobId.replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 80) || 'image';
+    const filePath = `${userDataPath()}/paperbanana-${safeJobId}-${index}.${extension}`;
+    if (writtenCacheFiles.has(filePath))
+        return filePath;
+    try {
+        if (base64Match) {
+            wx.getFileSystemManager().writeFileSync(filePath, base64Match[2], 'base64');
+        }
+        else if (utf8Match) {
+            wx.getFileSystemManager().writeFileSync(filePath, decodeURIComponent(utf8Match[2]), 'utf8');
+        }
+        writtenCacheFiles.add(filePath);
+        return filePath;
+    }
+    catch (error) {
+        console.warn('Failed to cache generated image', error);
+        return '';
+    }
+}
+// 启动时清理上次会话落盘的缓存图，避免 USER_DATA_PATH（上限 200MB）越积越满
+function cleanupCachedImages() {
+    const dir = userDataPath();
+    if (!dir)
+        return;
+    const fs = wx.getFileSystemManager();
+    fs.readdir({
+        dirPath: dir,
+        success(res) {
+            res.files.forEach((name) => {
+                if (String(name).indexOf('paperbanana-') === 0) {
+                    fs.unlink({ filePath: `${dir}/${name}` });
+                }
+            });
+        },
+    });
+}
+function normalizeReferenceImageModeUsed(value) {
+    if (value === 'main_model' || value === 'vision_model' || value === 'none' || value === 'auto')
+        return value;
+    return '';
+}
+// 补拉详情用并发池（wx.request 真机最多 10 个并发，50 条全量 Promise.all 会直接 request:fail）
+const HYDRATE_CONCURRENCY = 5;
+async function hydrateRecordJobs(jobs) {
+    const hydrated = jobs.slice();
+    let cursor = 0;
+    async function worker() {
+        while (cursor < hydrated.length) {
+            const index = cursor++;
+            const job = hydrated[index];
+            const hasImage = job.result_images.some((image) => image.url);
+            const hasResult = job.result_image_count > 0 || job.result_images.length > 0;
+            const hasReferenceImage = job.reference_images.some((image) => image.url);
+            const hasReference = job.reference_image_count > 0 || job.reference_images.length > 0;
+            if ((!hasResult || hasImage) && (!hasReference || hasReferenceImage))
+                continue;
+            try {
+                const detail = await (0, api_1.requestJson)({ action: 'getJob', jobId: job.id });
+                hydrated[index] = normalizeJob(detail.job);
+            }
+            catch {
+                // 补拉失败保留列表里的原始数据
+            }
+        }
+    }
+    await Promise.all(Array.from({ length: Math.min(HYDRATE_CONCURRENCY, hydrated.length) }, () => worker()));
+    return hydrated;
+}
+function readLocalJobs() {
+    const jobs = wx.getStorageSync(config_1.LOCAL_JOBS_KEY);
+    return Array.isArray(jobs) ? jobs.map(normalizeJob).filter((job) => job.id).map(toLocalJobSummary) : [];
+}
+// 写入本机最近任务（最多 10 条），返回最新列表供页面 setData。
+function appendLocalJob(job) {
+    if (!job.id)
+        return readLocalJobs();
+    const nextJobs = [toLocalJobSummary(job), ...readLocalJobs().filter((item) => item.id !== job.id)].slice(0, 10);
+    wx.setStorageSync(config_1.LOCAL_JOBS_KEY, nextJobs);
+    return nextJobs;
+}
+function clearLocalJobs() {
+    wx.removeStorageSync(config_1.LOCAL_JOBS_KEY);
+}
+const STAGE_TEXT_LIMIT = 300;
+function toStageSummary(stage) {
+    return {
+        ...stage,
+        text: stage.text.length > STAGE_TEXT_LIMIT ? `${stage.text.slice(0, STAGE_TEXT_LIMIT)}...` : stage.text,
+        suggestion: stage.suggestion.length > STAGE_TEXT_LIMIT ? `${stage.suggestion.slice(0, STAGE_TEXT_LIMIT)}...` : stage.suggestion,
+    };
+}
+// 生成页当前任务摘要：结果图单独存放在 resultImages，长文本剥离；stages 截断后保留供时间线展示。
+function toCurrentJobSummary(job) {
+    return {
+        ...job,
+        method_content: '',
+        result_images: [],
+        logs_tail: '',
+        stages: job.stages.map(toStageSummary),
+    };
+}
+// 记录列表摘要：时间线只在任务详情页展示，列表里剥离 stages 控制 setData 体积。
+function toRecordJobSummary(job) {
+    return {
+        ...job,
+        method_content: '',
+        logs_tail: '',
+        stages: [],
+        retrieved_references: [],
+    };
+}
+function toLocalJobSummary(job) {
+    return {
+        ...job,
+        method_content: '',
+        result_images: [],
+        logs_tail: '',
+        stages: [],
+        retrieved_references: [],
+    };
+}
+function formatDate(value) {
+    if (!value)
+        return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime()))
+        return '';
+    const pad = (num) => String(num).padStart(2, '0');
+    return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}

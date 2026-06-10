@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "使用教程",
+  "usingComponents": {
+    "feedback-panel": "/components/feedback-panel/feedback-panel"
+  }
+}

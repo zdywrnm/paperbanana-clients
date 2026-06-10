@@ -228,4 +228,4 @@ pnpm --filter @paperbanana/web build
 
 - Web 前端使用 BYOK 模式，用户自行填写模型 API Key。
 - 登录和任务记录通过 Sealos 上的 auth-gateway / Laf 后端提供。
-- 小程序需要在微信公众平台配置 `https://yifbnnzrwmxn.sealoshzh.site` 为 request/download/DNS/preconnect 合法域名。
+- 小程序需要在微信公众平台配置合法域名：request 填 `https://yifbnnzrwmxn.sealoshzh.site` 与 `https://objectstorageapi.hzh.sealos.run`（参考图直传），downloadFile 填 `https://objectstorageapi.hzh.sealos.run`（保存相册 / SVG 下载），DNS 预解析/预连接可填网关域名。

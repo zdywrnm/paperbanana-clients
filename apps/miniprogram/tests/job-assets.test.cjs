@@ -4,7 +4,7 @@ const {
   formatImageAsset,
   formatOutputFormat,
   normalizeOutputFormat,
-} = require('../miniprogram/pages/index/job-assets.js')
+} = require('../miniprogram/utils/job-assets.js')
 
 assert.equal(normalizeOutputFormat('svg'), 'svg')
 assert.equal(normalizeOutputFormat('SVG'), 'svg')
@@ -30,7 +30,7 @@ assert.deepEqual(
     format: 'svg',
     format_text: 'SVG',
     can_preview: false,
-    action_label: '复制链接',
+    action_label: '下载文件',
   },
 )
 
@@ -55,3 +55,5 @@ assert.deepEqual(
     action_label: '保存图片',
   },
 )
+
+console.log('job-assets.test.cjs passed')

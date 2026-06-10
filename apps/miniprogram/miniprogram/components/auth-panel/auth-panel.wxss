@@ -1,0 +1,5 @@
+.auth-name-input {
+  height: 88rpx;
+  min-height: 88rpx;
+  line-height: normal;
+}

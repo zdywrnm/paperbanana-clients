@@ -511,6 +511,13 @@ struct StageImage: Decodable, Equatable {
   let storage: String
   let mimeType: String
 
+  var displayFormat: String {
+    if mimeType.contains("svg") || filename.lowercased().hasSuffix(".svg") { return "svg" }
+    if mimeType.contains("jpeg") || mimeType.contains("jpg") || filename.lowercased().hasSuffix(".jpg") || filename.lowercased().hasSuffix(".jpeg") { return "jpg" }
+    if mimeType.contains("webp") || filename.lowercased().hasSuffix(".webp") { return "webp" }
+    return "png"
+  }
+
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: DynamicCodingKey.self)
     filename = container.string("filename", default: "")

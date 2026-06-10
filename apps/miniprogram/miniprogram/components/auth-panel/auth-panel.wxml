@@ -1,0 +1,36 @@
+<view class="panel-mask" wx:if="{{show}}" catchtap="close">
+  <view class="panel-dialog auth-panel" catchtap="noop">
+    <view class="section-head">
+      <view>
+        <view class="section-title">{{authTitle}}</view>
+        <view class="section-note">登录后可以在任务记录里查看自己提交过的结果。</view>
+      </view>
+      <button class="ghost-button" size="mini" catchtap="close">关闭</button>
+    </view>
+
+    <view class="field" wx:if="{{authIsSignUp}}">
+      <view class="field-label">昵称</view>
+      <input
+        class="input auth-name-input"
+        type="nickname"
+        maxlength="24"
+        value="{{authName}}"
+        placeholder="可选"
+        bindinput="onAuthNameInput"
+      />
+    </view>
+    <view class="field">
+      <view class="field-label">邮箱</view>
+      <input class="input" type="text" value="{{authEmail}}" placeholder="you@example.com" bindinput="onAuthEmailInput" />
+    </view>
+    <view class="field">
+      <view class="field-label">密码</view>
+      <input class="input" password value="{{authPassword}}" placeholder="至少 8 位" bindinput="onAuthPasswordInput" />
+    </view>
+    <button class="primary-button" loading="{{authSubmitting}}" disabled="{{!authCanSubmit}}" bindtap="submitAuth">
+      {{authSubmitText}}
+    </button>
+    <button class="text-button" bindtap="toggleAuthMode">{{authToggleText}}</button>
+    <view wx:if="{{authError}}" class="error-box">{{authError}}</view>
+  </view>
+</view>

@@ -1,13 +1,35 @@
 {
   "pages": [
     "pages/index/index",
-    "pages/logs/logs"
+    "pages/records/records",
+    "pages/guide/guide",
+    "pages/job-detail/job-detail"
   ],
   "window": {
     "navigationBarTextStyle": "black",
     "navigationBarTitleText": "PaperBanana",
     "navigationBarBackgroundColor": "#ffffff",
     "backgroundColor": "#f3f2ee"
+  },
+  "tabBar": {
+    "color": "#87827a",
+    "selectedColor": "#315f51",
+    "backgroundColor": "#fffffb",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "生成"
+      },
+      {
+        "pagePath": "pages/records/records",
+        "text": "记录"
+      },
+      {
+        "pagePath": "pages/guide/guide",
+        "text": "教程"
+      }
+    ]
   },
   "networkTimeout": {
     "request": 60000,

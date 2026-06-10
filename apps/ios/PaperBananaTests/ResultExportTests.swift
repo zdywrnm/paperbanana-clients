@@ -40,6 +40,27 @@ final class ResultExportTests: XCTestCase {
     XCTAssertNil(model.exportingReferenceImageID)
   }
 
+  func testExportsDataURLStageImageAsLocalShareableFile() async throws {
+    let job = try JSONDecoder().decode(Job.self, from: Data("""
+    {
+      "id": "stage-export",
+      "status": "succeeded",
+      "stages": [
+        {"id": "stage-1", "candidate_id": 0, "type": "critic", "round": 1, "image": {"filename": "stage.webp", "url": "data:image/webp;base64,UklGRg==", "mime_type": "image/webp"}}
+      ]
+    }
+    """.utf8))
+    let stage = try XCTUnwrap(job.stages.first)
+    let model = AppModel()
+
+    await model.exportStageImage(stage, index: 1)
+
+    let exported = try XCTUnwrap(model.exportedResultFile)
+    XCTAssertEqual(exported.filename, "paperbanana-stage-02-critic.webp")
+    XCTAssertEqual(try Data(contentsOf: exported.url), Data("RIFF".utf8))
+    XCTAssertNil(model.exportingStageImageID)
+  }
+
   func testJobExportArchiveMatchesWebZipContents() async throws {
     let svgDataURL = "data:image/svg+xml;base64,PHN2Zy8+"
     let pngDataURL = "data:image/png;base64,iVBORw0KGgo="

@@ -1,0 +1,144 @@
+.guide-head-section {
+  margin-top: 24rpx;
+}
+
+.guide-cta {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  margin-top: 22rpx;
+}
+
+.guide-cta-primary {
+  flex: 1;
+  margin-top: 0;
+}
+
+.guide-cta-ghost {
+  height: 82rpx;
+  line-height: 82rpx;
+  border-radius: 16rpx;
+}
+
+.guide-section-title {
+  color: #171513;
+  font-size: 28rpx;
+  font-weight: 800;
+}
+
+.guide-note {
+  margin-top: 12rpx;
+  color: #68706d;
+  font-size: 23rpx;
+  line-height: 1.6;
+}
+
+.guide-steps {
+  display: grid;
+  gap: 14rpx;
+  margin-top: 18rpx;
+}
+
+.guide-step-item {
+  display: grid;
+  grid-template-columns: 48rpx minmax(0, 1fr);
+  gap: 14rpx;
+  align-items: start;
+}
+
+.guide-step-num {
+  display: grid;
+  place-items: center;
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 50%;
+  background: #315f51;
+  color: #ffffff;
+  font-size: 24rpx;
+  font-weight: 800;
+}
+
+.guide-step-body,
+.guide-flow-item {
+  color: #343230;
+  font-size: 23rpx;
+  line-height: 1.6;
+}
+
+.strong {
+  font-weight: 780;
+  color: #171513;
+}
+
+.guide-flow {
+  display: grid;
+  gap: 12rpx;
+  margin-top: 16rpx;
+}
+
+.guide-flow-item {
+  padding: 14rpx 16rpx;
+  border: 1rpx solid #d9d6cc;
+  border-radius: 12rpx;
+  background: #fffffb;
+}
+
+.guide-term {
+  margin-top: 18rpx;
+  padding: 16rpx;
+  border: 1rpx solid #d9d6cc;
+  border-radius: 14rpx;
+  background: rgba(246, 242, 232, 0.62);
+}
+
+.guide-term-name {
+  color: #171513;
+  font-size: 24rpx;
+  font-weight: 780;
+}
+
+.guide-term-desc {
+  margin-top: 8rpx;
+  color: #68706d;
+  font-size: 22rpx;
+  line-height: 1.6;
+}
+
+.guide-faq-item {
+  margin-top: 12rpx;
+  color: #343230;
+  font-size: 23rpx;
+  line-height: 1.6;
+}
+
+.contact-qr {
+  display: block;
+  width: 420rpx;
+  margin: 22rpx auto 0;
+  border: 1rpx solid #d9d6cc;
+  border-radius: 16rpx;
+  background: #fffffb;
+}
+
+.contact-tip {
+  text-align: center;
+}
+
+.about-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-top: 18rpx;
+}
+
+.about-row text {
+  color: #343230;
+  font-size: 24rpx;
+  font-weight: 720;
+}
+
+.about-value {
+  color: #68706d;
+  font-weight: 650;
+}
