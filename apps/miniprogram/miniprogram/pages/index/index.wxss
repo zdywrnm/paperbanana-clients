@@ -109,6 +109,10 @@
   margin-top: 24rpx;
 }
 
+.field-row.single {
+  grid-template-columns: 1fr;
+}
+
 .field-row .field {
   margin-top: 0;
 }

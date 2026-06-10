@@ -69,28 +69,29 @@
 
     <view class="default-summary" wx:if="{{!isAdvancedMode}}">
       <text>{{providerMainModel}}</text>
-      <text>{{providerImageModel}}</text>
+      <text wx:if="{{outputFormat !== 'svg'}}">{{providerImageModel}}</text>
       <text>规划器 + 评审器</text>
       <text>16:9</text>
       <text>{{outputFormatLabel}}</text>
-      <text>{{imageSizeLabel}}</text>
+      <text wx:if="{{outputFormat !== 'svg'}}">{{imageSizeLabel}}</text>
     </view>
 
-    <view class="field-row">
+    <view class="field-row {{outputFormat === 'svg' ? 'single' : ''}}">
       <view class="field compact-field half-field">
         <view class="field-label">导出格式</view>
         <picker mode="selector" range="{{outputFormatOptions}}" range-key="label" value="{{outputFormatIndex}}" bindchange="onOutputFormatChange">
           <view class="picker-value compact-picker">{{outputFormatLabel}}</view>
         </picker>
       </view>
-      <view class="field compact-field half-field">
+      <view class="field compact-field half-field" wx:if="{{outputFormat !== 'svg'}}">
         <view class="field-label">输出清晰度</view>
         <picker mode="selector" range="{{resolutionOptions}}" range-key="label" value="{{resolutionIndex}}" bindchange="onResolutionChange">
           <view class="picker-value compact-picker">{{imageSizeLabel}}</view>
         </picker>
       </view>
     </view>
-    <view class="field-tip">PNG 适合直接预览保存，SVG 适合排版精修；1K 仅基础渲染，2K/4K 出图后自动精修放大（选项随模型变化）。</view>
+    <view class="field-tip" wx:if="{{outputFormat !== 'svg'}}">PNG 适合直接预览保存，SVG 适合排版精修；1K 仅基础渲染，2K/4K 出图后自动精修放大（选项随模型变化）。</view>
+    <view class="field-tip" wx:else>SVG 为矢量格式，可无限缩放、适合排版精修，由主模型直接生成——无需清晰度与图像生成模型。</view>
 
     <view class="field">
       <view class="field-label">{{providerLabel}} API 密钥</view>
@@ -145,7 +146,7 @@
             <view class="picker-value compact-picker model-picker">{{mainModelLabel}}</view>
           </picker>
         </view>
-        <view class="field compact-field">
+        <view class="field compact-field" wx:if="{{outputFormat !== 'svg'}}">
           <view class="field-label">图像模型</view>
           <picker mode="selector" range="{{imageModelOptions}}" range-key="label" value="{{imageModelIndex}}" bindchange="onImageModelChange">
             <view class="picker-value compact-picker model-picker">{{imageModelLabel}}</view>

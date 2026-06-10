@@ -37,7 +37,7 @@
             bindtap="previewStageImage"
           >
             <view class="stage-file-format">SVG</view>
-            <view class="stage-file-note">阶段中间图 · 点按分享文件或复制链接</view>
+            <view class="stage-file-note">阶段中间图 · 点按下载并分享</view>
           </view>
           <view class="stage-image-actions" wx:if="{{item.image_url}}">
             <button
@@ -46,7 +46,7 @@
               data-can-preview="{{item.image_can_preview}}"
               catchtap="saveStageImage"
             >
-              {{item.image_can_preview ? '保存图片' : '分享文件'}}
+              {{item.image_can_preview ? '保存图片' : '下载文件'}}
             </button>
           </view>
         </view>

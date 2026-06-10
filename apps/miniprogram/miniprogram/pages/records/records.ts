@@ -8,7 +8,7 @@ import {
   toRecordJobSummary,
   type Job,
 } from '../../utils/jobs'
-import { copyImageUrl, saveImageToAlbum } from '../../utils/media'
+import { downloadShareFile, saveImageToAlbum } from '../../utils/media'
 import { getCurrentUser, isSessionChecked, signOut as sessionSignOut, subscribeSession } from '../../utils/session'
 
 Component({
@@ -111,7 +111,7 @@ Component({
       const canPreview = readDatasetBoolean(event.currentTarget.dataset.canPreview, true)
       if (!url) return
       if (!canPreview) {
-        copyImageUrl(url)
+        downloadShareFile(url)
         return
       }
       wx.previewImage({ current: url, urls: [url] })
@@ -122,7 +122,7 @@ Component({
       const canPreview = readDatasetBoolean(event.currentTarget.dataset.canPreview, true)
       if (!url) return
       if (!canPreview) {
-        copyImageUrl(url)
+        downloadShareFile(url)
         return
       }
       saveImageToAlbum(url)

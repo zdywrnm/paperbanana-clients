@@ -1,7 +1,7 @@
 import { formatError, requestJson } from '../../utils/api'
 import { readDatasetBoolean } from '../../utils/constants'
 import { normalizeJob, type Job } from '../../utils/jobs'
-import { copyImageUrl, saveImageToAlbum } from '../../utils/media'
+import { downloadShareFile, saveImageToAlbum } from '../../utils/media'
 
 Component({
   data: {
@@ -96,7 +96,7 @@ Component({
       const canPreview = readDatasetBoolean(event.currentTarget.dataset.canPreview, true)
       if (!url) return
       if (!canPreview) {
-        copyImageUrl(url)
+        downloadShareFile(url)
         return
       }
       const job = this.data.job
@@ -109,7 +109,7 @@ Component({
       const canPreview = readDatasetBoolean(event.currentTarget.dataset.canPreview, true)
       if (!url) return
       if (!canPreview) {
-        copyImageUrl(url)
+        downloadShareFile(url)
         return
       }
       saveImageToAlbum(url)

@@ -93,7 +93,7 @@ Component({
             if (!url)
                 return;
             if (!canPreview) {
-                (0, media_1.copyImageUrl)(url);
+                (0, media_1.downloadShareFile)(url);
                 return;
             }
             const job = this.data.job;
@@ -106,7 +106,7 @@ Component({
             if (!url)
                 return;
             if (!canPreview) {
-                (0, media_1.copyImageUrl)(url);
+                (0, media_1.downloadShareFile)(url);
                 return;
             }
             (0, media_1.saveImageToAlbum)(url);

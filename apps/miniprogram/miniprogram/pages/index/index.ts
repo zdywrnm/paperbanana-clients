@@ -33,7 +33,7 @@ import {
   toCurrentJobSummary,
   type Job,
 } from '../../utils/jobs'
-import { copyImageUrl, saveImageToAlbum } from '../../utils/media'
+import { downloadShareFile, saveImageToAlbum } from '../../utils/media'
 import { buildCreateJobPayload, type UploadedReferenceImage } from '../../utils/payload'
 import {
   buildReferenceImage,
@@ -843,7 +843,7 @@ Component({
       const canPreview = readDatasetBoolean(event.currentTarget.dataset.canPreview, true)
       if (!url) return
       if (!canPreview) {
-        copyImageUrl(url)
+        downloadShareFile(url)
         return
       }
       const urls = this.data.resultImages.filter((image) => image.can_preview).map((image) => image.url).filter(Boolean)
@@ -858,7 +858,7 @@ Component({
       const canPreview = readDatasetBoolean(event.currentTarget.dataset.canPreview, true)
       if (!url) return
       if (!canPreview) {
-        copyImageUrl(url)
+        downloadShareFile(url)
         return
       }
       saveImageToAlbum(url)

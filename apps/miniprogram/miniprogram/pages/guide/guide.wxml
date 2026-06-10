@@ -23,7 +23,7 @@
       </view>
       <view class="guide-step-item">
         <view class="guide-step-num">3</view>
-        <view class="guide-step-body"><text class="strong">点「生成候选图」。</text>几十秒后出图，可放大预览、保存到相册（SVG 复制链接）。</view>
+        <view class="guide-step-body"><text class="strong">点「生成候选图」。</text>几十秒后出图，可放大预览、保存到相册（SVG 可下载后分享到聊天转存）。</view>
       </view>
     </view>
   </view>
@@ -102,7 +102,7 @@
     <view class="guide-section-title">看懂结果区</view>
     <view class="guide-term">
       <view class="guide-term-name">候选图</view>
-      <view class="guide-term-desc">本次生成的成图，可放大预览、保存到相册；SVG 走复制链接。</view>
+      <view class="guide-term-desc">本次生成的成图，可放大预览、保存到相册；SVG 点「下载文件」会下载到本地并弹出微信文件分享（发给自己或文件传输助手即可转存）。</view>
     </view>
     <view class="guide-term">
       <view class="guide-term-name">参考回显</view>

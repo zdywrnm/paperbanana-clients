@@ -764,7 +764,7 @@ Component({
             if (!url)
                 return;
             if (!canPreview) {
-                (0, media_1.copyImageUrl)(url);
+                (0, media_1.downloadShareFile)(url);
                 return;
             }
             const urls = this.data.resultImages.filter((image) => image.can_preview).map((image) => image.url).filter(Boolean);
@@ -779,7 +779,7 @@ Component({
             if (!url)
                 return;
             if (!canPreview) {
-                (0, media_1.copyImageUrl)(url);
+                (0, media_1.downloadShareFile)(url);
                 return;
             }
             (0, media_1.saveImageToAlbum)(url);

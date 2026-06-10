@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.imageExtension = imageExtension;
 exports.copyImageUrl = copyImageUrl;
+exports.downloadShareFile = downloadShareFile;
 exports.saveImageToAlbum = saveImageToAlbum;
 function imageExtension(mimeType) {
     if (mimeType.includes('svg'))
@@ -23,17 +24,50 @@ function copyImageUrl(url) {
         });
         return;
     }
-    const shareFileMessage = wx.shareFileMessage;
-    if (typeof shareFileMessage === 'function') {
-        shareFileMessage({
-            filePath: url,
-            fail() {
-                wx.showToast({ title: '文件已缓存本地，暂无外部链接', icon: 'none' });
-            },
-        });
+    shareLocalFile(url, '');
+}
+// SVG 等非位图资产的"下载"：小程序无法存相册/openDocument，下载到本地后走微信文件分享
+// （发给自己或文件传输助手即可转存/传电脑）。下载失败时退回复制链接。
+function downloadShareFile(url, fileName = '') {
+    if (!url)
+        return;
+    const name = fileName || decodeURIComponent(url.split('?')[0].split('/').pop() || '') || 'paperbanana.svg';
+    if (!/^https?:\/\//i.test(url)) {
+        shareLocalFile(url, name);
         return;
     }
-    wx.showToast({ title: '文件已缓存本地，暂无外部链接', icon: 'none' });
+    wx.showLoading({ title: '下载中' });
+    wx.downloadFile({
+        url,
+        success(result) {
+            wx.hideLoading();
+            if (result.statusCode < 200 || result.statusCode >= 300 || !result.tempFilePath) {
+                copyImageUrl(url);
+                return;
+            }
+            shareLocalFile(result.tempFilePath, name);
+        },
+        fail() {
+            wx.hideLoading();
+            copyImageUrl(url);
+        },
+    });
+}
+function shareLocalFile(filePath, fileName) {
+    const shareFileMessage = wx.shareFileMessage;
+    if (typeof shareFileMessage === 'function') {
+        const options = {
+            filePath,
+            fail() {
+                wx.showToast({ title: '未完成分享', icon: 'none' });
+            },
+        };
+        if (fileName)
+            options.fileName = fileName;
+        shareFileMessage(options);
+        return;
+    }
+    wx.showToast({ title: '当前微信版本不支持文件分享', icon: 'none' });
 }
 // PNG 等位图保存到相册；SVG 走 copyImageUrl（见 SYNC.md 2026-06-07 基线条目的用户反馈）。
 function saveImageToAlbum(url) {

@@ -22,7 +22,7 @@ Component({
             if (!url)
                 return;
             if (canPreview === false || canPreview === 'false') {
-                (0, media_1.copyImageUrl)(url);
+                (0, media_1.downloadShareFile)(url);
                 return;
             }
             wx.previewImage({ current: url, urls: [url] });
@@ -32,9 +32,9 @@ Component({
             const canPreview = event.currentTarget.dataset.canPreview;
             if (!url)
                 return;
-            // SVG 不能存相册：本地文件走分享、远端链接走复制（与结果图行为一致）
+            // SVG 不能存相册：下载到本地后走文件分享（与结果图行为一致）
             if (canPreview === false || canPreview === 'false') {
-                (0, media_1.copyImageUrl)(url);
+                (0, media_1.downloadShareFile)(url);
                 return;
             }
             (0, media_1.saveImageToAlbum)(url);
