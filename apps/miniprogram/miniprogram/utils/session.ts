@@ -40,7 +40,8 @@ function setCurrentUser(user: CurrentUser | null) {
 export async function refreshSession(): Promise<CurrentUser | null> {
   const epoch = ++sessionEpoch
   try {
-    const session = await authRequest<{ user?: { id?: string; email?: string; name?: string } } | null>('/get-session', 'GET')
+    // 短超时：启动期的会话探测失败按未登录处理即可，不必等满 60s（也避免控制台超时报错）
+    const session = await authRequest<{ user?: { id?: string; email?: string; name?: string } } | null>('/get-session', 'GET', undefined, { timeout: 15000 })
     if (epoch !== sessionEpoch) return currentUser
     const user = session && session.user
     if (user && user.id) {

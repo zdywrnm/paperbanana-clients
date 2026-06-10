@@ -80,7 +80,6 @@ Component({
     referenceVisionModelLabel: getModelLabel(PROVIDERS[0].visionModels, PROVIDERS[0].visionModel),
     configurationMode: 'simple' as ConfigurationMode,
     isAdvancedMode: false,
-    modeLabel: '普通模式',
     pipelineOptions: PIPELINE_OPTIONS,
     pipelineIndex: 0,
     pipelineLabel: String(PIPELINE_OPTIONS[0].label),
@@ -138,6 +137,7 @@ Component({
     quickStartExamples: QUICK_START_EXAMPLES,
     healthText: '检测中',
     healthOk: false,
+    healthChecked: false,
     canSubmit: false,
     isSubmitting: false,
     currentJobId: '',
@@ -232,7 +232,6 @@ Component({
       this.setData({
         configurationMode,
         isAdvancedMode,
-        modeLabel: isAdvancedMode ? '专业模式' : '普通模式',
       })
       this.refreshResolutionOptions()
       this.refreshReferenceModeState()
@@ -678,19 +677,23 @@ Component({
 
     async checkHealth() {
       try {
-        const data = await requestJson<{ code?: number; ok?: boolean; runtime?: string; laf?: { ok?: boolean } }>({
-          action: 'health',
-        })
+        const data = await requestJson<{ code?: number; ok?: boolean; runtime?: string; laf?: { ok?: boolean } }>(
+          { action: 'health' },
+          // 启动期探测用短超时：失败只影响警示条展示，避免 60s 超时在控制台报 Error: timeout
+          { timeout: 15000 },
+        )
         const laf = data.laf || {}
         const ok = Boolean(data.ok || laf.ok || data.code === 0)
         this.setData({
           healthOk: ok,
-          healthText: ok ? '后端可用' : '后端异常',
+          healthChecked: true,
+          healthText: ok ? '后端可用' : '后端异常，生成功能可能暂不可用',
         })
       } catch (error) {
         this.setData({
           healthOk: false,
-          healthText: formatError(error),
+          healthChecked: true,
+          healthText: `后端异常：${formatError(error)}`,
         })
       }
     },

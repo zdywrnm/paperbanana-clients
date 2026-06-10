@@ -11,14 +11,16 @@
 
 .example-list {
   display: grid;
-  gap: 16rpx;
-  margin-top: 18rpx;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12rpx;
+  margin-top: 16rpx;
 }
 
 .example-card {
   display: grid;
+  align-content: start;
   gap: 8rpx;
-  padding: 20rpx;
+  padding: 16rpx;
   border: 1rpx solid #d9d6cc;
   border-radius: 14rpx;
   background: rgba(255, 255, 251, 0.88);
@@ -26,27 +28,34 @@
 
 .example-label {
   justify-self: start;
-  padding: 5rpx 12rpx;
+  padding: 4rpx 12rpx;
   border-radius: 8rpx;
   color: #77510b;
   background: #fff3d2;
   border: 1rpx solid #ead28d;
-  font-size: 21rpx;
+  font-size: 20rpx;
   font-weight: 760;
 }
 
 .example-title {
   color: #171513;
-  font-size: 28rpx;
+  font-size: 24rpx;
   line-height: 1.35;
-  font-weight: 800;
+  font-weight: 780;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 
-.example-caption,
 .example-hint {
   color: #68706d;
-  font-size: 22rpx;
-  line-height: 1.5;
+  font-size: 20rpx;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 
 .mode-field {
@@ -328,4 +337,23 @@
   display: flex;
   flex: none;
   gap: 10rpx;
+}
+
+/* 意见反馈悬浮按钮（与 web 端 feedback-fab 对应），固定在 tabBar 上方右下角 */
+.feedback-fab {
+  position: fixed;
+  right: 24rpx;
+  bottom: calc(40rpx + env(safe-area-inset-bottom));
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 76rpx;
+  padding: 0 30rpx;
+  border-radius: 999rpx;
+  background: rgba(23, 21, 19, 0.88);
+  color: #fffffb;
+  font-size: 24rpx;
+  font-weight: 760;
+  box-shadow: 0 12rpx 30rpx rgba(23, 21, 19, 0.24);
 }

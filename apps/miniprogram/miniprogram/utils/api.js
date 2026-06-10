@@ -11,13 +11,13 @@ const config_1 = require("./config");
 function requestJson(body, options = {}) {
     return postJson(config_1.API_ENDPOINT, body, options);
 }
-function authRequest(path, method, data) {
+function authRequest(path, method, data, options = {}) {
     return new Promise((resolve, reject) => {
         const header = requestHeader(true);
         wx.request({
             url: `${config_1.AUTH_BASE}${path}`,
             method,
-            timeout: 60000,
+            timeout: options.timeout || 60000,
             header,
             data,
             success(res) {

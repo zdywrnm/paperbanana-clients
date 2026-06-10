@@ -3,29 +3,20 @@
     <view class="brand">
       <image class="brand-logo" src="{{logoSrc}}" mode="aspectFill" />
       <view class="brand-copy">
-        <view class="brand-title">PaperBanana 工作台</view>
-        <view class="brand-tags">
-          <text>多智能体</text>
-          <text>学术图示生成</text>
-        </view>
+        <view class="brand-title">PaperBanana</view>
+        <view class="brand-sub">学术图示工作台</view>
       </view>
     </view>
 
     <view class="auth-chip logged" wx:if="{{isLoggedIn}}">
       <text class="auth-dot"></text>
       <text class="auth-email">{{currentUserEmail}}</text>
-      <button class="chip-button" size="mini" bindtap="signOut">退出</button>
+      <text class="auth-signout" bindtap="signOut">退出</text>
     </view>
     <button class="auth-chip" wx:else bindtap="openAuthPanel">登录 / 注册</button>
   </view>
 
-  <view class="status-row">
-    <view class="status-pill {{healthOk ? 'ok' : 'warn'}}">{{healthText}}</view>
-    <view class="status-pill">{{modeLabel}}</view>
-    <view class="status-pill" wx:if="{{isLoggedIn}}">账号记录已启用</view>
-    <view class="status-pill" wx:else>不登录也可生成</view>
-    <button class="status-action" bindtap="openFeedbackPanel">意见反馈</button>
-  </view>
+  <view class="health-banner" wx:if="{{healthChecked && !healthOk}}">{{healthText}}</view>
 
   <feedback-panel show="{{showFeedbackPanel}}" job-id="{{currentJobId}}" bind:close="closeFeedbackPanel" />
   <auth-panel show="{{showAuthPanel}}" bind:close="closeAuthPanel" bind:authed="onAuthed" />
@@ -42,7 +33,6 @@
       >
         <view class="example-label">{{item.label}}</view>
         <view class="example-title">{{item.title}}</view>
-        <view class="example-caption">{{item.caption}}</view>
         <view class="example-hint">{{item.hint}}</view>
       </view>
     </view>
@@ -329,4 +319,6 @@
   </view>
 
   <view class="footer-space" />
+
+  <view class="feedback-fab" bindtap="openFeedbackPanel">反馈</view>
 </scroll-view>

@@ -22,7 +22,7 @@
   margin-top: 10rpx;
 }
 
-.strip-tags text {
+.strip-tag {
   max-width: 100%;
   padding: 5rpx 14rpx;
   border: 1rpx solid #d9d6cc;

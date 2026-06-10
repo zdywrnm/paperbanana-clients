@@ -2,7 +2,7 @@
   <view class="retrieved-reference-strip" wx:if="{{references.length}}">
     <view class="strip-title">检索参考</view>
     <view class="strip-tags">
-      <text wx:for="{{references}}" wx:key="id">{{item.title || item.id}}</text>
+      <text class="strip-tag" wx:for="{{references}}" wx:key="id">{{item.title || item.id}}</text>
     </view>
   </view>
 

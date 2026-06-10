@@ -35,6 +35,9 @@ Component({
       this.triggerEvent('close')
     },
 
+    // 拦截点击冒泡，避免点对话框内容触发遮罩层的 close
+    noop() {},
+
     toggleAuthMode() {
       const nextMode: AuthMode = this.data.authMode === 'sign-in' ? 'sign-up' : 'sign-in'
       const isSignUp = nextMode === 'sign-up'

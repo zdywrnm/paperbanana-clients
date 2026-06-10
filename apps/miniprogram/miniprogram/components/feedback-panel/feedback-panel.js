@@ -33,6 +33,8 @@ Component({
             this.setData({ feedbackError: '' });
             this.triggerEvent('close');
         },
+        // 拦截点击冒泡，避免点对话框内容触发遮罩层的 close
+        noop() { },
         onFeedbackCategoryChange(event) {
             const feedbackCategoryIndex = (0, constants_1.readPickerIndex)(event.detail.value, constants_1.FEEDBACK_CATEGORIES.length);
             const option = constants_1.FEEDBACK_CATEGORIES[feedbackCategoryIndex] || constants_1.FEEDBACK_CATEGORIES[0];

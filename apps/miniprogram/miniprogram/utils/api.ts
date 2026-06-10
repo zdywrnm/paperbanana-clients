@@ -16,13 +16,13 @@ export function requestJson<T>(body: WechatMiniprogram.IAnyObject, options: Requ
   return postJson<T>(API_ENDPOINT, body, options)
 }
 
-export function authRequest<T>(path: string, method: 'GET' | 'POST', data?: WechatMiniprogram.IAnyObject): Promise<T> {
+export function authRequest<T>(path: string, method: 'GET' | 'POST', data?: WechatMiniprogram.IAnyObject, options: RequestOptions = {}): Promise<T> {
   return new Promise((resolve, reject) => {
     const header = requestHeader(true)
     wx.request({
       url: `${AUTH_BASE}${path}`,
       method,
-      timeout: 60000,
+      timeout: options.timeout || 60000,
       header,
       data,
       success(res: WxRequestResult<T & { message?: string; code?: string; error?: string }>) {

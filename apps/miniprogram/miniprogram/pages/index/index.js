@@ -28,7 +28,6 @@ Component({
         referenceVisionModelLabel: (0, constants_1.getModelLabel)(constants_1.PROVIDERS[0].visionModels, constants_1.PROVIDERS[0].visionModel),
         configurationMode: 'simple',
         isAdvancedMode: false,
-        modeLabel: '普通模式',
         pipelineOptions: constants_1.PIPELINE_OPTIONS,
         pipelineIndex: 0,
         pipelineLabel: String(constants_1.PIPELINE_OPTIONS[0].label),
@@ -86,6 +85,7 @@ Component({
         quickStartExamples: constants_1.QUICK_START_EXAMPLES,
         healthText: '检测中',
         healthOk: false,
+        healthChecked: false,
         canSubmit: false,
         isSubmitting: false,
         currentJobId: '',
@@ -181,7 +181,6 @@ Component({
             this.setData({
                 configurationMode,
                 isAdvancedMode,
-                modeLabel: isAdvancedMode ? '专业模式' : '普通模式',
             });
             this.refreshResolutionOptions();
             this.refreshReferenceModeState();
@@ -602,20 +601,22 @@ Component({
         },
         async checkHealth() {
             try {
-                const data = await (0, api_1.requestJson)({
-                    action: 'health',
-                });
+                const data = await (0, api_1.requestJson)({ action: 'health' }, 
+                // 启动期探测用短超时：失败只影响警示条展示，避免 60s 超时在控制台报 Error: timeout
+                { timeout: 15000 });
                 const laf = data.laf || {};
                 const ok = Boolean(data.ok || laf.ok || data.code === 0);
                 this.setData({
                     healthOk: ok,
-                    healthText: ok ? '后端可用' : '后端异常',
+                    healthChecked: true,
+                    healthText: ok ? '后端可用' : '后端异常，生成功能可能暂不可用',
                 });
             }
             catch (error) {
                 this.setData({
                     healthOk: false,
-                    healthText: (0, api_1.formatError)(error),
+                    healthChecked: true,
+                    healthText: `后端异常：${(0, api_1.formatError)(error)}`,
                 });
             }
         },
