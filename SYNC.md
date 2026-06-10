@@ -32,7 +32,8 @@
 各端待办：
 - [x] laf-functions（归一化处：有上传图则 retrievalSetting→none、manualReferenceIds→[]）
 - [x] web（检索设置 Select 在有参考图时锁为"不使用检索"+disabled+提示；payload 同步发 none；隐藏手动参考面板）
-- [ ] miniprogram/android/windows/macos（UI 可选同步：上传参考图后提示"检索已自动关闭"；不改也不会出错，后端已强制）
+- [x] miniprogram（已同步：上传参考图后"检索设置"锁为"不使用检索"+提示文案；payload 双保险发 none/[]）
+- [ ] android/windows/macos（UI 可选同步：上传参考图后提示"检索已自动关闭"；不改也不会出错，后端已强制）
 
 ### [2026-06-09] 输出清晰度 + 精修内联化 + 精修模型 bug 修复 — by Claude
 变更：① 生成新增"输出清晰度"`imageSize`('2K'/'4K');② 精修分析步骤的模型选择修 bug;③ web 移除独立"精修图片"页签,改结果图"精修"按钮弹内联模态(纯前端)。
@@ -44,7 +45,8 @@
 - [x] laf-functions（imageSize 接 callImageModel;refine 分析改视觉/主模型）
 - [x] packages/api（createJobRequest 加 imageSize;refineImageRequest 转发 mainModelName/referenceVisionModelName）
 - [x] web（输出清晰度 Select;精修内联模态;移除页签）
-- [ ] miniprogram/android/windows/macos（生成加 imageSize 可选;精修请求补 mainModelName/referenceVisionModelName）
+- [x] miniprogram（生成已加"输出清晰度"1K/2K/4K，按 provider/图像模型过滤并自动收敛；与 web 一致无手动精修 UI（精修由清晰度自动驱动），故无精修请求需补字段）
+- [ ] android/windows/macos（生成加 imageSize 可选;精修请求补 mainModelName/referenceVisionModelName）
 
 ### [2026-06-08] 阿里百炼模型列表更正 + 参考图模式按固定能力 — by Claude
 变更：之前 bailian 模型常量含**不存在/未激活**的名字;改为官方模型广场的真实模型,并把"参考图识别能力"按**模型**固定。
@@ -56,7 +58,8 @@
 各端待办：
 - [x] laf-functions（能力正则、静默兜底、stage 标题中文）
 - [x] web（真实模型常量、删自动选择、修图过大 CSS）
-- [ ] miniprogram/android/windows/macos（同步 bailian provider/model 常量到真实模型 + 识别模型能力;去掉 auto 入口）
+- [x] miniprogram（已同步 bailian 真实模型常量 + mainModelCanReadImages 固定能力;参考图模式按能力派生缺省，已去掉 auto 入口，展示层保留旧记录 auto 兼容）
+- [ ] android/windows/macos（同步 bailian provider/model 常量到真实模型 + 识别模型能力;去掉 auto 入口）
 
 ### [2026-06-08] 修复越权(IDOR)：Laf 校验网关共享 token — by Claude
 变更：公开的 Laf 端点(`https://sdswgya641.sealoshzh.site/paperbanana-api`)此前完全信任调用方传入的 `userId`/`userEmail`,任何人直连即可用受害者 `userId` 读其任务历史(`method_content`/`caption`/结果图 URL),绕过网关会话鉴权。现在 Laf 对「依赖调用方身份」的非管理员动作校验网关注入的共享 token。
@@ -72,7 +75,7 @@
 - [x] laf-functions（校验 `gatewayToken`/`adminToken`,fail-open 兜底）
 - [x] auth-gateway（无需改：`withGatewayToken` 已注入;仅需在 Sealos 配置 `PAPERBANANA_GATEWAY_TOKEN` env）
 - [x] web（默认 `VITE_API_BASE` 指向网关,经网关转发,无需改）
-- [ ] miniprogram（确认 `API_BASE` 指向网关域名,勿直连 Laf）
+- [x] miniprogram（已确认：`miniprogram/utils/config.ts` 的 `API_BASE` 指向网关域名 `https://yifbnnzrwmxn.sealoshzh.site`，未直连 Laf）
 - [ ] android（确认 `API_BASE_DEFAULT` 指向网关域名,勿直连 Laf）
 - [ ] windows（确认 `DefaultApiBase` 指向网关域名,勿直连 Laf）
 - [ ] macos（默认 `sealosAPIBase` 指向网关;若用户把"网关地址"改成 Laf 域名,身份动作将被拒——属预期）
@@ -91,7 +94,8 @@
 - [x] packages/api（`taskName` 已白名单，无需改）
 - [x] web（plot 提交放开：data_stat 类别 → `taskName:'plot'`）
 - [x] auth-gateway（无需改：plot 走 createJob 既有转发；admin 动作直连 Laf）
-- [ ] miniprogram/android/windows/macos（兼容 `taskName:'plot'`，后续补 plot UI）
+- [x] miniprogram（已接入：信息图类别选"数据统计图"时 `taskName:'plot'` + 提示"统计图由独立渲染服务生成"；参考库检索 taskName 同步切 plot）
+- [ ] android/windows/macos（兼容 `taskName:'plot'`，后续补 plot UI）
 - [x] plot-worker 已部署到 Sealos（Deployment+Service+NetworkPolicy，2Gi）+ Laf 已设 `PLOT_WORKER_URL`/`PLOT_WORKER_TOKEN`；`pingPlotWorker` 实测渲染通过
 
 ### [2026-06-08] PaperBanana 根项目 10 项功能对齐（diagram 主链路）— by Codex
@@ -107,7 +111,7 @@
 - [x] auth-gateway
 - [x] packages/api
 - [x] web（manual 参考、timeline、zip、refine、plot 占位）
-- [ ] miniprogram（兼容新增字段；后续补 UI）
+- [x] miniprogram（已兼容新增字段并补全 UI：检索设置 none/auto/random/manual、手动参考库选卡（≤10）、stages 生成演化时间线、检索参考展示、任务记录新徽标）
 - [ ] android（兼容新增字段；后续补 UI）
 - [ ] windows（兼容新增字段；后续补 UI）
 - [ ] macos（兼容新增字段；后续补 UI）
@@ -120,7 +124,7 @@
 - [x] auth-gateway
 - [x] web
 - [x] packages/api
-- [ ] miniprogram（如有 admin 入口）
+- [x] miniprogram（无 admin 入口，无需改）
 - [ ] 其它端无 admin UI 暂不涉及
 
 ### [2026-06-07] 用户意见反馈 submitFeedback — by Codex
