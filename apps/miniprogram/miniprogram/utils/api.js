@@ -12,9 +12,9 @@ const config_1 = require("./config");
 function requestJson(body, options = {}) {
     return postJson(config_1.API_ENDPOINT, body, options);
 }
-// 防御解析：后端 getJob 等响应的 AI 生成文本（stage/critic/logs）可能含未转义的裸控制字符，
-// 导致 wx.request 的严格 JSON.parse 失败、res.data 退化为字符串（轮询会永远拿不到 job 而卡死）。
-// 这里清洗 0x00–0x1F 后重试解析；换行/制表符替换为空格（文本降级换行，结构不受影响）。
+// 防御解析：wx.request 严格 JSON.parse 失败时 res.data 会退化为字符串（如网关/代理异常时
+// 返回的 HTML 错误页、或上游响应被意外破坏），导致轮询拿不到 job。这里清洗 0x00–0x1F 后
+// 重试解析（换行/制表符替换为空格），仍失败才原样返回交给错误处理。属通用兜底，非已知后端缺陷。
 function coerceJsonResponse(data) {
     if (typeof data !== 'string')
         return data;
