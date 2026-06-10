@@ -160,7 +160,9 @@ Component({
       ;(this as any).isPageVisible = true
       // 悬浮反馈按钮放到右下角（movable-view 的 x/y 是相对 movable-area 左上角的 px 值）
       try {
-        const info = wx.getSystemInfoSync()
+        // getSystemInfoSync 已废弃；优先用 getWindowInfo（基础库 2.20.1+），旧环境回退
+        const getWindowInfo = (wx as any).getWindowInfo
+        const info = typeof getWindowInfo === 'function' ? getWindowInfo() : wx.getSystemInfoSync()
         const rpx = info.windowWidth / 750
         this.setData({
           fabX: Math.max(0, info.windowWidth - 144 * rpx - 24 * rpx),
