@@ -174,13 +174,14 @@ export function normalizeJobStage(input: unknown, jobId = '', index = 0): JobSta
   const imageUrl = resolveImageUrl(String(image.url || ''), `${jobId}-stage`, index, mimeType, mimeType)
   const candidateId = Number(stage.candidate_id != null ? stage.candidate_id : stage.candidateId != null ? stage.candidateId : 0)
   const type = String(stage.type || '')
+  const title = String(stage.title || stage.type || '')
   return {
     id: String(stage.id || stage._id || `stage-${index}`),
     candidate_id: candidateId,
     candidate_number: candidateId + 1,
     type,
-    marker: stageMarker(type),
-    title: String(stage.title || stage.type || ''),
+    marker: stageMarker(type, title),
+    title,
     round: Number(stage.round || 0),
     text: String(stage.text || stage.description || stage.message || ''),
     suggestion: String(stage.suggestion || stage.criticSuggestion || ''),
@@ -190,11 +191,12 @@ export function normalizeJobStage(input: unknown, jobId = '', index = 0): JobSta
   }
 }
 
-function stageMarker(type: string): string {
-  if (type === 'plan') return '规'
+function stageMarker(type: string, title = ''): string {
+  // 精修放大阶段后端用 type:'render'，靠标题区分（含"精修"/"放大"）
+  if (title.includes('精修') || title.includes('放大') || type.includes('refine') || type.includes('upscale') || type.includes('enhance')) return '修'
+  if (type === 'plan' || type === 'planner') return '规'
   if (type === 'render') return '绘'
   if (type === 'critic') return '审'
-  if (type.includes('refine') || type.includes('upscale')) return '修'
   if (type.includes('retriev')) return '检'
   return '步'
 }
