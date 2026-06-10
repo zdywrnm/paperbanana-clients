@@ -98,11 +98,26 @@ Component({
         isAuthChecking: true,
         showAuthPanel: false,
         showFeedbackPanel: false,
+        // 反馈悬浮按钮初始位置（px，attached 时按屏幕尺寸算到右下角）
+        fabX: 0,
+        fabY: 0,
     },
     lifetimes: {
         attached() {
             ;
             this.isPageVisible = true;
+            // 悬浮反馈按钮放到右下角（movable-view 的 x/y 是相对 movable-area 左上角的 px 值）
+            try {
+                const info = wx.getSystemInfoSync();
+                const rpx = info.windowWidth / 750;
+                this.setData({
+                    fabX: Math.max(0, info.windowWidth - 144 * rpx - 24 * rpx),
+                    fabY: Math.max(0, info.windowHeight - 76 * rpx - 48 * rpx),
+                });
+            }
+            catch {
+                // 取不到屏幕信息时停留在默认位置，可手动拖动
+            }
             const unsubscribe = (0, session_1.subscribeSession)((user) => {
                 this.setData({
                     isLoggedIn: Boolean(user),

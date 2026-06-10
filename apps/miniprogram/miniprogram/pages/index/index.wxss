@@ -90,8 +90,8 @@
 
 .mode-switch button.active {
   color: #ffffff;
-  background: #171513;
-  box-shadow: 0 10rpx 22rpx rgba(23, 21, 19, 0.16);
+  background: #315f51;
+  box-shadow: 0 10rpx 22rpx rgba(38, 79, 67, 0.2);
 }
 
 .mode-switch text {
@@ -339,19 +339,28 @@
   gap: 10rpx;
 }
 
-/* 意见反馈悬浮按钮（与 web 端 feedback-fab 对应），固定在 tabBar 上方右下角 */
-.feedback-fab {
+/* 意见反馈悬浮按钮（与 web 端 feedback-fab 同款墨绿），可按住拖动。
+   外层 movable-area 铺满视口但 pointer-events:none，只有按钮本身可交互。 */
+.fab-area {
   position: fixed;
-  right: 24rpx;
-  bottom: calc(40rpx + env(safe-area-inset-bottom));
+  left: 0;
+  top: 0;
+  width: 100vw;
+  height: 100vh;
   z-index: 90;
+  pointer-events: none;
+}
+
+.feedback-fab {
+  pointer-events: auto;
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 144rpx;
   height: 76rpx;
-  padding: 0 30rpx;
   border-radius: 999rpx;
-  background: rgba(23, 21, 19, 0.88);
+  border: 1rpx solid rgba(22, 72, 56, 0.84);
+  background: #315f51;
   color: #fffffb;
   font-size: 24rpx;
   font-weight: 760;

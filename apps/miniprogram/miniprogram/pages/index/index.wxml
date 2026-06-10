@@ -319,6 +319,15 @@
   </view>
 
   <view class="footer-space" />
-
-  <view class="feedback-fab" bindtap="openFeedbackPanel">反馈</view>
 </scroll-view>
+
+<movable-area class="fab-area">
+  <movable-view
+    class="feedback-fab"
+    direction="all"
+    x="{{fabX}}"
+    y="{{fabY}}"
+    inertia
+    bindtap="openFeedbackPanel"
+  >反馈</movable-view>
+</movable-area>

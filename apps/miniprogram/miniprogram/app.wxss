@@ -273,11 +273,11 @@ button::after {
   min-height: 82rpx;
   border-radius: 16rpx;
   color: #ffffff;
-  background: #171513;
+  background: #315f51;
   font-size: 27rpx;
   font-weight: 780;
   line-height: 82rpx;
-  box-shadow: 0 12rpx 28rpx rgba(23, 21, 19, 0.16);
+  box-shadow: 0 12rpx 28rpx rgba(38, 79, 67, 0.22);
 }
 
 .primary-button {
@@ -292,9 +292,12 @@ button::after {
 .secondary-button {
   min-height: 64rpx;
   margin-top: 16rpx;
-  background: #315f51;
+  border: 1rpx solid #c8ddcd;
+  background: #edf6ef;
+  color: #315f51;
   font-size: 24rpx;
   line-height: 64rpx;
+  box-shadow: none;
 }
 
 .text-button {

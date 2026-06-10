@@ -52,7 +52,7 @@
   width: 48rpx;
   height: 48rpx;
   border-radius: 50%;
-  background: #171513;
+  background: #315f51;
   color: #ffffff;
   font-size: 24rpx;
   font-weight: 800;
