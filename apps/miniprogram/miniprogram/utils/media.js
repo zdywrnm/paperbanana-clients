@@ -24,7 +24,7 @@ function copyImageUrl(url) {
         });
         return;
     }
-    shareLocalFile(url, '');
+    shareLocalFile(url, '', '');
 }
 // SVG 等非位图资产的"下载"：小程序无法存相册/openDocument，下载到本地后走微信文件分享
 // （发给自己或文件传输助手即可转存/传电脑）。下载失败时退回复制链接。
@@ -33,7 +33,7 @@ function downloadShareFile(url, fileName = '') {
         return;
     const name = fileName || decodeURIComponent(url.split('?')[0].split('/').pop() || '') || 'paperbanana.svg';
     if (!/^https?:\/\//i.test(url)) {
-        shareLocalFile(url, name);
+        shareLocalFile(url, name, '');
         return;
     }
     wx.showLoading({ title: '下载中' });
@@ -45,7 +45,7 @@ function downloadShareFile(url, fileName = '') {
                 copyImageUrl(url);
                 return;
             }
-            shareLocalFile(result.tempFilePath, name);
+            shareLocalFile(result.tempFilePath, name, url);
         },
         fail() {
             wx.hideLoading();
@@ -53,21 +53,38 @@ function downloadShareFile(url, fileName = '') {
         },
     });
 }
-function shareLocalFile(filePath, fileName) {
+// shareFileMessage 仅真机支持（开发者工具模拟器必失败）。失败时：
+// 用户主动取消 → 静默；环境不支持等 → 有远端链接就复制链接兜底，否则提示需真机。
+function shareLocalFile(filePath, fileName, fallbackUrl) {
+    const fallback = () => {
+        if (fallbackUrl) {
+            wx.setClipboardData({
+                data: fallbackUrl,
+                success() {
+                    wx.showToast({ title: '当前环境不支持文件分享，已复制下载链接', icon: 'none' });
+                },
+            });
+            return;
+        }
+        wx.showToast({ title: '文件分享需在真机上使用', icon: 'none' });
+    };
     const shareFileMessage = wx.shareFileMessage;
-    if (typeof shareFileMessage === 'function') {
-        const options = {
-            filePath,
-            fail() {
-                wx.showToast({ title: '未完成分享', icon: 'none' });
-            },
-        };
-        if (fileName)
-            options.fileName = fileName;
-        shareFileMessage(options);
+    if (typeof shareFileMessage !== 'function') {
+        fallback();
         return;
     }
-    wx.showToast({ title: '当前微信版本不支持文件分享', icon: 'none' });
+    const options = {
+        filePath,
+        fail(error) {
+            const message = String((error && error.errMsg) || '');
+            if (message.indexOf('cancel') >= 0)
+                return;
+            fallback();
+        },
+    };
+    if (fileName)
+        options.fileName = fileName;
+    shareFileMessage(options);
 }
 // PNG 等位图保存到相册；SVG 走 copyImageUrl（见 SYNC.md 2026-06-07 基线条目的用户反馈）。
 function saveImageToAlbum(url) {
