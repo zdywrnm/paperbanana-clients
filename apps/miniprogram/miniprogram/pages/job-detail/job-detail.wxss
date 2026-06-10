@@ -1,0 +1,49 @@
+.detail-actions {
+  display: flex;
+  flex: none;
+  gap: 10rpx;
+}
+
+.detail-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+  margin-bottom: 18rpx;
+}
+
+.detail-method {
+  margin-top: 18rpx;
+  display: grid;
+  gap: 10rpx;
+}
+
+.detail-method-text {
+  max-height: 320rpx;
+  overflow-y: auto;
+  padding: 16rpx;
+  color: #343230;
+  background: #f3f2ec;
+  border: 1rpx solid #d9d6cc;
+  border-radius: 14rpx;
+  font-size: 22rpx;
+  line-height: 1.6;
+}
+
+.detail-logs {
+  margin-top: 18rpx;
+  display: grid;
+  gap: 10rpx;
+}
+
+.detail-logs-text {
+  max-height: 280rpx;
+  overflow-y: auto;
+  padding: 16rpx;
+  color: #9f3a2d;
+  background: #f8ebe7;
+  border: 1rpx solid #ead1ca;
+  border-radius: 14rpx;
+  font-size: 20rpx;
+  line-height: 1.55;
+  word-break: break-all;
+}

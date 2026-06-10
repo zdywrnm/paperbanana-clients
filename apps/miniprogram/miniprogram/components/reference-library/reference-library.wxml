@@ -1,0 +1,29 @@
+<view class="reference-library-panel">
+  <view class="library-head">
+    <view class="library-head-copy">
+      <view class="library-title">手动参考案例</view>
+      <view class="library-note">从 PaperBanana 参考库选择最多 {{limit}} 个案例（已选 {{selectedCount}}）。</view>
+    </view>
+    <button class="ghost-button" size="mini" disabled="{{isLoading}}" bindtap="onRefresh">{{isLoading ? '加载中' : '刷新'}}</button>
+  </view>
+  <view wx:if="{{error}}" class="error-box">{{error}}</view>
+  <view class="library-grid" wx:if="{{cards.length}}">
+    <view
+      class="library-card {{item.selected ? 'active' : ''}}"
+      wx:for="{{cards}}"
+      wx:key="id"
+      data-id="{{item.id}}"
+      bindtap="onToggle"
+    >
+      <image wx:if="{{item.image_url}}" class="library-thumb" src="{{item.image_url}}" mode="aspectFill" lazy-load="{{true}}" />
+      <view wx:else class="library-thumb placeholder">PB</view>
+      <view class="library-card-title">{{item.title || item.id}}</view>
+      <view class="library-card-summary">{{item.summary || item.source}}</view>
+      <view class="library-check" wx:if="{{item.selected}}">已选</view>
+    </view>
+  </view>
+  <view class="empty-state" wx:if="{{!isLoading && !cards.length && !error}}">
+    <view>参考库暂无数据</view>
+    <text>可先使用自动检索或上传参考图。</text>
+  </view>
+</view>

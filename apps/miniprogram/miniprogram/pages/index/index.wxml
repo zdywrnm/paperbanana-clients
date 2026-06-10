@@ -19,11 +19,6 @@
     <button class="auth-chip" wx:else bindtap="openAuthPanel">登录 / 注册</button>
   </view>
 
-  <view class="paper-tabs">
-    <button class="{{isGenerateTab ? 'active' : ''}}" data-tab="generate" bindtap="switchTab">生成候选图</button>
-    <button class="{{isRecordsTab ? 'active' : ''}}" data-tab="records" bindtap="switchTab">任务记录</button>
-  </view>
-
   <view class="status-row">
     <view class="status-pill {{healthOk ? 'ok' : 'warn'}}">{{healthText}}</view>
     <view class="status-pill">{{modeLabel}}</view>
@@ -32,498 +27,306 @@
     <button class="status-action" bindtap="openFeedbackPanel">意见反馈</button>
   </view>
 
-  <view class="feedback-panel section" wx:if="{{showFeedbackPanel}}">
+  <feedback-panel show="{{showFeedbackPanel}}" job-id="{{currentJobId}}" bind:close="closeFeedbackPanel" />
+  <auth-panel show="{{showAuthPanel}}" bind:close="closeAuthPanel" bind:authed="onAuthed" />
+
+  <view class="section example-panel">
+    <view class="example-panel-head">快速上手案例</view>
+    <view class="example-list">
+      <view
+        class="example-card"
+        wx:for="{{quickStartExamples}}"
+        wx:key="id"
+        data-id="{{item.id}}"
+        bindtap="applyExample"
+      >
+        <view class="example-label">{{item.label}}</view>
+        <view class="example-title">{{item.title}}</view>
+        <view class="example-caption">{{item.caption}}</view>
+        <view class="example-hint">{{item.hint}}</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="section">
     <view class="section-head">
       <view>
-        <view class="section-title">意见反馈</view>
-        <view class="section-note">遇到生成失败、模型异常或体验问题，可以直接提交给开发者。</view>
+        <view class="section-title">生成设置</view>
+        <view class="section-note">普通模式使用平台默认配置；专业模式可调整流程、比例和模型名称。</view>
       </view>
-      <button class="ghost-button" size="mini" bindtap="closeFeedbackPanel">关闭</button>
     </view>
+
+    <view class="field mode-field">
+      <view class="field-label">使用模式</view>
+      <view class="mode-switch">
+        <button class="{{!isAdvancedMode ? 'active' : ''}}" data-mode="simple" bindtap="switchConfigurationMode">
+          <view>普通模式</view>
+          <text>默认流程</text>
+        </button>
+        <button class="{{isAdvancedMode ? 'active' : ''}}" data-mode="advanced" bindtap="switchConfigurationMode">
+          <view>专业模式</view>
+          <text>自定义参数</text>
+        </button>
+      </view>
+    </view>
+
     <view class="field">
-      <view class="field-label">反馈类型</view>
-      <picker mode="selector" range="{{feedbackCategoryOptions}}" range-key="label" value="{{feedbackCategoryIndex}}" bindchange="onFeedbackCategoryChange">
-        <view class="picker-value compact-picker">{{feedbackCategoryLabel}}</view>
+      <view class="field-label">{{isAdvancedMode ? '模型接口' : '模型平台'}}</view>
+      <picker mode="selector" range="{{providers}}" range-key="label" value="{{providerIndex}}" bindchange="onProviderChange">
+        <view class="picker-value">{{providerLabel}}</view>
       </picker>
     </view>
-    <view class="field">
-      <view class="field-label">反馈内容</view>
-      <textarea
-        class="textarea feedback-textarea"
-        maxlength="2000"
-        show-confirm-bar="{{false}}"
-        cursor-spacing="20"
-        value="{{feedbackMessage}}"
-        placeholder="请描述遇到的问题、复现步骤或希望改进的地方"
-        bindinput="onFeedbackMessageInput"
-      />
-    </view>
-    <view class="field">
-      <view class="field-label">联系方式（可选）</view>
-      <input class="input" maxlength="120" value="{{feedbackContact}}" placeholder="微信 / 邮箱 / QQ，方便后续联系" bindinput="onFeedbackContactInput" />
-      <view class="field-tip" wx:if="{{currentJobId}}">会一并附上当前任务 ID：{{currentJobId}}</view>
-    </view>
-    <button class="primary-button" loading="{{isFeedbackSubmitting}}" disabled="{{!feedbackCanSubmit}}" bindtap="submitFeedback">提交反馈</button>
-    <view wx:if="{{feedbackSubmitted}}" class="success-box">已收到反馈，谢谢。</view>
-    <view wx:if="{{feedbackError}}" class="error-box">{{feedbackError}}</view>
-  </view>
 
-  <view class="auth-panel section" wx:if="{{showAuthPanel}}">
-    <view class="section-head">
-      <view>
-        <view class="section-title">{{authTitle}}</view>
-        <view class="section-note">登录后可以在任务记录里查看自己提交过的结果。</view>
-      </view>
-      <button class="ghost-button" size="mini" bindtap="closeAuthPanel">关闭</button>
+    <view class="default-summary" wx:if="{{!isAdvancedMode}}">
+      <text>{{providerMainModel}}</text>
+      <text>{{providerImageModel}}</text>
+      <text>规划器 + 评审器</text>
+      <text>16:9</text>
+      <text>{{outputFormatLabel}}</text>
+      <text>{{imageSizeLabel}}</text>
     </view>
 
-    <view class="field" wx:if="{{authIsSignUp}}">
-      <view class="field-label">昵称</view>
-      <input
-        class="input auth-name-input"
-        type="nickname"
-        maxlength="24"
-        value="{{authName}}"
-        placeholder="可选"
-        bindinput="onAuthNameInput"
-      />
-    </view>
-    <view class="field">
-      <view class="field-label">邮箱</view>
-      <input class="input" type="text" value="{{authEmail}}" placeholder="you@example.com" bindinput="onAuthEmailInput" />
-    </view>
-    <view class="field">
-      <view class="field-label">密码</view>
-      <input class="input" password value="{{authPassword}}" placeholder="至少 8 位" bindinput="onAuthPasswordInput" />
-    </view>
-    <button class="primary-button" loading="{{authSubmitting}}" disabled="{{!authCanSubmit}}" bindtap="submitAuth">
-      {{authSubmitText}}
-    </button>
-    <button class="text-button" bindtap="toggleAuthMode">{{authToggleText}}</button>
-    <view wx:if="{{authError}}" class="error-box">{{authError}}</view>
-  </view>
-
-  <block wx:if="{{isGenerateTab}}">
-    <view class="section example-panel">
-      <view class="example-panel-head">快速上手案例</view>
-      <view class="example-list">
-        <view
-          class="example-card"
-          wx:for="{{quickStartExamples}}"
-          wx:key="id"
-          data-id="{{item.id}}"
-          bindtap="applyExample"
-        >
-          <view class="example-label">{{item.label}}</view>
-          <view class="example-title">{{item.title}}</view>
-          <view class="example-caption">{{item.caption}}</view>
-          <view class="example-hint">{{item.hint}}</view>
-        </view>
-      </view>
-    </view>
-
-    <view class="section">
-      <view class="section-head">
-        <view>
-          <view class="section-title">生成设置</view>
-          <view class="section-note">普通模式使用平台默认配置；专业模式可调整流程、比例和模型名称。</view>
-        </view>
-      </view>
-
-      <view class="field mode-field">
-        <view class="field-label">使用模式</view>
-        <view class="mode-switch">
-          <button class="{{!isAdvancedMode ? 'active' : ''}}" data-mode="simple" bindtap="switchConfigurationMode">
-            <view>普通模式</view>
-            <text>默认流程</text>
-          </button>
-          <button class="{{isAdvancedMode ? 'active' : ''}}" data-mode="advanced" bindtap="switchConfigurationMode">
-            <view>专业模式</view>
-            <text>自定义参数</text>
-          </button>
-        </view>
-      </view>
-
-      <view class="field">
-        <view class="field-label">{{isAdvancedMode ? '模型接口' : '模型平台'}}</view>
-        <picker mode="selector" range="{{providers}}" range-key="label" value="{{providerIndex}}" bindchange="onProviderChange">
-          <view class="picker-value">{{providerLabel}}</view>
-        </picker>
-      </view>
-
-      <view class="default-summary" wx:if="{{!isAdvancedMode}}">
-        <text>{{providerMainModel}}</text>
-        <text>{{providerImageModel}}</text>
-        <text>规划器 + 评审器</text>
-        <text>16:9</text>
-        <text>{{outputFormatLabel}}</text>
-      </view>
-
-      <view class="field">
+    <view class="field-row">
+      <view class="field compact-field half-field">
         <view class="field-label">导出格式</view>
         <picker mode="selector" range="{{outputFormatOptions}}" range-key="label" value="{{outputFormatIndex}}" bindchange="onOutputFormatChange">
-          <view class="picker-value">{{outputFormatLabel}}</view>
+          <view class="picker-value compact-picker">{{outputFormatLabel}}</view>
         </picker>
-        <view class="field-tip">PNG 适合直接预览和保存；SVG 适合后续编辑和论文排版。</view>
       </view>
-
-      <view class="field">
-        <view class="field-label">{{providerLabel}} API 密钥</view>
-        <input class="input" password value="{{apiKey}}" placeholder="{{apiKeyPlaceholder}}" bindinput="onApiKeyInput" />
-      </view>
-
-      <view class="api-key-guide">
-        <view class="guide-title">API Key 申请指南</view>
-        <view class="guide-step" wx:for="{{providerGuideSteps}}" wx:key="*this">{{index + 1}}. {{item}}</view>
-      </view>
-
-      <view class="advanced-panel" wx:if="{{isAdvancedMode}}">
-        <view class="advanced-title">专业配置</view>
-        <view class="advanced-grid">
-          <view class="field compact-field">
-            <view class="field-label">生成流程</view>
-            <picker mode="selector" range="{{pipelineOptions}}" range-key="label" value="{{pipelineIndex}}" bindchange="onPipelineChange">
-              <view class="picker-value compact-picker">{{pipelineLabel}}</view>
-            </picker>
-          </view>
-          <view class="field compact-field">
-            <view class="field-label">画面比例</view>
-            <picker mode="selector" range="{{aspectRatioOptions}}" range-key="label" value="{{aspectRatioIndex}}" bindchange="onAspectRatioChange">
-              <view class="picker-value compact-picker">{{aspectRatioLabel}}</view>
-            </picker>
-          </view>
-          <view class="field compact-field">
-            <view class="field-label">候选数量</view>
-            <picker mode="selector" range="{{candidateOptions}}" range-key="label" value="{{candidateIndex}}" bindchange="onCandidateChange">
-              <view class="picker-value compact-picker">{{candidateLabel}}</view>
-            </picker>
-          </view>
-          <view class="field compact-field">
-            <view class="field-label">评审轮数</view>
-            <picker mode="selector" range="{{criticRoundOptions}}" range-key="label" value="{{criticRoundIndex}}" bindchange="onCriticRoundChange">
-              <view class="picker-value compact-picker">{{criticRoundLabel}}</view>
-            </picker>
-          </view>
-        </view>
-        <view class="model-grid">
-          <view class="field compact-field">
-            <view class="field-label">主模型</view>
-            <picker mode="selector" range="{{mainModelOptions}}" range-key="label" value="{{mainModelIndex}}" bindchange="onMainModelChange">
-              <view class="picker-value compact-picker model-picker">{{mainModelLabel}}</view>
-            </picker>
-          </view>
-          <view class="field compact-field">
-            <view class="field-label">图像模型</view>
-            <picker mode="selector" range="{{imageModelOptions}}" range-key="label" value="{{imageModelIndex}}" bindchange="onImageModelChange">
-              <view class="picker-value compact-picker model-picker">{{imageModelLabel}}</view>
-            </picker>
-          </view>
-        </view>
-      </view>
-
-      <view class="field">
-        <view class="field-label">信息图类别</view>
-        <picker mode="selector" range="{{categories}}" range-key="label" value="{{categoryIndex}}" bindchange="onCategoryChange">
-          <view class="picker-value">{{categoryLabel}}</view>
+      <view class="field compact-field half-field">
+        <view class="field-label">输出清晰度</view>
+        <picker mode="selector" range="{{resolutionOptions}}" range-key="label" value="{{resolutionIndex}}" bindchange="onResolutionChange">
+          <view class="picker-value compact-picker">{{imageSizeLabel}}</view>
         </picker>
-        <view class="field-tip">{{categoryDescription}}</view>
       </view>
     </view>
+    <view class="field-tip">PNG 适合直接预览保存，SVG 适合排版精修；1K 仅基础渲染，2K/4K 出图后自动精修放大（选项随模型变化）。</view>
 
-    <view class="section">
-      <view class="section-head">
-        <view>
-          <view class="section-title">输入内容</view>
-          <view class="section-note">粘贴论文方法部分或业务流程，再填写目标图注。</view>
-        </view>
-      </view>
+    <view class="field">
+      <view class="field-label">{{providerLabel}} API 密钥</view>
+      <input class="input" password value="{{apiKey}}" placeholder="{{apiKeyPlaceholder}}" bindinput="onApiKeyInput" />
+    </view>
 
-      <view class="field">
-        <view class="field-label">论文方法内容</view>
-        <textarea
-          class="textarea method-textarea"
-          maxlength="3000"
-          show-confirm-bar="{{false}}"
-          cursor-spacing="20"
-          value="{{methodContent}}"
-          placeholder="粘贴论文方法部分、项目流程、业务步骤或想表达的图示内容"
-          bindinput="onMethodInput"
-        />
-      </view>
-      <view class="field">
-        <view class="field-label">目标图注</view>
-        <input
-          class="input"
-          maxlength="200"
-          value="{{caption}}"
-          placeholder="例如：图 1：所提出方法框架总览。"
-          bindinput="onCaptionInput"
-        />
-      </view>
+    <view class="api-key-guide">
+      <view class="guide-title">API Key 申请指南</view>
+      <view class="guide-step" wx:for="{{providerGuideSteps}}" wx:key="*this">{{index + 1}}. {{item}}</view>
+    </view>
 
-      <view class="field">
-        <view class="reference-upload-head">
-          <view>
-            <view class="field-label">参考图</view>
-            <view class="field-tip">可选。支持 PNG、JPG、WebP、SVG，最多 3 张，单张不超过 5MB。</view>
-          </view>
-          <view class="reference-actions">
-            <button class="ghost-button" size="mini" disabled="{{!referenceCanAddImage || isSubmitting || isUploadingReferences}}" bindtap="chooseReferenceFile">
-              {{isUploadingReferences ? '上传中' : '添加参考图'}}
-            </button>
-          </view>
-        </view>
-        <view class="reference-preview-grid" wx:if="{{referenceImages.length}}">
-          <view class="reference-card" wx:for="{{referenceImages}}" wx:key="id">
-            <image wx:if="{{item.canPreview}}" class="reference-thumb" src="{{item.path}}" mode="aspectFill" data-path="{{item.path}}" bindtap="previewReferenceImage" />
-            <view wx:else class="reference-file-thumb" data-path="{{item.path}}" bindtap="previewReferenceImage">{{item.formatText}}</view>
-            <view class="reference-info">
-              <text>{{item.filename}}</text>
-              <text>{{item.sizeText}}</text>
-            </view>
-            <button class="reference-remove" size="mini" data-id="{{item.id}}" bindtap="removeReferenceImage">移除</button>
-          </view>
-        </view>
-        <view class="reference-mode-panel" wx:if="{{shouldShowReferenceModeSelector}}">
-          <view class="field-label">参考图处理方式</view>
-          <view class="reference-mode-switch">
-            <button
-              wx:for="{{referenceImageModeOptions}}"
-              wx:key="value"
-              class="{{referenceImageMode === item.value ? 'active' : ''}} {{item.value === 'main_model' && referenceCapabilityStatus === 'unsupported' ? 'disabled' : ''}}"
-              data-mode="{{item.value}}"
-              bindtap="onReferenceModeTap"
-            >
-              {{item.label}}
-            </button>
-          </view>
-        </view>
-        <view class="field compact-field" wx:if="{{isAdvancedMode && referenceNeedsVisionModel}}">
-          <view class="field-label">参考图识别模型</view>
-          <picker mode="selector" range="{{referenceVisionModelOptions}}" range-key="label" value="{{referenceVisionModelIndex}}" bindchange="onReferenceVisionModelChange">
-            <view class="picker-value compact-picker model-picker">{{referenceVisionModelLabel}}</view>
+    <view class="advanced-panel" wx:if="{{isAdvancedMode}}">
+      <view class="advanced-title">专业配置</view>
+      <view class="advanced-grid">
+        <view class="field compact-field">
+          <view class="field-label">生成流程</view>
+          <picker mode="selector" range="{{pipelineOptions}}" range-key="label" value="{{pipelineIndex}}" bindchange="onPipelineChange">
+            <view class="picker-value compact-picker">{{pipelineLabel}}</view>
           </picker>
         </view>
-        <view class="field-tip" wx:if="{{referenceModeNote}}">{{referenceModeNote}}</view>
-        <view wx:if="{{referenceUploadError}}" class="error-box">{{referenceUploadError}}</view>
+        <view class="field compact-field">
+          <view class="field-label">检索设置</view>
+          <view wx:if="{{referenceImageCount > 0}}" class="picker-value compact-picker locked">不使用检索</view>
+          <picker wx:else mode="selector" range="{{retrievalOptions}}" range-key="label" value="{{retrievalIndex}}" bindchange="onRetrievalChange">
+            <view class="picker-value compact-picker">{{retrievalLabel}}</view>
+          </picker>
+        </view>
+        <view class="field compact-field">
+          <view class="field-label">画面比例</view>
+          <picker mode="selector" range="{{aspectRatioOptions}}" range-key="label" value="{{aspectRatioIndex}}" bindchange="onAspectRatioChange">
+            <view class="picker-value compact-picker">{{aspectRatioLabel}}</view>
+          </picker>
+        </view>
+        <view class="field compact-field">
+          <view class="field-label">候选数量</view>
+          <picker mode="selector" range="{{candidateOptions}}" range-key="label" value="{{candidateIndex}}" bindchange="onCandidateChange">
+            <view class="picker-value compact-picker">{{candidateLabel}}</view>
+          </picker>
+        </view>
+        <view class="field compact-field">
+          <view class="field-label">评审轮数</view>
+          <picker mode="selector" range="{{criticRoundOptions}}" range-key="label" value="{{criticRoundIndex}}" bindchange="onCriticRoundChange">
+            <view class="picker-value compact-picker">{{criticRoundLabel}}</view>
+          </picker>
+        </view>
       </view>
-
-      <button class="primary-button" loading="{{isSubmitting}}" disabled="{{!canSubmit}}" bindtap="submitJob">
-        {{isUploadingReferences ? '上传参考图' : (isSubmitting ? '提交中' : '生成候选图')}}
-      </button>
-      <view wx:if="{{!canSubmit}}" class="submit-tip">
-        {{!referenceModeCanSubmit ? '当前参考图处理方式不可用，请改用独立识别模型或更换主模型。' : (isAdvancedMode ? '需要填写 API Key、模型名称、至少 20 字内容和目标图注。' : '需要填写 API Key、至少 20 字内容和目标图注。')}}
+      <view class="field-tip" wx:if="{{referenceImageCount > 0}}">已上传参考图，检索自动关闭（以参考图为唯一风格来源）。</view>
+      <view class="model-grid">
+        <view class="field compact-field">
+          <view class="field-label">主模型</view>
+          <picker mode="selector" range="{{mainModelOptions}}" range-key="label" value="{{mainModelIndex}}" bindchange="onMainModelChange">
+            <view class="picker-value compact-picker model-picker">{{mainModelLabel}}</view>
+          </picker>
+        </view>
+        <view class="field compact-field">
+          <view class="field-label">图像模型</view>
+          <picker mode="selector" range="{{imageModelOptions}}" range-key="label" value="{{imageModelIndex}}" bindchange="onImageModelChange">
+            <view class="picker-value compact-picker model-picker">{{imageModelLabel}}</view>
+          </picker>
+        </view>
       </view>
-      <view wx:if="{{error}}" class="error-box">{{error}}</view>
+      <reference-library
+        wx:if="{{showReferenceLibrary}}"
+        task-name="{{libraryTaskName}}"
+        selected-ids="{{manualReferenceIds}}"
+        bind:toggle="onManualReferenceToggle"
+      />
     </view>
 
-    <view class="section" wx:if="{{currentJobId}}">
-      <view class="section-head">
-        <view>
-          <view class="section-title">生成结果</view>
-          <view class="section-note">任务 ID：{{currentJobId}}</view>
-        </view>
-        <button class="ghost-button" size="mini" bindtap="copyJobId">复制</button>
+    <view class="field">
+      <view class="field-label">信息图类别</view>
+      <picker mode="selector" range="{{categories}}" range-key="label" value="{{categoryIndex}}" bindchange="onCategoryChange">
+        <view class="picker-value">{{categoryLabel}}</view>
+      </picker>
+      <view class="field-tip">{{categoryDescription}}</view>
+      <view class="plot-note" wx:if="{{isPlotCategory}}">{{plotNote}}</view>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-head">
+      <view>
+        <view class="section-title">输入内容</view>
+        <view class="section-note">粘贴论文方法部分或业务流程，再填写目标图注。</view>
       </view>
-      <view class="job-panel">
+    </view>
+
+    <view class="field">
+      <view class="field-label">论文方法内容</view>
+      <textarea
+        class="textarea method-textarea"
+        maxlength="3000"
+        show-confirm-bar="{{false}}"
+        cursor-spacing="20"
+        value="{{methodContent}}"
+        placeholder="粘贴论文方法部分、项目流程、业务步骤或想表达的图示内容"
+        bindinput="onMethodInput"
+      />
+    </view>
+    <view class="field">
+      <view class="field-label">目标图注</view>
+      <input
+        class="input"
+        maxlength="200"
+        value="{{caption}}"
+        placeholder="例如：图 1：所提出方法框架总览。"
+        bindinput="onCaptionInput"
+      />
+    </view>
+
+    <view class="field">
+      <view class="reference-upload-head">
+        <view>
+          <view class="field-label">参考图</view>
+          <view class="field-tip">可选。支持 PNG、JPG、WebP、SVG，最多 3 张，单张不超过 5MB。仅作风格参考，不决定版式。</view>
+        </view>
+        <view class="reference-actions">
+          <button class="ghost-button" size="mini" disabled="{{!referenceCanAddImage || isSubmitting || isUploadingReferences}}" bindtap="chooseReferenceFile">
+            {{isUploadingReferences ? '上传中' : '添加参考图'}}
+          </button>
+        </view>
+      </view>
+      <view class="reference-preview-grid" wx:if="{{referenceImages.length}}">
+        <view class="reference-card" wx:for="{{referenceImages}}" wx:key="id">
+          <image wx:if="{{item.canPreview}}" class="reference-thumb" src="{{item.path}}" mode="aspectFill" data-path="{{item.path}}" bindtap="previewReferenceImage" />
+          <view wx:else class="reference-file-thumb" data-path="{{item.path}}" bindtap="previewReferenceImage">{{item.formatText}}</view>
+          <view class="reference-info">
+            <text>{{item.filename}}</text>
+            <text>{{item.sizeText}}</text>
+          </view>
+          <button class="reference-remove" size="mini" data-id="{{item.id}}" bindtap="removeReferenceImage">移除</button>
+        </view>
+      </view>
+      <view class="reference-mode-panel" wx:if="{{shouldShowReferenceModeSelector}}">
+        <view class="field-label">参考图处理方式</view>
+        <view class="reference-mode-switch">
+          <button
+            wx:for="{{referenceImageModeOptions}}"
+            wx:key="value"
+            class="{{referenceImageMode === item.value ? 'active' : ''}} {{item.value === 'main_model' && !canSelectMainModelDirect ? 'disabled' : ''}}"
+            data-mode="{{item.value}}"
+            bindtap="onReferenceModeTap"
+          >
+            {{item.label}}
+          </button>
+        </view>
+      </view>
+      <view class="field compact-field" wx:if="{{isAdvancedMode && referenceNeedsVisionModel}}">
+        <view class="field-label">参考图识别模型</view>
+        <picker mode="selector" range="{{referenceVisionModelOptions}}" range-key="label" value="{{referenceVisionModelIndex}}" bindchange="onReferenceVisionModelChange">
+          <view class="picker-value compact-picker model-picker">{{referenceVisionModelLabel}}</view>
+        </picker>
+      </view>
+      <view class="field-tip" wx:if="{{referenceModeNote}}">{{referenceModeNote}}</view>
+      <view wx:if="{{referenceUploadError}}" class="error-box">{{referenceUploadError}}</view>
+    </view>
+
+    <button class="primary-button" loading="{{isSubmitting}}" disabled="{{!canSubmit}}" bindtap="submitJob">
+      {{isUploadingReferences ? '上传参考图' : (isSubmitting ? '提交中' : '生成候选图')}}
+    </button>
+    <view wx:if="{{!canSubmit}}" class="submit-tip">
+      {{!referenceModeCanSubmit ? '当前参考图处理方式不可用，请改用独立识别模型或更换主模型。' : (isAdvancedMode ? '需要填写 API Key、模型名称、至少 20 字内容和目标图注；手动参考需至少选 1 个案例。' : '需要填写 API Key、至少 20 字内容和目标图注。')}}
+    </view>
+    <view wx:if="{{error}}" class="error-box">{{error}}</view>
+  </view>
+
+  <view class="section" wx:if="{{currentJobId}}">
+    <view class="section-head">
+      <view>
+        <view class="section-title">生成结果</view>
+        <view class="section-note">任务 ID：{{currentJobId}}</view>
+      </view>
+      <button class="ghost-button" size="mini" bindtap="copyJobId">复制</button>
+    </view>
+    <view class="job-panel">
+      <view class="job-badges">
         <view class="status-badge {{job.status || 'queued'}}">{{statusLabel || '排队中'}}</view>
+        <view class="status-pill" wx:if="{{job.image_size}}">{{job.image_size}}</view>
+        <view class="status-pill" wx:if="{{job.retrieval_setting && job.retrieval_setting !== 'none'}}">{{job.retrieval_setting_text}}</view>
+        <view class="status-pill" wx:if="{{job.task_name === 'plot'}}">统计图</view>
+      </view>
+      <view class="job-actions">
+        <button class="ghost-button" size="mini" bindtap="openJobDetail">详情</button>
         <button class="ghost-button" size="mini" bindtap="refreshCurrentJob">刷新</button>
       </view>
-      <view class="result-grid" wx:if="{{resultImages.length}}">
-        <view class="asset-card" wx:for="{{resultImages}}" wx:key="url">
-          <image
-            wx:if="{{item.can_preview}}"
-            class="result-image"
-            src="{{item.url}}"
-            mode="widthFix"
+    </view>
+    <view class="result-grid" wx:if="{{resultImages.length}}">
+      <view class="asset-card" wx:for="{{resultImages}}" wx:key="url">
+        <image
+          wx:if="{{item.can_preview}}"
+          class="result-image"
+          src="{{item.url}}"
+          mode="widthFix"
+          data-url="{{item.url}}"
+          data-can-preview="{{item.can_preview}}"
+          bindtap="previewImage"
+        />
+        <view
+          wx:else
+          class="file-asset"
+          data-url="{{item.url}}"
+          data-can-preview="{{item.can_preview}}"
+          bindtap="previewImage"
+        >
+          <view class="file-asset-format">{{item.format_text}}</view>
+          <view class="file-asset-name">{{item.filename}}</view>
+        </view>
+        <view class="asset-actions">
+          <text>{{item.filename}}</text>
+          <button
+            size="mini"
             data-url="{{item.url}}"
             data-can-preview="{{item.can_preview}}"
-            bindtap="previewImage"
-          />
-          <view
-            wx:else
-            class="file-asset"
-            data-url="{{item.url}}"
-            data-can-preview="{{item.can_preview}}"
-            bindtap="previewImage"
+            catchtap="handleImageAction"
           >
-            <view class="file-asset-format">{{item.format_text}}</view>
-            <view class="file-asset-name">{{item.filename}}</view>
-          </view>
-          <view class="asset-actions">
-            <text>{{item.filename}}</text>
-            <button
-              size="mini"
-              data-url="{{item.url}}"
-              data-can-preview="{{item.can_preview}}"
-              catchtap="handleImageAction"
-            >
-              {{item.action_label}}
-            </button>
-          </view>
+            {{item.action_label}}
+          </button>
         </view>
-      </view>
-      <view class="empty-state" wx:else>
-        <view>{{statusLabel || '等待结果'}}</view>
-        <text>任务完成后会在这里显示候选图。</text>
       </view>
     </view>
-
-    <view class="section" wx:if="{{localJobs.length}}">
-      <view class="section-head">
-        <view>
-          <view class="section-title">本机最近</view>
-          <view class="section-note">保存在当前设备，换设备后不会同步。</view>
-        </view>
-        <button class="ghost-button" size="mini" bindtap="clearLocalJobs">清空</button>
-      </view>
-      <view class="history-item" wx:for="{{localJobs}}" wx:key="id" data-id="{{item.id}}" bindtap="reuseLocalJob">
-        <view class="history-main">
-          <view class="history-title">{{item.caption || item.id}}</view>
-          <view class="history-meta">{{item.infographic_category}} · {{item.provider || '模型服务'}}</view>
-        </view>
-        <view class="history-status {{item.status}}">{{item.status_text}}</view>
-      </view>
+    <view class="empty-state" wx:else>
+      <view>{{statusLabel || '等待结果'}}</view>
+      <text>任务完成后会在这里显示候选图。</text>
     </view>
-  </block>
-
-  <block wx:if="{{isRecordsTab}}">
-    <view class="section records-panel">
-      <view class="section-head">
-        <view>
-          <view class="section-title">我的任务记录</view>
-          <view class="section-note">任务记录与账号绑定，登录后可以查看自己提交过的任务。</view>
-        </view>
-        <button class="ghost-button" size="mini" wx:if="{{isLoggedIn}}" bindtap="loadAccountJobs">刷新</button>
-      </view>
-
-      <view class="login-required-card" wx:if="{{isAuthChecking}}">
-        <view class="login-card-title">正在检查登录状态</view>
-        <view class="login-card-note">请稍候。</view>
-      </view>
-
-      <view class="login-required-card" wx:elif="{{!isLoggedIn}}">
-        <view class="login-card-title">任务记录需要登录后使用</view>
-        <view class="login-card-note">不登录也可以正常生成候选图；登录后，新提交的任务会保存到你的账号记录里。</view>
-        <button class="login-card-button" bindtap="openAuthPanel">登录 / 注册</button>
-      </view>
-
-      <block wx:else>
-        <view class="account-row">
-          <text>{{currentUserEmail}}</text>
-          <button class="ghost-button" size="mini" bindtap="signOut">退出</button>
-        </view>
-        <view wx:if="{{accountJobsLoading}}" class="empty-state">正在加载任务记录</view>
-        <view wx:if="{{accountJobsError}}" class="error-box">{{accountJobsError}}</view>
-        <view wx:if="{{!accountJobsLoading && !accountJobs.length}}" class="empty-state">
-          <view>暂无任务记录</view>
-          <text>登录后提交的新任务会出现在这里。</text>
-        </view>
-        <view class="job-record-card" wx:for="{{accountJobs}}" wx:key="id">
-          <view class="job-record-topline">
-            <view class="history-status {{item.status}}">{{item.status_text}}</view>
-            <view class="job-record-time">{{item.created_text}}</view>
-          </view>
-          <view class="job-record-title">{{item.caption || '未记录图注'}}</view>
-          <view class="job-record-meta">
-            <text>{{item.infographic_category}}</text>
-            <text>{{item.provider || '模型服务'}}</text>
-            <text>{{item.configuration_mode === 'simple' ? '普通模式' : '专业模式'}}</text>
-          </view>
-          <view class="job-models">
-            <view>
-              <text>主模型</text>
-              <text>{{item.main_model_name || '未记录'}}</text>
-            </view>
-            <view>
-              <text>图像模型</text>
-              <text>{{item.image_gen_model_name || '未记录'}}</text>
-            </view>
-            <view>
-              <text>导出格式</text>
-              <text>{{item.output_format_text}}</text>
-            </view>
-            <view>
-              <text>参考识别模型</text>
-              <text>{{item.reference_vision_model_text}}</text>
-            </view>
-            <view>
-              <text>参考图处理</text>
-              <text>{{item.reference_image_mode_text}}</text>
-            </view>
-          </view>
-          <view class="job-prompt-preview">{{item.method_preview || '未记录方法内容'}}</view>
-          <view class="job-record-error" wx:if="{{item.error}}">{{item.error}}</view>
-          <view class="record-asset-section" wx:if="{{item.reference_images.length}}">
-            <view class="record-asset-title">参考图</view>
-            <view class="record-images">
-              <view class="record-asset-card" wx:for="{{item.reference_images}}" wx:for-item="image" wx:key="url">
-                <image
-                  wx:if="{{image.can_preview}}"
-                  class="record-reference-image"
-                  src="{{image.url}}"
-                  mode="aspectFill"
-                  data-url="{{image.url}}"
-                  data-can-preview="{{image.can_preview}}"
-                  bindtap="previewRecordImage"
-                />
-                <view
-                  wx:else
-                  class="file-asset compact"
-                  data-url="{{image.url}}"
-                  data-can-preview="{{image.can_preview}}"
-                  bindtap="previewRecordImage"
-                >
-                  <view class="file-asset-format">{{image.format_text}}</view>
-                  <view class="file-asset-name">{{image.filename}}</view>
-                </view>
-                <button
-                  size="mini"
-                  data-url="{{image.url}}"
-                  data-can-preview="{{image.can_preview}}"
-                  catchtap="handleImageAction"
-                >
-                  {{image.action_label}}
-                </button>
-              </view>
-            </view>
-          </view>
-          <view class="record-images" wx:if="{{item.result_images.length}}">
-            <view class="record-asset-card result" wx:for="{{item.result_images}}" wx:for-item="image" wx:key="url">
-              <image
-                wx:if="{{image.can_preview}}"
-                class="record-result-image"
-                src="{{image.url}}"
-                mode="widthFix"
-                data-url="{{image.url}}"
-                data-can-preview="{{image.can_preview}}"
-                bindtap="previewRecordImage"
-              />
-              <view
-                wx:else
-                class="file-asset compact"
-                data-url="{{image.url}}"
-                data-can-preview="{{image.can_preview}}"
-                bindtap="previewRecordImage"
-              >
-                <view class="file-asset-format">{{image.format_text}}</view>
-                <view class="file-asset-name">{{image.filename}}</view>
-              </view>
-              <button
-                size="mini"
-                data-url="{{image.url}}"
-                data-can-preview="{{image.can_preview}}"
-                catchtap="handleImageAction"
-              >
-                {{image.action_label}}
-              </button>
-            </view>
-          </view>
-          <button class="secondary-button" data-id="{{item.id}}" bindtap="openAccountJob">查看任务</button>
-        </view>
-      </block>
-    </view>
-  </block>
+    <stage-timeline wx:if="{{job}}" stages="{{job.stages}}" references="{{job.retrieved_references}}" />
+  </view>
 
   <view class="footer-space" />
 </scroll-view>

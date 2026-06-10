@@ -1,0 +1,46 @@
+<view class="stage-timeline" wx:if="{{stages.length || references.length}}">
+  <view class="retrieved-reference-strip" wx:if="{{references.length}}">
+    <view class="strip-title">检索参考</view>
+    <view class="strip-tags">
+      <text wx:for="{{references}}" wx:key="id">{{item.title || item.id}}</text>
+    </view>
+  </view>
+
+  <block wx:if="{{stages.length}}">
+    <view class="stage-heading">生成演化</view>
+    <view class="stage-list">
+      <view class="stage-item" wx:for="{{stages}}" wx:key="id">
+        <view class="stage-marker stage-marker-{{item.type}}">{{item.marker}}</view>
+        <view class="stage-body">
+          <view class="stage-meta">
+            <text class="stage-title">{{item.title || item.type}}</text>
+            <text class="stage-sub">候选 {{item.candidate_number}}{{item.round ? ' · 第 ' + item.round + ' 轮' : ''}}</text>
+          </view>
+          <view class="stage-text" wx:if="{{item.text}}">{{item.text}}</view>
+          <view class="stage-suggestion" wx:if="{{item.suggestion}}">{{item.suggestion}}</view>
+          <view class="stage-error" wx:if="{{item.error}}">{{item.error}}</view>
+          <image
+            wx:if="{{item.image_url && item.image_can_preview}}"
+            class="stage-image"
+            src="{{item.image_url}}"
+            mode="widthFix"
+            lazy-load="{{true}}"
+            data-url="{{item.image_url}}"
+            data-can-preview="{{item.image_can_preview}}"
+            bindtap="previewStageImage"
+          />
+          <view
+            wx:elif="{{item.image_url}}"
+            class="stage-file"
+            data-url="{{item.image_url}}"
+            data-can-preview="{{item.image_can_preview}}"
+            bindtap="previewStageImage"
+          >
+            <view class="stage-file-format">SVG</view>
+            <view class="stage-file-note">阶段中间图 · 点按分享文件或复制链接</view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </block>
+</view>

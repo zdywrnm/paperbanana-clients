@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "任务记录",
+  "usingComponents": {
+    "auth-panel": "/components/auth-panel/auth-panel"
+  }
+}

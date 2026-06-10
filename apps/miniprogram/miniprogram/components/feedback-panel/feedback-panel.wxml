@@ -1,0 +1,35 @@
+<view class="feedback-panel section" wx:if="{{show}}">
+  <view class="section-head">
+    <view>
+      <view class="section-title">意见反馈</view>
+      <view class="section-note">遇到生成失败、模型异常或体验问题，可以直接提交给开发者。</view>
+    </view>
+    <button class="ghost-button" size="mini" bindtap="close">关闭</button>
+  </view>
+  <view class="field">
+    <view class="field-label">反馈类型</view>
+    <picker mode="selector" range="{{feedbackCategoryOptions}}" range-key="label" value="{{feedbackCategoryIndex}}" bindchange="onFeedbackCategoryChange">
+      <view class="picker-value compact-picker">{{feedbackCategoryLabel}}</view>
+    </picker>
+  </view>
+  <view class="field">
+    <view class="field-label">反馈内容</view>
+    <textarea
+      class="textarea feedback-textarea"
+      maxlength="2000"
+      show-confirm-bar="{{false}}"
+      cursor-spacing="20"
+      value="{{feedbackMessage}}"
+      placeholder="请描述遇到的问题、复现步骤或希望改进的地方"
+      bindinput="onFeedbackMessageInput"
+    />
+  </view>
+  <view class="field">
+    <view class="field-label">联系方式（可选）</view>
+    <input class="input" maxlength="120" value="{{feedbackContact}}" placeholder="微信 / 邮箱 / QQ，方便后续联系" bindinput="onFeedbackContactInput" />
+    <view class="field-tip" wx:if="{{jobId}}">会一并附上当前任务 ID：{{jobId}}</view>
+  </view>
+  <button class="primary-button" loading="{{isFeedbackSubmitting}}" disabled="{{!feedbackCanSubmit}}" bindtap="submitFeedback">提交反馈</button>
+  <view wx:if="{{feedbackSubmitted}}" class="success-box">已收到反馈，谢谢。</view>
+  <view wx:if="{{feedbackError}}" class="error-box">{{feedbackError}}</view>
+</view>

@@ -1,0 +1,103 @@
+.reference-library-panel {
+  margin-top: 18rpx;
+  padding: 16rpx;
+  border: 1rpx solid #d9d6cc;
+  border-radius: 14rpx;
+  background: rgba(246, 242, 232, 0.62);
+}
+
+.library-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14rpx;
+}
+
+.library-head-copy {
+  min-width: 0;
+}
+
+.library-title {
+  color: #171513;
+  font-size: 24rpx;
+  font-weight: 780;
+}
+
+.library-note {
+  margin-top: 6rpx;
+  color: #68706d;
+  font-size: 21rpx;
+  line-height: 1.45;
+}
+
+.library-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14rpx;
+  margin-top: 16rpx;
+}
+
+.library-card {
+  position: relative;
+  display: grid;
+  gap: 8rpx;
+  padding: 12rpx;
+  border: 1rpx solid #d9d6cc;
+  border-radius: 12rpx;
+  background: #fffffb;
+  box-sizing: border-box;
+}
+
+.library-card.active {
+  border-color: #315f51;
+  background: #edf6ef;
+}
+
+.library-thumb {
+  width: 100%;
+  height: 150rpx;
+  border: 1rpx solid #d9d6cc;
+  border-radius: 8rpx;
+  background: #f3f2ec;
+}
+
+.library-thumb.placeholder {
+  display: grid;
+  place-items: center;
+  color: #a89f91;
+  font-size: 28rpx;
+  font-weight: 800;
+}
+
+.library-card-title {
+  color: #171513;
+  font-size: 21rpx;
+  font-weight: 740;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.library-card-summary {
+  color: #68706d;
+  font-size: 19rpx;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.library-check {
+  position: absolute;
+  top: 18rpx;
+  right: 18rpx;
+  padding: 4rpx 12rpx;
+  border-radius: 999rpx;
+  background: #315f51;
+  color: #ffffff;
+  font-size: 19rpx;
+  font-weight: 740;
+}

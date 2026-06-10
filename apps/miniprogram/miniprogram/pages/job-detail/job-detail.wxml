@@ -1,0 +1,162 @@
+<scroll-view class="page" scroll-y type="list">
+  <view class="section" wx:if="{{isLoading && !job}}">
+    <view class="empty-state">
+      <view>正在加载任务</view>
+      <text>任务 ID：{{jobId}}</text>
+    </view>
+  </view>
+
+  <view class="section" wx:if="{{error && !job}}">
+    <view class="error-box">{{error}}</view>
+  </view>
+
+  <block wx:if="{{job}}">
+    <view class="section">
+      <view class="section-head">
+        <view>
+          <view class="section-title">{{job.caption || '未记录图注'}}</view>
+          <view class="section-note">任务 ID：{{job.id}}</view>
+        </view>
+        <view class="detail-actions">
+          <button class="ghost-button" size="mini" bindtap="copyJobId">复制 ID</button>
+          <button class="ghost-button" size="mini" bindtap="refresh">刷新</button>
+        </view>
+      </view>
+
+      <view class="detail-badges">
+        <view class="status-badge {{job.status}}">{{job.status_text}}</view>
+        <view class="status-pill">{{job.configuration_mode === 'simple' ? '普通模式' : '专业模式'}}</view>
+        <view class="status-pill" wx:if="{{job.provider}}">{{job.provider}}</view>
+        <view class="status-pill" wx:if="{{job.aspect_ratio}}">{{job.aspect_ratio}}</view>
+        <view class="status-pill">{{job.output_format_text}}</view>
+        <view class="status-pill" wx:if="{{job.image_size}}">{{job.image_size}}</view>
+        <view class="status-pill">{{job.retrieval_setting_text}}</view>
+        <view class="status-pill" wx:if="{{job.task_name === 'plot'}}">统计图</view>
+        <view class="status-pill" wx:if="{{job.critic_mode}}">{{job.critic_mode === 'image' ? '图像评审' : '文本评审'}}</view>
+        <view class="status-pill" wx:if="{{job.created_text}}">{{job.created_text}}</view>
+      </view>
+
+      <view class="job-models">
+        <view>
+          <text>主模型</text>
+          <text>{{job.main_model_name || '未记录'}}</text>
+        </view>
+        <view>
+          <text>图像模型</text>
+          <text>{{job.image_gen_model_name || '未记录'}}</text>
+        </view>
+        <view>
+          <text>参考识别模型</text>
+          <text>{{job.reference_vision_model_text}}</text>
+        </view>
+        <view>
+          <text>参考图处理</text>
+          <text>{{job.reference_image_mode_text}}</text>
+        </view>
+      </view>
+
+      <view class="detail-method" wx:if="{{job.method_content}}">
+        <view class="record-asset-title">方法内容</view>
+        <view class="detail-method-text">{{job.method_content}}</view>
+      </view>
+
+      <view class="job-record-error" wx:if="{{job.error}}">{{job.error}}</view>
+    </view>
+
+    <view class="section" wx:if="{{job.reference_images.length}}">
+      <view class="section-head">
+        <view>
+          <view class="section-title">参考回显</view>
+          <view class="section-note">仅作风格参考，不决定版式。</view>
+        </view>
+      </view>
+      <view class="record-images">
+        <view class="record-asset-card" wx:for="{{job.reference_images}}" wx:key="url">
+          <image
+            wx:if="{{item.can_preview}}"
+            class="record-reference-image"
+            src="{{item.url}}"
+            mode="aspectFill"
+            data-url="{{item.url}}"
+            data-can-preview="{{item.can_preview}}"
+            bindtap="previewImage"
+          />
+          <view
+            wx:else
+            class="file-asset compact"
+            data-url="{{item.url}}"
+            data-can-preview="{{item.can_preview}}"
+            bindtap="previewImage"
+          >
+            <view class="file-asset-format">{{item.format_text}}</view>
+            <view class="file-asset-name">{{item.filename}}</view>
+          </view>
+          <button
+            size="mini"
+            data-url="{{item.url}}"
+            data-can-preview="{{item.can_preview}}"
+            catchtap="handleImageAction"
+          >
+            {{item.action_label}}
+          </button>
+        </view>
+      </view>
+    </view>
+
+    <view class="section">
+      <view class="section-head">
+        <view>
+          <view class="section-title">候选图</view>
+          <view class="section-note">{{job.result_images.length ? '点击图片可放大预览。' : '任务完成后会在这里显示候选图。'}}</view>
+        </view>
+      </view>
+      <view class="result-grid" wx:if="{{job.result_images.length}}">
+        <view class="asset-card" wx:for="{{job.result_images}}" wx:key="url">
+          <image
+            wx:if="{{item.can_preview}}"
+            class="result-image"
+            src="{{item.url}}"
+            mode="widthFix"
+            data-url="{{item.url}}"
+            data-can-preview="{{item.can_preview}}"
+            bindtap="previewImage"
+          />
+          <view
+            wx:else
+            class="file-asset"
+            data-url="{{item.url}}"
+            data-can-preview="{{item.can_preview}}"
+            bindtap="previewImage"
+          >
+            <view class="file-asset-format">{{item.format_text}}</view>
+            <view class="file-asset-name">{{item.filename}}</view>
+          </view>
+          <view class="asset-actions">
+            <text>{{item.filename}}</text>
+            <button
+              size="mini"
+              data-url="{{item.url}}"
+              data-can-preview="{{item.can_preview}}"
+              catchtap="handleImageAction"
+            >
+              {{item.action_label}}
+            </button>
+          </view>
+        </view>
+      </view>
+      <view class="empty-state" wx:else>
+        <view>{{job.status_text}}</view>
+        <text>{{job.status === 'failed' ? '生成失败，可在上方查看错误信息。' : '生成中，页面会自动刷新。'}}</text>
+      </view>
+
+      <stage-timeline stages="{{job.stages}}" references="{{job.retrieved_references}}" />
+
+      <view class="detail-logs" wx:if="{{job.status === 'failed' && job.logs_tail}}">
+        <view class="record-asset-title">日志末尾</view>
+        <view class="detail-logs-text">{{job.logs_tail}}</view>
+      </view>
+    </view>
+  </block>
+
+  <view class="footer-space" />
+</scroll-view>

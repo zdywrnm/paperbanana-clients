@@ -1,0 +1,5 @@
+.feedback-textarea {
+  height: 220rpx;
+  min-height: 220rpx;
+  max-height: 220rpx;
+}
