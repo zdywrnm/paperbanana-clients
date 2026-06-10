@@ -151,13 +151,31 @@ function resolveImageUrl(url, jobId = 'image', index = 0, mimeType = '', fallbac
     if (!url)
         return '';
     if (/^https?:\/\//i.test(url))
-        return url;
+        return stabilizeRemoteUrl(url);
     if (/^data:image\//i.test(url))
         return cacheDataImage(url, jobId, index, mimeType, fallbackFormat);
     // 已落盘的本地缓存路径（如本机记录 round-trip）原样返回，不能拼到 API_BASE 上
     if (/^wxfile:/i.test(url) || (userDataPath() && url.indexOf(userDataPath()) === 0))
         return url;
     return `${config_1.API_BASE}${url}`;
+}
+// 桶签名 URL 每次 getJob 都重新签发（查询串变化）。轮询期间 src 频变会让 <image>
+// 反复重载闪烁——按"去查询串的路径"为键，在缓存期内复用首次拿到的签名 URL 保持 src 稳定。
+// 缓存期取 30 分钟，远小于后端最短签名有效期（stage 图 1 小时），过期后换用新签名（仅闪一次）。
+const STABLE_URL_TTL_MS = 30 * 60 * 1000;
+const stableUrlCache = new Map();
+function stabilizeRemoteUrl(url) {
+    const pathKey = url.split('?')[0];
+    if (pathKey === url)
+        return url;
+    const now = Date.now();
+    const cached = stableUrlCache.get(pathKey);
+    if (cached && now - cached.cachedAt < STABLE_URL_TTL_MS)
+        return cached.url;
+    if (stableUrlCache.size > 500)
+        stableUrlCache.clear();
+    stableUrlCache.set(pathKey, { url, cachedAt: now });
+    return url;
 }
 function userDataPath() {
     const env = wx.env;
