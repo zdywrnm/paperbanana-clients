@@ -603,9 +603,19 @@ struct JobDetailView: View {
         }
         JobMetadataGrid(job: job)
         JobPromptEcho(job: job)
-        if job.statusKind == .failed && !job.failureText.isEmpty {
-          Text(formatUserFacingError(job.failureText))
-            .foregroundStyle(.red)
+        if job.statusKind == .failed {
+          if !job.failureErrorText.isEmpty {
+            Label(formatUserFacingError(job.failureErrorText), systemImage: "exclamationmark.triangle")
+              .font(.footnote)
+              .foregroundStyle(.red)
+          } else if !job.failureLogsText.isEmpty {
+            Label("任务失败，查看日志了解原因。", systemImage: "exclamationmark.triangle")
+              .font(.footnote)
+              .foregroundStyle(.red)
+          }
+          if !job.failureLogsText.isEmpty {
+            FailureLogsView(logsTail: job.failureLogsText)
+          }
         }
         if !job.retrievedReferences.isEmpty {
           VStack(alignment: .leading, spacing: 6) {
@@ -638,6 +648,25 @@ struct JobDetailView: View {
     .padding()
     .background(AppBackground())
     .navigationTitle("任务详情")
+  }
+}
+
+struct FailureLogsView: View {
+  let logsTail: String
+
+  var body: some View {
+    DisclosureGroup("失败日志") {
+      ScrollView(.horizontal) {
+        Text(logsTail)
+          .font(.system(.caption, design: .monospaced))
+          .foregroundStyle(.secondary)
+          .textSelection(.enabled)
+          .frame(maxWidth: .infinity, alignment: .leading)
+      }
+      .padding(10)
+      .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+    }
+    .font(.footnote)
   }
 }
 

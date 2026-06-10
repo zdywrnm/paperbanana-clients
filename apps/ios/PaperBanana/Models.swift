@@ -603,9 +603,17 @@ struct Job: Decodable, Identifiable, Equatable {
   }
 
   var failureText: String {
-    let trimmedError = error.trimmingCharacters(in: .whitespacesAndNewlines)
+    let trimmedError = failureErrorText
     if !trimmedError.isEmpty { return trimmedError }
-    return logsTail
+    return failureLogsText
+  }
+
+  var failureErrorText: String {
+    error.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  var failureLogsText: String {
+    logsTail.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
   var metadataItems: [JobMetadataItem] {
@@ -717,7 +725,12 @@ struct Job: Decodable, Identifiable, Equatable {
     resultImageCount = container.int("result_image_count", "resultImageCount", default: resultImages.count)
     referenceImages = container.decodeArray("reference_images", "referenceImages")
     referenceImageCount = container.int("reference_image_count", "referenceImageCount", default: referenceImages.count)
-    logsTail = container.string("logs_tail") + container.logsString("logs")
+    let rawLogsTail = container.string("logs_tail", "logsTail")
+    let logsArrayTail = container.logsString("logs")
+    logsTail = [rawLogsTail, logsArrayTail]
+      .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+      .filter { !$0.isEmpty }
+      .joined(separator: "\n")
     error = container.string("error")
     createdAt = container.string("created_at", "createdAt")
     updatedAt = container.string("updated_at", "updatedAt")

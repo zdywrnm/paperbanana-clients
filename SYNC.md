@@ -50,6 +50,7 @@
 - iOS 任务详情展示与 Web 记录卡片一致的关键元数据：时间、模式、类别、平台、格式、比例、检索、参考图处理、主模型、图像模型、识别模型、评审模式、候选图和阶段数，并回显方法内容/图注。
 - iOS 任务详情对齐 Web `JobStatus` 的参考回显规则：只展示后端返回了 `url` 的 `referenceImages`，支持 PNG/JPG/WebP/SVG 预览和分享导出。
 - iOS 生成演化阶段图对齐 Web/小程序下载能力：每个带图阶段可单独保存/分享，并显示候选编号和评审轮次。
+- iOS 失败任务对齐 Web `JobStatus`：`error` 作为错误提示显示，`logs_tail/logsTail` 与 `logs` 数组保留为可展开原始失败日志，不再被 `error` 覆盖。
 - iOS 任务详情新增整单 ZIP 分享，打包 `metadata.json`、`results/`、`references/`、`stages/`，对齐 Web `DownloadJobZipButton` 的下载全部能力。
 - iOS 意见反馈类别与 Web 固定枚举一致：`bug` / `feature` / `experience` / `other`；反馈内容限制 2000 字，联系方式限制 300 字。
 - iOS API Key 只存本机 Keychain；身份动作走 auth-gateway，不直连 Laf，不包含或下发 `PAPERBANANA_GATEWAY_TOKEN`。

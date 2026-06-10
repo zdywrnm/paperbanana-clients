@@ -32,11 +32,43 @@ final class JobDecodingTests: XCTestCase {
     XCTAssertEqual(job.outputFormat, .svg)
     XCTAssertEqual(job.imageSize, .twoK)
     XCTAssertEqual(job.failureText, "model failed")
+    XCTAssertEqual(job.failureErrorText, "model failed")
+    XCTAssertEqual(job.failureLogsText, "tail")
     XCTAssertEqual(job.referenceImageCount, 1)
     XCTAssertEqual(job.resultImages.first?.format, "svg")
     XCTAssertEqual(job.referenceImages.first?.objectKey, "refs/style.svg")
     XCTAssertEqual(job.retrievedReferences.first?.title, "Reference")
     XCTAssertEqual(job.stages.first?.type, "critic")
+  }
+
+  func testFailedJobKeepsLogsTailSeparateFromError() throws {
+    let job = try JSONDecoder().decode(Job.self, from: Data("""
+      {
+        "id": "failed-logs",
+        "status": "failed",
+        "error": "model failed",
+        "logsTail": "gateway line",
+        "logs": ["planner line", "renderer line"]
+      }
+      """.utf8))
+
+    XCTAssertEqual(job.failureText, "model failed")
+    XCTAssertEqual(job.failureErrorText, "model failed")
+    XCTAssertEqual(job.failureLogsText, "gateway line\nplanner line\nrenderer line")
+  }
+
+  func testFailedJobFallsBackToLogsWhenErrorIsMissing() throws {
+    let job = try JSONDecoder().decode(Job.self, from: Data("""
+      {
+        "id": "failed-log-only",
+        "status": "failed",
+        "logs_tail": "renderer timeout"
+      }
+      """.utf8))
+
+    XCTAssertEqual(job.failureText, "renderer timeout")
+    XCTAssertEqual(job.failureErrorText, "")
+    XCTAssertEqual(job.failureLogsText, "renderer timeout")
   }
 
   func testRecordSummaryKnowsWhenFreshDetailIsNeeded() throws {
