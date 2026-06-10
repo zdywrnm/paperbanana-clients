@@ -16,6 +16,25 @@ export function requestJson<T>(body: WechatMiniprogram.IAnyObject, options: Requ
   return postJson<T>(API_ENDPOINT, body, options)
 }
 
+// 防御解析：后端 getJob 等响应的 AI 生成文本（stage/critic/logs）可能含未转义的裸控制字符，
+// 导致 wx.request 的严格 JSON.parse 失败、res.data 退化为字符串（轮询会永远拿不到 job 而卡死）。
+// 这里清洗 0x00–0x1F 后重试解析；换行/制表符替换为空格（文本降级换行，结构不受影响）。
+export function coerceJsonResponse<T>(data: unknown): T {
+  if (typeof data !== 'string') return data as T
+  const text = data
+  try {
+    return JSON.parse(text) as T
+  } catch {
+    // fall through to sanitized retry
+  }
+  try {
+    const sanitized = text.replace(/[\u0000-\u001f]/g, (ch) => (ch === '\n' || ch === '\r' || ch === '\t' ? ' ' : ''))
+    return JSON.parse(sanitized) as T
+  } catch {
+    return data as T
+  }
+}
+
 export function authRequest<T>(path: string, method: 'GET' | 'POST', data?: WechatMiniprogram.IAnyObject, options: RequestOptions = {}): Promise<T> {
   return new Promise((resolve, reject) => {
     const header = requestHeader(true)
@@ -27,7 +46,7 @@ export function authRequest<T>(path: string, method: 'GET' | 'POST', data?: Wech
       data,
       success(res: WxRequestResult<T & { message?: string; code?: string; error?: string }>) {
         persistCookies(res)
-        const responseData = res.data
+        const responseData = coerceJsonResponse<T & { message?: string; code?: string; error?: string }>(res.data)
         if (res.statusCode < 200 || res.statusCode >= 300) {
           const body = responseData || ({} as T & { message?: string; code?: string; error?: string })
           reject(new Error(body.message || body.error || `HTTP ${res.statusCode}`))
@@ -52,7 +71,7 @@ export function postJson<T>(url: string, body: WechatMiniprogram.IAnyObject, opt
       data: body,
       success(res: WxRequestResult<T & { code?: number; error?: string; detail?: string }>) {
         persistCookies(res)
-        const data = res.data || ({} as T & { code?: number; error?: string; detail?: string })
+        const data = coerceJsonResponse<T & { code?: number; error?: string; detail?: string }>(res.data) || ({} as T & { code?: number; error?: string; detail?: string })
         if (res.statusCode < 200 || res.statusCode >= 300 || (data.code && data.code !== 0)) {
           reject(new Error(data.error || data.detail || `HTTP ${res.statusCode}`))
           return

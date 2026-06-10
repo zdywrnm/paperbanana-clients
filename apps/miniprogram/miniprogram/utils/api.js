@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.requestJson = requestJson;
+exports.coerceJsonResponse = coerceJsonResponse;
 exports.authRequest = authRequest;
 exports.postJson = postJson;
 exports.uploadReferenceFile = uploadReferenceFile;
@@ -10,6 +11,27 @@ exports.formatError = formatError;
 const config_1 = require("./config");
 function requestJson(body, options = {}) {
     return postJson(config_1.API_ENDPOINT, body, options);
+}
+// 防御解析：后端 getJob 等响应的 AI 生成文本（stage/critic/logs）可能含未转义的裸控制字符，
+// 导致 wx.request 的严格 JSON.parse 失败、res.data 退化为字符串（轮询会永远拿不到 job 而卡死）。
+// 这里清洗 0x00–0x1F 后重试解析；换行/制表符替换为空格（文本降级换行，结构不受影响）。
+function coerceJsonResponse(data) {
+    if (typeof data !== 'string')
+        return data;
+    const text = data;
+    try {
+        return JSON.parse(text);
+    }
+    catch {
+        // fall through to sanitized retry
+    }
+    try {
+        const sanitized = text.replace(/[\u0000-\u001f]/g, (ch) => (ch === '\n' || ch === '\r' || ch === '\t' ? ' ' : ''));
+        return JSON.parse(sanitized);
+    }
+    catch {
+        return data;
+    }
 }
 function authRequest(path, method, data, options = {}) {
     return new Promise((resolve, reject) => {
@@ -22,7 +44,7 @@ function authRequest(path, method, data, options = {}) {
             data,
             success(res) {
                 persistCookies(res);
-                const responseData = res.data;
+                const responseData = coerceJsonResponse(res.data);
                 if (res.statusCode < 200 || res.statusCode >= 300) {
                     const body = responseData || {};
                     reject(new Error(body.message || body.error || `HTTP ${res.statusCode}`));
@@ -46,7 +68,7 @@ function postJson(url, body, options = {}) {
             data: body,
             success(res) {
                 persistCookies(res);
-                const data = res.data || {};
+                const data = coerceJsonResponse(res.data) || {};
                 if (res.statusCode < 200 || res.statusCode >= 300 || (data.code && data.code !== 0)) {
                     reject(new Error(data.error || data.detail || `HTTP ${res.statusCode}`));
                     return;

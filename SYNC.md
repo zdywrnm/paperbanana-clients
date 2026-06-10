@@ -24,6 +24,18 @@
 
 ## 条目（最新在上）
 
+### [2026-06-10] getJob 响应可能含未转义控制字符（非法 JSON）— by Claude (miniprogram)
+变更：实测发现 `getJob` 响应在 stages 写入 AI 生成文本（评审意见/日志）后，JSON 字符串值里可能携带**未转义的裸控制字符**（如 0x0A），严格 `JSON.parse` 直接抛错。任务前期响应合法、stages 出现后持续非法——表现为客户端轮询"突然拿不到 job"。
+契约（影响其他端 / 共享）：
+- 各端的 HTTP 层若用严格 JSON 解析（如 `wx.request` dataType:json、`JSONDecoder`），遇到该响应会失败，轮询界面卡在"生成中"。
+- **根因在 laf-functions**：序列化 job 前应对 stage text / critic suggestion / logs 等文本字段清洗或正确转义 0x00–0x1F。
+- 修复根因前，各端建议加防御解析：解析失败时把 0x00–0x1F 清洗（\n/\r/\t 替换为空格、其余删除）后重试解析。
+各端待办：
+- [ ] laf-functions（根因：序列化前清洗/转义控制字符）
+- [x] miniprogram（已加防御解析 `coerceJsonResponse`：清洗后重试，轮询不再卡死）
+- [x] web（浏览器 fetch json() 同为严格解析，但 web 端暂未见报障；后端修复后自然消除，暂不动）
+- [ ] android/windows/macos（建议同样加防御解析，或等 laf 根因修复）
+
 ### [2026-06-09] 上传参考图时自动关闭检索（二选一）— by Claude
 变更：`createJob` 当请求带了有效 `referenceImages` 时，后端**强制** `retrievalSetting='none'`、`manualReferenceIds=[]`（以上传图为唯一视觉风格锚点，避免检索到的多张图与上传图风格相互打架）。检索一律不跑、不附检索图，任务记录里 `retrievalSetting` 即存为 `none`、徽标显示"不检索"。
 契约（影响其他端 / 共享）：
