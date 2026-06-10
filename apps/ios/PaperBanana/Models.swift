@@ -232,6 +232,13 @@ struct ReferenceImageAsset: Codable, Identifiable, Equatable, Hashable {
     objectKey.isEmpty ? filename : objectKey
   }
 
+  var displayFormat: String {
+    if mimeType.contains("svg") || filename.lowercased().hasSuffix(".svg") { return "svg" }
+    if mimeType.contains("jpeg") || mimeType.contains("jpg") || filename.lowercased().hasSuffix(".jpg") || filename.lowercased().hasSuffix(".jpeg") { return "jpg" }
+    if mimeType.contains("webp") || filename.lowercased().hasSuffix(".webp") { return "webp" }
+    return "png"
+  }
+
   init(
     filename: String,
     mimeType: String,
@@ -622,6 +629,10 @@ struct Job: Decodable, Identifiable, Equatable {
 
     if statusKind != .succeeded && !hasReference { return false }
     return hasResult || hasReference || hasBucketImage || hasRemoteSignedURL
+  }
+
+  var visibleReferenceImages: [ReferenceImageAsset] {
+    referenceImages.filter { !($0.url ?? "").isEmpty }
   }
 
   init(id: String, status: String) {

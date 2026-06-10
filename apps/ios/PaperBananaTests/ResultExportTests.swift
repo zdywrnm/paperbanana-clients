@@ -22,6 +22,24 @@ final class ResultExportTests: XCTestCase {
     XCTAssertNil(model.exportingResultImageID)
   }
 
+  func testExportsDataURLReferenceEchoAsLocalShareableFile() async throws {
+    let image = ReferenceImageAsset(
+      filename: "style.svg",
+      mimeType: "image/svg+xml",
+      size: 6,
+      objectKey: "refs/style.svg",
+      url: "data:image/svg+xml;base64,PHN2Zy8+"
+    )
+    let model = AppModel()
+
+    await model.exportReferenceImage(image, index: 0)
+
+    let exported = try XCTUnwrap(model.exportedResultFile)
+    XCTAssertEqual(exported.filename, "paperbanana-reference-1.svg")
+    XCTAssertEqual(try String(contentsOf: exported.url, encoding: .utf8), "<svg/>")
+    XCTAssertNil(model.exportingReferenceImageID)
+  }
+
   func testJobExportArchiveMatchesWebZipContents() async throws {
     let svgDataURL = "data:image/svg+xml;base64,PHN2Zy8+"
     let pngDataURL = "data:image/png;base64,iVBORw0KGgo="

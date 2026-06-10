@@ -64,6 +64,23 @@ final class JobDecodingTests: XCTestCase {
     XCTAssertFalse(queued.needsFreshRecordDetail)
   }
 
+  func testVisibleReferenceImagesMatchWebReferenceEchoRule() throws {
+    let job = try JSONDecoder().decode(Job.self, from: Data("""
+      {
+        "id": "reference-echo",
+        "status": "succeeded",
+        "reference_images": [
+          {"filename": "style.svg", "url": "/signed/style.svg", "objectKey": "refs/style.svg", "mimeType": "image/svg+xml", "size": 16},
+          {"filename": "hidden.png", "objectKey": "refs/hidden.png", "mimeType": "image/png", "size": 16}
+        ]
+      }
+      """.utf8))
+
+    XCTAssertEqual(job.visibleReferenceImages.count, 1)
+    XCTAssertEqual(job.visibleReferenceImages.first?.filename, "style.svg")
+    XCTAssertEqual(job.visibleReferenceImages.first?.displayFormat, "svg")
+  }
+
   func testJobMetadataItemsExposeWebRecordFields() throws {
     let job = try JSONDecoder().decode(Job.self, from: Data("""
       {

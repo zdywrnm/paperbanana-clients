@@ -126,6 +126,7 @@ final class AppModel {
   var refineJobID = ""
   var exportedResultFile: ExportedResultFile?
   var exportingResultImageID: ResultImage.ID?
+  var exportingReferenceImageID: ReferenceImageAsset.ID?
   var exportingJobArchiveID: Job.ID?
   var alertMessage = ""
   var isAlertPresented = false
@@ -560,6 +561,27 @@ final class AppModel {
     }
   }
 
+  func exportReferenceImage(_ image: ReferenceImageAsset, index: Int) async {
+    exportingReferenceImageID = image.id
+    defer { exportingReferenceImageID = nil }
+
+    do {
+      guard let sourceURL = image.url, let resolvedURL = resolvedImageURL(sourceURL) else {
+        throw PaperBananaAPIError.invalidURL(image.url ?? "")
+      }
+      let data = try await resultImageData(from: resolvedURL)
+      let filename = exportFilename(for: image, index: index)
+      let directory = FileManager.default.temporaryDirectory.appendingPathComponent("PaperBananaExports", isDirectory: true)
+      try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+      let fileURL = directory.appendingPathComponent(filename)
+      try data.write(to: fileURL, options: .atomic)
+      exportedResultFile = ExportedResultFile(url: fileURL, filename: filename)
+    } catch {
+      alertMessage = formatUserFacingError(error)
+      isAlertPresented = true
+    }
+  }
+
   func exportJobArchive(_ job: Job) async {
     exportingJobArchiveID = job.id
     defer { exportingJobArchiveID = nil }
@@ -679,6 +701,12 @@ final class AppModel {
     let existingExtension = URL(fileURLWithPath: image.filename).pathExtension
     let fileExtension = existingExtension.isEmpty ? fallbackFormat : existingExtension
     return "paperbanana-candidate-\(image.candidateID + 1).\(fileExtension)"
+  }
+
+  private func exportFilename(for image: ReferenceImageAsset, index: Int) -> String {
+    let existingExtension = URL(fileURLWithPath: image.filename).pathExtension
+    let fileExtension = existingExtension.isEmpty ? image.displayFormat : existingExtension
+    return "paperbanana-reference-\(index + 1).\(fileExtension)"
   }
 
   private func loadSelectedProviderKey() {
