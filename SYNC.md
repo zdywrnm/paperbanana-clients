@@ -24,6 +24,30 @@
 
 ## 条目（最新在上）
 
+### [2026-06-10] 新增原生 iOS 客户端 v1 — by Codex
+变更：新增 `apps/ios` SwiftUI 原生客户端，最低 iOS 26.0，采用 Liquid Glass 风格并默认连接 auth-gateway `https://yifbnnzrwmxn.sealoshzh.site`。
+契约（影响其他端 / 共享）：
+- iOS 端按 Web 最新 `createJob` 白名单发送：`taskName`、`outputFormat`、`imageSize`、`referenceImages`、`referenceImageMode`、`referenceVisionModelName`、`retrievalSetting`、`manualReferenceIds`、`aspectRatio`、`numCandidates`、`maxCriticRounds`。
+- 上传参考图时 iOS UI 与 Web 一致：客户端将 `retrievalSetting='none'`、`manualReferenceIds=[]`，后端仍为权威。
+- iOS 参考图入口支持 Photos 和 Files；Photos 中非 PNG/JPG/WebP/SVG 的可解码图片会先在本地转为 JPG，再走同一套上传校验。
+- iOS provider/model 常量以 Web `apps/web/src/constants.js` 为准，含百炼真实模型、视觉模型和 `mainModelCanReadImages` 能力判断。
+- iOS 与 Web 一致：provider 或主模型变化时重新按 `mainModelCanReadImages` 收敛参考图处理方式；图像模型变化时收敛到支持的清晰度档位。
+- iOS 在有参考图时调用网关 `modelCapability` 确认主模型参考图能力；失败时保留 Web 同步常量的本地 fallback，不阻塞生成。
+- iOS 结果图精修 sheet 与 Web 精修面板对齐，支持独立设置目标比例和清晰度；提交 `refineImage` 时使用独立精修参数，不污染下一次生成草稿。
+- iOS API Key 申请指南使用与 Web 相同的 provider guide URL/steps，并提示模型密钥不会保存到站点数据库。
+- iOS 新增原生「指南」tab，对齐 Web `GuidePanel` 的三步上手、多智能体流程、模型/参数/检索/结果术语、常见问题和资源链接；联系作者入口落到设置里的意见反馈。
+- iOS 任务详情展示与 Web 记录卡片一致的关键元数据：时间、模式、类别、平台、格式、比例、检索、参考图处理、主模型、图像模型、识别模型、评审模式、候选图和阶段数，并回显方法内容/图注。
+- iOS 任务详情新增整单 ZIP 分享，打包 `metadata.json`、`results/`、`references/`、`stages/`，对齐 Web `DownloadJobZipButton` 的下载全部能力。
+- iOS 意见反馈类别与 Web 固定枚举一致：`bug` / `feature` / `experience` / `other`；反馈内容限制 2000 字，联系方式限制 300 字。
+- iOS API Key 只存本机 Keychain；身份动作走 auth-gateway，不直连 Laf，不包含或下发 `PAPERBANANA_GATEWAY_TOKEN`。
+- iOS 原生请求会带 `Origin: https://www.paperbanana.asia` 和 `Referer: https://www.paperbanana.asia/`，否则 Better Auth 会返回 `MISSING_OR_NULL_ORIGIN`。
+- iOS app bundle 包含 `PrivacyInfo.xcprivacy`：无 tracking；声明登录信息、生成内容、参考图、反馈、用户自带 API Key；声明 `UserDefaults` required reason `CA92.1`。
+- iOS AppIcon 仍以 PNG raster 进入 `AppIcon.appiconset`；新增可编辑 SVG 源 `AppIconSource.imageset/PaperBananaAppIcon.svg`。
+- iOS 新增 `apps/ios/Scripts/e2e-gateway-smoke.mjs`，用于发版前用环境变量凭据复跑登录、参考图上传、`createJob`、`getJob` 真实链路。
+各端待办：
+- [x] ios（原生 SwiftUI v1、模型常量、payload、参考图上传、记录解码、refine 字段、SVG 图标源、真实百炼参考图 E2E、测试）
+- [ ] macos/android/windows/miniprogram（仍需按上方历史条目追齐最新 Web 契约）
+
 ### [2026-06-09] 上传参考图时自动关闭检索（二选一）— by Claude
 变更：`createJob` 当请求带了有效 `referenceImages` 时，后端**强制** `retrievalSetting='none'`、`manualReferenceIds=[]`（以上传图为唯一视觉风格锚点，避免检索到的多张图与上传图风格相互打架）。检索一律不跑、不附检索图，任务记录里 `retrievalSetting` 即存为 `none`、徽标显示"不检索"。
 契约（影响其他端 / 共享）：
