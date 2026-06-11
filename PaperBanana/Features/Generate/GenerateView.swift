@@ -34,8 +34,7 @@ struct GenerateView: View {
         }
         .padding()
       }
-      .paperCompactTabBarInset()
-      .background(AppBackground())
+      .background(AppBackground(isGenerating: model.jobs.hasActiveJob))
       .navigationTitle("PaperBanana")
       .task(id: model.generation.modelCapabilityQueryID) {
         await model.generation.refreshMainModelCapability()

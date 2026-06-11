@@ -13,8 +13,7 @@ struct SettingsView: View {
         }
         .padding()
       }
-      .paperCompactTabBarInset()
-      .background(AppBackground())
+      .background(AppBackground(isGenerating: model.jobs.hasActiveJob))
       .navigationTitle("设置")
     }
   }

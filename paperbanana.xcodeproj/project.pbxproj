@@ -6,6 +6,16 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXContainerItemProxy section */
+		A10000082FD95500007445A8 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 92001DF42FD95401007445A8 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 92001DFB2FD95401007445A8;
+			remoteInfo = PaperBanana;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		92001DFC2FD95401007445A8 /* PaperBanana.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PaperBanana.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000012FD95500007445A8 /* PaperBananaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PaperBananaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -110,16 +120,6 @@
 		};
 /* End PBXNativeTarget section */
 
-/* Begin PBXContainerItemProxy section */
-		A10000082FD95500007445A8 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 92001DF42FD95401007445A8 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 92001DFB2FD95401007445A8;
-			remoteInfo = PaperBanana;
-		};
-/* End PBXContainerItemProxy section */
-
 /* Begin PBXProject section */
 		92001DF42FD95401007445A8 /* Project object */ = {
 			isa = PBXProject;
@@ -137,7 +137,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 92001DF72FD95401007445A8 /* Build configuration list for PBXProject "PaperBanana" */;
+			buildConfigurationList = 92001DF72FD95401007445A8 /* Build configuration list for PBXProject "paperbanana" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -328,13 +328,13 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-					DEVELOPMENT_TEAM = MRDBK9Y6TF;
-					ENABLE_PREVIEWS = YES;
-					GENERATE_INFOPLIST_FILE = YES;
-					INFOPLIST_KEY_CFBundleDisplayName = PaperBanana;
-					INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
-					INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-					INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				DEVELOPMENT_TEAM = MRDBK9Y6TF;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = PaperBanana;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -362,13 +362,13 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-					DEVELOPMENT_TEAM = MRDBK9Y6TF;
-					ENABLE_PREVIEWS = YES;
-					GENERATE_INFOPLIST_FILE = YES;
-					INFOPLIST_KEY_CFBundleDisplayName = PaperBanana;
-					INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
-					INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-					INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				DEVELOPMENT_TEAM = MRDBK9Y6TF;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = PaperBanana;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -444,7 +444,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		92001DF72FD95401007445A8 /* Build configuration list for PBXProject "PaperBanana" */ = {
+		92001DF72FD95401007445A8 /* Build configuration list for PBXProject "paperbanana" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				92001E052FD95402007445A8 /* Debug */,

@@ -16,6 +16,12 @@ final class JobsStore {
   /// 当前 userJobs 来自本地缓存（尚未被网络刷新覆盖）。
   var isShowingCachedData = false
 
+  /// 当前任务是否仍在进行中（排队 / 生成），驱动全局状态胶囊与背景动画。
+  var hasActiveJob: Bool {
+    guard let status = currentJob?.statusKind else { return false }
+    return status == .queued || status == .running
+  }
+
   private let apiClient: PaperBananaAPIClient
   private let settings: SettingsStore
   private let auth: AuthStore

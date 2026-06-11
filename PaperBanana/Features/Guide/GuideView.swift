@@ -20,8 +20,7 @@ struct GuideView: View {
         }
         .padding()
       }
-      .paperCompactTabBarInset()
-      .background(AppBackground())
+      .background(AppBackground(isGenerating: model.jobs.hasActiveJob))
       .navigationTitle("使用指南")
     }
   }

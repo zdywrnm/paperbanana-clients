@@ -7,8 +7,8 @@ struct StatusPill: View {
   var body: some View {
     Label(text, systemImage: systemImage)
       .font(.caption.weight(.semibold))
-      .padding(.horizontal, 10)
-      .padding(.vertical, 6)
-      .paperGlass(cornerRadius: 999, interactive: false)
+      .padding(.horizontal, Theme.Spacing.md)
+      .padding(.vertical, Theme.Spacing.xs)
+      .paperGlass(.panel, in: .capsule)
   }
 }

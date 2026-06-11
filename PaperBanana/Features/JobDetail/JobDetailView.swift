@@ -72,7 +72,7 @@ struct JobDetailView: View {
       }
     }
     .padding()
-    .background(AppBackground())
+    .background(AppBackground(isGenerating: model.jobs.hasActiveJob))
     .navigationTitle("任务详情")
   }
 

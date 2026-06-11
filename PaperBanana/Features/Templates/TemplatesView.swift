@@ -26,8 +26,7 @@ struct TemplatesView: View {
         }
         .padding()
       }
-      .paperCompactTabBarInset()
-      .background(AppBackground())
+      .background(AppBackground(isGenerating: model.jobs.hasActiveJob))
       .navigationTitle("示例模板")
     }
   }

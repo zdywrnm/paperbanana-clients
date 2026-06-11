@@ -5,8 +5,8 @@ struct GlassPanel<Content: View>: View {
 
   var body: some View {
     content
-      .padding(16)
+      .padding(Theme.Spacing.lg)
       .frame(maxWidth: .infinity, alignment: .leading)
-      .paperGlass(cornerRadius: 22)
+      .paperGlass(.panel)
   }
 }
