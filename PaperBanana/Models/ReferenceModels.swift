@@ -56,6 +56,8 @@ struct ReferenceImageAsset: Codable, Identifiable, Equatable, Hashable {
     try container.encode(size, forKey: .key("size"))
     try container.encode(objectKey, forKey: .key("objectKey"))
     try container.encodeIfPresent(uploadToken, forKey: .key("uploadToken"))
+    try container.encodeIfPresent(url, forKey: .key("url"))
+    try container.encodeIfPresent(storage, forKey: .key("storage"))
   }
 
   var dictionary: [String: Any] {
@@ -78,8 +80,6 @@ struct PendingReferenceImage: Identifiable, Equatable {
 
   var size: Int { data.count }
 }
-
-typealias ReferenceUploadItem = PendingReferenceImage
 
 enum ReferenceImageLimits {
   static let maxCount = 3

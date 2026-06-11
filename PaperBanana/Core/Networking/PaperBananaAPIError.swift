@@ -1,9 +1,20 @@
 import Foundation
 
+/// 后端失败响应中可用于错误映射的结构化信息。
+struct ServerErrorDetails: Equatable {
+  /// HTTP 状态码；envelope 失败（HTTP 200 但 ok=false/code!=0）时为 200。
+  let statusCode: Int
+  /// envelope 的错误 code 字段（如 Better Auth 的 "INVALID_EMAIL_OR_PASSWORD"）。
+  let code: String?
+  /// 从响应里提取出的错误消息。
+  let message: String?
+}
+
 enum PaperBananaAPIError: LocalizedError {
   case invalidURL(String)
   case invalidResponse
   case server(String)
+  case http(ServerErrorDetails)
   case decoding(String)
 
   var errorDescription: String? {
@@ -11,24 +22,8 @@ enum PaperBananaAPIError: LocalizedError {
     case .invalidURL(let value): "无效后端地址：\(value)"
     case .invalidResponse: "后端返回了无效响应。"
     case .server(let message): message
+    case .http(let details): details.message ?? "HTTP \(details.statusCode)"
     case .decoding(let message): "响应解析失败：\(message)"
     }
   }
-}
-
-func formatUserFacingError(_ error: Error) -> String {
-  formatUserFacingError(error.localizedDescription)
-}
-
-func formatUserFacingError(_ message: String) -> String {
-  if message.contains("Invalid email or password") { return "邮箱或密码不正确。" }
-  if message.contains("User already exists") { return "这个邮箱已经注册，请直接登录。" }
-  if message.contains("Missing API key") { return "缺少所选模型接口的 API Key。" }
-  if message.contains("Incorrect API key") || message.contains("apikey-error") { return "API Key 不正确，请确认模型服务和密钥匹配。" }
-  if message.contains("Please log in") || message.contains("请先登录") || message.contains("Unauthorized") { return "请先登录后再使用任务记录。" }
-  if message.contains("Forbidden") { return "当前账号没有权限查看这个任务。" }
-  if message.contains("timed out") || message.contains("timeout") { return "请求超时，请稍后重试。" }
-  if message.contains("Network request failed") || message.contains("No such host") || message.contains("无法连接") { return "无法连接后端，请确认网络可访问 Sealos 后端地址。" }
-  if message.contains("HTTP 503") { return "服务暂时不可用，请稍后重试。" }
-  return message.isEmpty ? "操作失败" : message
 }

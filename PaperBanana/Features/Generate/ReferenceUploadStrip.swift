@@ -7,7 +7,7 @@ struct ReferenceUploadStrip: View {
   let showImporter: () -> Void
 
   private var remainingSlots: Int {
-    max(0, ReferenceImageLimits.maxCount - model.draft.referenceImages.count)
+    max(0, ReferenceImageLimits.maxCount - model.generation.draft.referenceImages.count)
   }
 
   var body: some View {
@@ -29,12 +29,12 @@ struct ReferenceUploadStrip: View {
         }
         .disabled(remainingSlots == 0)
       }
-      if model.draft.referenceImages.isEmpty {
+      if model.generation.draft.referenceImages.isEmpty {
         Text("支持 PNG、JPG、WebP、SVG，最多 3 张。")
           .font(.footnote)
           .foregroundStyle(.secondary)
       } else {
-        ForEach(model.draft.referenceImages) { image in
+        ForEach(model.generation.draft.referenceImages) { image in
           HStack {
             Image(systemName: image.mimeType.contains("svg") ? "doc.richtext" : "photo")
             VStack(alignment: .leading) {
@@ -46,7 +46,7 @@ struct ReferenceUploadStrip: View {
             }
             Spacer()
             Button(role: .destructive) {
-              model.removeReferenceImage(image)
+              model.generation.removeReferenceImage(image)
             } label: {
               Image(systemName: "trash")
             }
@@ -55,8 +55,8 @@ struct ReferenceUploadStrip: View {
           .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
         }
       }
-      if !model.referenceUploadError.isEmpty {
-        Text(model.referenceUploadError)
+      if !model.generation.referenceUploadError.isEmpty {
+        Text(model.generation.referenceUploadError)
           .font(.footnote)
           .foregroundStyle(.red)
       }

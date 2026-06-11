@@ -14,12 +14,12 @@ final class ResultExportTests: XCTestCase {
     """.utf8))
     let model = AppModel()
 
-    await model.exportResultImage(image, outputFormat: .svg)
+    await model.exports.exportResultImage(image, outputFormat: .svg)
 
-    let exported = try XCTUnwrap(model.exportedResultFile)
+    let exported = try XCTUnwrap(model.exports.exportedResultFile)
     XCTAssertEqual(exported.filename, "paperbanana-candidate-2.svg")
     XCTAssertEqual(try String(contentsOf: exported.url, encoding: .utf8), "<svg/>")
-    XCTAssertNil(model.exportingResultImageID)
+    XCTAssertNil(model.exports.exportingResultImageID)
   }
 
   func testExportsDataURLReferenceEchoAsLocalShareableFile() async throws {
@@ -32,12 +32,12 @@ final class ResultExportTests: XCTestCase {
     )
     let model = AppModel()
 
-    await model.exportReferenceImage(image, index: 0)
+    await model.exports.exportReferenceImage(image, index: 0)
 
-    let exported = try XCTUnwrap(model.exportedResultFile)
+    let exported = try XCTUnwrap(model.exports.exportedResultFile)
     XCTAssertEqual(exported.filename, "paperbanana-reference-1.svg")
     XCTAssertEqual(try String(contentsOf: exported.url, encoding: .utf8), "<svg/>")
-    XCTAssertNil(model.exportingReferenceImageID)
+    XCTAssertNil(model.exports.exportingReferenceImageID)
   }
 
   func testExportsDataURLStageImageAsLocalShareableFile() async throws {
@@ -53,12 +53,12 @@ final class ResultExportTests: XCTestCase {
     let stage = try XCTUnwrap(job.stages.first)
     let model = AppModel()
 
-    await model.exportStageImage(stage, index: 1)
+    await model.exports.exportStageImage(stage, index: 1)
 
-    let exported = try XCTUnwrap(model.exportedResultFile)
+    let exported = try XCTUnwrap(model.exports.exportedResultFile)
     XCTAssertEqual(exported.filename, "paperbanana-stage-02-critic.webp")
     XCTAssertEqual(try Data(contentsOf: exported.url), Data("RIFF".utf8))
-    XCTAssertNil(model.exportingStageImageID)
+    XCTAssertNil(model.exports.exportingStageImageID)
   }
 
   func testJobExportArchiveMatchesWebZipContents() async throws {
@@ -86,9 +86,9 @@ final class ResultExportTests: XCTestCase {
     """.utf8))
     let model = AppModel()
 
-    await model.exportJobArchive(job)
+    await model.exports.exportJobArchive(job)
 
-    let exported = try XCTUnwrap(model.exportedResultFile)
+    let exported = try XCTUnwrap(model.exports.exportedResultFile)
     let data = try Data(contentsOf: exported.url)
     XCTAssertEqual(exported.filename, "paperbanana-job-archive-1.zip")
     XCTAssertTrue(data.starts(with: Data([0x50, 0x4b, 0x03, 0x04])))
@@ -96,7 +96,7 @@ final class ResultExportTests: XCTestCase {
     XCTAssertNotNil(data.range(of: Data("results/result-1.svg".utf8)))
     XCTAssertNotNil(data.range(of: Data("references/reference-1.png".utf8)))
     XCTAssertNotNil(data.range(of: Data("stages/stage-01-critic.webp".utf8)))
-    XCTAssertNil(model.exportingJobArchiveID)
+    XCTAssertNil(model.exports.exportingJobArchiveID)
   }
 
   func testJobExportAssetsSkipMissingURLs() throws {

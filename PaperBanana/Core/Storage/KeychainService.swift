@@ -1,6 +1,20 @@
 import Foundation
 import Security
 
+enum KeychainError: LocalizedError {
+  case readFailed(OSStatus)
+  case saveFailed(OSStatus)
+  case deleteFailed(OSStatus)
+
+  var errorDescription: String? {
+    switch self {
+    case .readFailed(let status): "Keychain 读取失败：\(status)"
+    case .saveFailed(let status): "Keychain 保存失败：\(status)"
+    case .deleteFailed(let status): "Keychain 删除失败：\(status)"
+    }
+  }
+}
+
 final class KeychainService {
   private let service = "asia.paperbanana.ios"
 
@@ -12,7 +26,7 @@ final class KeychainService {
     var result: CFTypeRef?
     let status = SecItemCopyMatching(query as CFDictionary, &result)
     if status == errSecItemNotFound { return nil }
-    guard status == errSecSuccess else { throw PaperBananaAPIError.server("Keychain 读取失败：\(status)") }
+    guard status == errSecSuccess else { throw KeychainError.readFailed(status) }
     guard let data = result as? Data else { return nil }
     return String(data: data, encoding: .utf8)
   }
@@ -23,13 +37,13 @@ final class KeychainService {
     query[kSecValueData as String] = Data(value.utf8)
     query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
     let status = SecItemAdd(query as CFDictionary, nil)
-    guard status == errSecSuccess else { throw PaperBananaAPIError.server("Keychain 保存失败：\(status)") }
+    guard status == errSecSuccess else { throw KeychainError.saveFailed(status) }
   }
 
   func delete(account: String) throws {
     let status = SecItemDelete(baseQuery(account: account) as CFDictionary)
     guard status == errSecSuccess || status == errSecItemNotFound else {
-      throw PaperBananaAPIError.server("Keychain 删除失败：\(status)")
+      throw KeychainError.deleteFailed(status)
     }
   }
 

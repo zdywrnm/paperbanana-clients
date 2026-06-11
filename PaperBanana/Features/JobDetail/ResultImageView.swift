@@ -31,14 +31,14 @@ struct ResultImageView: View {
           .foregroundStyle(.secondary)
         Spacer()
         Button {
-          Task { await model.exportResultImage(image, outputFormat: outputFormat) }
+          Task { await model.exports.exportResultImage(image, outputFormat: outputFormat) }
         } label: {
-          Image(systemName: model.exportingResultImageID == image.id ? "hourglass" : "square.and.arrow.down")
+          Image(systemName: model.exports.exportingResultImageID == image.id ? "hourglass" : "square.and.arrow.down")
         }
-        .disabled(model.exportingResultImageID == image.id || image.url.isEmpty)
+        .disabled(model.exports.exportingResultImageID == image.id || image.url.isEmpty)
         .accessibilityLabel("保存或分享候选图 \(image.candidateID + 1)")
         Button {
-          model.beginRefine(image)
+          model.generation.beginRefine(image)
         } label: {
           Image(systemName: "wand.and.stars")
         }

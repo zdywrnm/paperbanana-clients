@@ -42,11 +42,11 @@ struct ReferenceEchoCard: View {
           .minimumScaleFactor(0.8)
         Spacer()
         Button {
-          Task { await model.exportReferenceImage(reference, index: index) }
+          Task { await model.exports.exportReferenceImage(reference, index: index) }
         } label: {
-          Image(systemName: model.exportingReferenceImageID == reference.id ? "hourglass" : "square.and.arrow.down")
+          Image(systemName: model.exports.exportingReferenceImageID == reference.id ? "hourglass" : "square.and.arrow.down")
         }
-        .disabled(model.exportingReferenceImageID == reference.id || (reference.url ?? "").isEmpty)
+        .disabled(model.exports.exportingReferenceImageID == reference.id || (reference.url ?? "").isEmpty)
         .accessibilityLabel("保存或分享参考图 \(index + 1)")
       }
     }

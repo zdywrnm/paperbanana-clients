@@ -15,13 +15,13 @@ struct JobDetailView: View {
         }
         if job.hasExportableAssets {
           Button {
-            Task { await model.exportJobArchive(job) }
+            Task { await model.exports.exportJobArchive(job) }
           } label: {
-            Label(model.exportingJobArchiveID == job.id ? "打包中" : "分享全部", systemImage: model.exportingJobArchiveID == job.id ? "hourglass" : "archivebox")
+            Label(model.exports.exportingJobArchiveID == job.id ? "打包中" : "分享全部", systemImage: model.exports.exportingJobArchiveID == job.id ? "hourglass" : "archivebox")
           }
           .buttonStyle(.bordered)
           .paperGlassButton()
-          .disabled(model.exportingJobArchiveID == job.id)
+          .disabled(model.exports.exportingJobArchiveID == job.id)
         }
         JobMetadataGrid(job: job)
         JobPromptEcho(job: job)

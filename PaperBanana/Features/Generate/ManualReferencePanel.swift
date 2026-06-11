@@ -10,26 +10,26 @@ struct ManualReferencePanel: View {
           .font(.headline)
         Spacer()
         Button("刷新") {
-          Task { await model.loadReferenceLibrary() }
+          Task { await model.generation.loadReferenceLibrary() }
         }
       }
-      if model.referenceLibrary.isEmpty && !model.referenceLibraryLoading {
+      if model.generation.referenceLibrary.isEmpty && !model.generation.referenceLibraryLoading {
         Button("加载参考库") {
-          Task { await model.loadReferenceLibrary() }
+          Task { await model.generation.loadReferenceLibrary() }
         }
       }
-      if model.referenceLibraryLoading {
+      if model.generation.referenceLibraryLoading {
         ProgressView()
       }
-      if !model.referenceLibraryError.isEmpty {
-        Text(model.referenceLibraryError)
+      if !model.generation.referenceLibraryError.isEmpty {
+        Text(model.generation.referenceLibraryError)
           .font(.footnote)
           .foregroundStyle(.red)
       }
-      ForEach(model.referenceLibrary.prefix(12)) { item in
+      ForEach(model.generation.referenceLibrary.prefix(12)) { item in
         Toggle(isOn: Binding(
-          get: { model.draft.manualReferenceIds.contains(item.id) },
-          set: { _ in model.toggleManualReference(item) }
+          get: { model.generation.draft.manualReferenceIds.contains(item.id) },
+          set: { _ in model.generation.toggleManualReference(item) }
         )) {
           VStack(alignment: .leading) {
             Text(item.title.isEmpty ? item.id : item.title)

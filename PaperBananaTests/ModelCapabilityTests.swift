@@ -10,10 +10,10 @@ final class ModelCapabilityTests: XCTestCase {
 
   func testRefreshMainModelCapabilityUsesGatewayResultForReferenceNote() async throws {
     let model = AppModel(apiClient: PaperBananaAPIClient(session: URLSession.modelCapabilityStubbedSession()))
-    model.draft.configurationMode = .advanced
-    model.draft.provider = .bailian
-    model.draft.mainModelName = "qwen3.7-plus"
-    model.draft.referenceImages = [
+    model.generation.draft.configurationMode = .advanced
+    model.generation.draft.provider = .bailian
+    model.generation.draft.mainModelName = "qwen3.7-plus"
+    model.generation.draft.referenceImages = [
       PendingReferenceImage(id: "ref-1", filename: "style.png", mimeType: "image/png", data: Data([1, 2, 3]))
     ]
     ModelCapabilityURLProtocolStub.requestHandler = { request in
@@ -30,19 +30,19 @@ final class ModelCapabilityTests: XCTestCase {
       )
     }
 
-    await model.refreshMainModelCapability()
+    await model.generation.refreshMainModelCapability()
 
-    XCTAssertEqual(model.mainModelCapability?.status, "supported")
-    XCTAssertEqual(model.mainModelCapability?.source, "gateway")
-    XCTAssertEqual(model.referenceCapabilityNote, "网关确认当前主模型支持图像理解，可用主模型直读参考图。")
+    XCTAssertEqual(model.generation.mainModelCapability?.status, "supported")
+    XCTAssertEqual(model.generation.mainModelCapability?.source, "gateway")
+    XCTAssertEqual(model.generation.referenceCapabilityNote, "网关确认当前主模型支持图像理解，可用主模型直读参考图。")
   }
 
   func testRefreshMainModelCapabilityFallsBackToLocalWhenGatewayFails() async throws {
     let model = AppModel(apiClient: PaperBananaAPIClient(session: URLSession.modelCapabilityStubbedSession()))
-    model.draft.configurationMode = .advanced
-    model.draft.provider = .bailian
-    model.draft.mainModelName = "qwen3.7-plus"
-    model.draft.referenceImages = [
+    model.generation.draft.configurationMode = .advanced
+    model.generation.draft.provider = .bailian
+    model.generation.draft.mainModelName = "qwen3.7-plus"
+    model.generation.draft.referenceImages = [
       PendingReferenceImage(id: "ref-1", filename: "style.png", mimeType: "image/png", data: Data([1, 2, 3]))
     ]
     ModelCapabilityURLProtocolStub.requestHandler = { request in
@@ -53,17 +53,17 @@ final class ModelCapabilityTests: XCTestCase {
       )
     }
 
-    await model.refreshMainModelCapability()
+    await model.generation.refreshMainModelCapability()
 
-    XCTAssertEqual(model.mainModelCapability?.status, "unknown")
-    XCTAssertTrue(model.mainModelCapability?.supportsReferenceImages ?? false)
-    XCTAssertTrue(model.referenceCapabilityNote.contains("当前主模型支持图像理解"))
-    XCTAssertTrue(model.referenceCapabilityNote.contains("Capability unavailable"))
+    XCTAssertEqual(model.generation.mainModelCapability?.status, "unknown")
+    XCTAssertTrue(model.generation.mainModelCapability?.supportsReferenceImages ?? false)
+    XCTAssertTrue(model.generation.referenceCapabilityNote.contains("当前主模型支持图像理解"))
+    XCTAssertTrue(model.generation.referenceCapabilityNote.contains("Capability unavailable"))
   }
 
   func testRefreshMainModelCapabilityClearsWhenNoReferenceImagesExist() async {
     let model = AppModel(apiClient: PaperBananaAPIClient(session: URLSession.modelCapabilityStubbedSession()))
-    model.mainModelCapability = ModelCapability(
+    model.generation.mainModelCapability = ModelCapability(
       status: "supported",
       supportsReferenceImages: true,
       reason: "cached",
@@ -71,9 +71,9 @@ final class ModelCapabilityTests: XCTestCase {
       cached: true
     )
 
-    await model.refreshMainModelCapability()
+    await model.generation.refreshMainModelCapability()
 
-    XCTAssertNil(model.mainModelCapability)
+    XCTAssertNil(model.generation.mainModelCapability)
   }
 }
 

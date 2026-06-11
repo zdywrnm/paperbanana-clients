@@ -9,17 +9,17 @@ struct RefineSheet: View {
     NavigationStack {
       Form {
         Section("精修指令") {
-          TextEditor(text: $model.refineInstruction)
+          TextEditor(text: $model.generation.refineInstruction)
             .frame(minHeight: 160)
         }
         Section("目标设置") {
-          Picker("目标比例", selection: $model.refineAspectRatio) {
+          Picker("目标比例", selection: $model.generation.refineAspectRatio) {
             ForEach(["16:9", "21:9", "3:2", "1:1"], id: \.self) { ratio in
               Text(ratio).tag(ratio)
             }
           }
-          Picker("清晰度", selection: $model.refineImageSize) {
-            ForEach(model.refineSupportedImageSizes) { size in
+          Picker("清晰度", selection: $model.generation.refineImageSize) {
+            ForEach(model.generation.refineSupportedImageSizes) { size in
               Text(size.title).tag(size)
             }
           }
@@ -27,11 +27,11 @@ struct RefineSheet: View {
         Section {
           Button("提交精修") {
             Task {
-              await model.refine(image: image)
+              await model.generation.refine(image: image)
               dismiss()
             }
           }
-          .disabled(model.refineInstruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+          .disabled(model.generation.refineInstruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
       }
       .navigationTitle("图片精修")

@@ -24,11 +24,11 @@ struct StageTimelineView: View {
               Spacer()
               if stage.image?.url.isEmpty == false {
                 Button {
-                  Task { await model.exportStageImage(stage, index: index) }
+                  Task { await model.exports.exportStageImage(stage, index: index) }
                 } label: {
-                  Image(systemName: model.exportingStageImageID == stage.id ? "hourglass" : "square.and.arrow.down")
+                  Image(systemName: model.exports.exportingStageImageID == stage.id ? "hourglass" : "square.and.arrow.down")
                 }
-                .disabled(model.exportingStageImageID == stage.id)
+                .disabled(model.exports.exportingStageImageID == stage.id)
                 .accessibilityLabel("保存或分享阶段图 \(index + 1)")
               }
             }

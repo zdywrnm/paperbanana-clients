@@ -6,10 +6,10 @@ struct RootView: View {
 
   var body: some View {
     rootContent
-    .sheet(item: $model.refineSourceImage) { image in
+    .sheet(item: $model.generation.refineSourceImage) { image in
       RefineSheet(model: model, image: image)
     }
-    .sheet(item: $model.exportedResultFile) { file in
+    .sheet(item: $model.exports.exportedResultFile) { file in
       ShareSheet(items: [file.url])
         .presentationDetents([.medium, .large])
     }

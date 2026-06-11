@@ -211,7 +211,11 @@ final class PaperBananaAPIClient {
     let isHTTPError = !(200..<300).contains(httpResponse.statusCode)
     let isEnvelopeFailure = objectIndicatesFailure(object)
     if isHTTPError || isEnvelopeFailure {
-      throw PaperBananaAPIError.server(serverErrorMessage(from: object, statusCode: httpResponse.statusCode))
+      throw PaperBananaAPIError.http(ServerErrorDetails(
+        statusCode: httpResponse.statusCode,
+        code: serverErrorCode(from: object),
+        message: serverErrorMessage(from: object)
+      ))
     }
     do {
       return try decoder.decode(T.self, from: data.isEmpty ? Data("{}".utf8) : data)
@@ -225,20 +229,33 @@ final class PaperBananaAPIClient {
     return (try JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
   }
 
+  /// 并发拉取记录详情（并发上限 4），输出顺序与输入保持一致；
+  /// 单条失败时回退为原始摘要。
   private func hydrateRecordImages(apiBase: String, jobs: [Job]) async -> [Job] {
-    var hydrated: [Job] = []
-    hydrated.reserveCapacity(jobs.count)
+    let pending = jobs.enumerated().filter { $0.element.needsFreshRecordDetail }
+    guard !pending.isEmpty else { return jobs }
 
-    for job in jobs {
-      guard job.needsFreshRecordDetail else {
-        hydrated.append(job)
-        continue
+    var hydrated = jobs
+    await withTaskGroup(of: (Int, Job).self) { group in
+      let maxConcurrent = 4
+      var nextIndex = 0
+
+      func addNextTask() {
+        guard nextIndex < pending.count else { return }
+        let (index, job) = pending[nextIndex]
+        nextIndex += 1
+        group.addTask {
+          let detail = (try? await self.getJob(apiBase: apiBase, jobID: job.id)) ?? job
+          return (index, detail)
+        }
       }
 
-      do {
-        hydrated.append(try await getJob(apiBase: apiBase, jobID: job.id))
-      } catch {
-        hydrated.append(job)
+      for _ in 0..<min(maxConcurrent, pending.count) {
+        addNextTask()
+      }
+      for await (index, job) in group {
+        hydrated[index] = job
+        addNextTask()
       }
     }
     return hydrated
@@ -257,7 +274,7 @@ final class PaperBananaAPIClient {
     return false
   }
 
-  private func serverErrorMessage(from object: [String: Any], statusCode: Int) -> String {
+  private func serverErrorMessage(from object: [String: Any]) -> String? {
     if let error = object["error"] as? String, !error.isEmpty { return error }
     if let detail = object["detail"] as? String, !detail.isEmpty { return detail }
     if let message = object["message"] as? String, !message.isEmpty { return message }
@@ -266,7 +283,12 @@ final class PaperBananaAPIClient {
       if let error = data["error"] as? String, !error.isEmpty { return error }
       if let message = data["message"] as? String, !message.isEmpty { return message }
     }
-    if let code = object["code"] { return String(describing: code) }
-    return "HTTP \(statusCode)"
+    return nil
+  }
+
+  private func serverErrorCode(from object: [String: Any]) -> String? {
+    if let code = object["code"] as? String, !code.isEmpty { return code }
+    if let error = object["error"] as? [String: Any], let code = error["code"] as? String, !code.isEmpty { return code }
+    return nil
   }
 }

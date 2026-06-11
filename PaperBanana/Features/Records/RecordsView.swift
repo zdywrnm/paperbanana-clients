@@ -6,7 +6,7 @@ struct RecordsView: View {
   var body: some View {
     NavigationStack {
       Group {
-        if model.currentUser == nil {
+        if model.auth.currentUser == nil {
           ContentUnavailableView {
             Label("登录后查看任务记录", systemImage: "person.crop.circle.badge.exclamationmark")
           } description: {
@@ -15,25 +15,30 @@ struct RecordsView: View {
             Button("去登录") { model.selectedTab = .settings }
           }
         } else {
-          List(selection: $model.selectedRecordID) {
-            ForEach(model.userJobs) { job in
+          List(selection: $model.jobs.selectedRecordID) {
+            if model.jobs.isShowingCachedData {
+              Text("正在显示本地缓存的记录，下拉刷新获取最新数据。")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
+            ForEach(model.jobs.userJobs) { job in
               NavigationLink(value: job.id) {
                 JobRow(job: job)
               }
             }
           }
           .navigationDestination(for: String.self) { id in
-            if let job = model.userJobs.first(where: { $0.id == id }) {
+            if let job = model.jobs.userJobs.first(where: { $0.id == id }) {
               JobDetailView(model: model, job: job)
             }
           }
-          .refreshable { await model.loadUserJobs(silent: false) }
+          .refreshable { await model.jobs.loadUserJobs(silent: false) }
         }
       }
       .navigationTitle("任务记录")
       .toolbar {
         Button {
-          Task { await model.loadUserJobs(silent: false) }
+          Task { await model.jobs.loadUserJobs(silent: false) }
         } label: {
           Image(systemName: "arrow.clockwise")
         }

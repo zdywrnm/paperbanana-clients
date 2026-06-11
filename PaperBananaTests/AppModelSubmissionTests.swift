@@ -5,72 +5,72 @@ import XCTest
 final class AppModelSubmissionTests: XCTestCase {
   func testMainModelDirectReferenceIsBlockedWhenModelCannotReadImages() {
     let model = AppModel()
-    model.selectedAPIKey = "sk-test"
-    model.draft.configurationMode = .advanced
-    model.draft.provider = .bailian
-    model.draft.mainModelName = "qwen3.7-max"
-    model.draft.referenceImageMode = .mainModel
-    model.draft.referenceImages = [
+    model.generation.selectedAPIKey = "sk-test"
+    model.generation.draft.configurationMode = .advanced
+    model.generation.draft.provider = .bailian
+    model.generation.draft.mainModelName = "qwen3.7-max"
+    model.generation.draft.referenceImageMode = .mainModel
+    model.generation.draft.referenceImages = [
       PendingReferenceImage(id: "ref-1", filename: "style.png", mimeType: "image/png", data: Data([1, 2, 3]))
     ]
 
-    XCTAssertTrue(model.mainModelDirectUnsupported)
-    XCTAssertFalse(model.canSubmit)
-    XCTAssertEqual(model.referenceCapabilityNote, "当前主模型不能直读参考图，请使用独立识别模型。")
+    XCTAssertTrue(model.generation.mainModelDirectUnsupported)
+    XCTAssertFalse(model.generation.canSubmit)
+    XCTAssertEqual(model.generation.referenceCapabilityNote, "当前主模型不能直读参考图，请使用独立识别模型。")
   }
 
   func testManualReferenceModeRequiresSelectionWhenNoUploadExists() {
     let model = AppModel()
-    model.selectedAPIKey = "sk-test"
-    model.draft.configurationMode = .advanced
-    model.draft.retrievalSetting = .manual
-    model.draft.manualReferenceIds = []
+    model.generation.selectedAPIKey = "sk-test"
+    model.generation.draft.configurationMode = .advanced
+    model.generation.draft.retrievalSetting = .manual
+    model.generation.draft.manualReferenceIds = []
 
-    XCTAssertFalse(model.hasRequiredManualReferences)
-    XCTAssertFalse(model.canSubmit)
+    XCTAssertFalse(model.generation.hasRequiredManualReferences)
+    XCTAssertFalse(model.generation.canSubmit)
 
-    model.draft.manualReferenceIds = ["diagram-001"]
+    model.generation.draft.manualReferenceIds = ["diagram-001"]
 
-    XCTAssertTrue(model.hasRequiredManualReferences)
-    XCTAssertTrue(model.canSubmit)
+    XCTAssertTrue(model.generation.hasRequiredManualReferences)
+    XCTAssertTrue(model.generation.canSubmit)
   }
 
   func testProviderSelectionRealignsReferenceImageModeLikeWeb() {
     let model = AppModel()
-    model.draft.configurationMode = .advanced
-    model.draft.referenceImageMode = .mainModel
+    model.generation.draft.configurationMode = .advanced
+    model.generation.draft.referenceImageMode = .mainModel
 
-    model.selectProvider(.bailian)
+    model.generation.selectProvider(.bailian)
 
-    XCTAssertEqual(model.draft.mainModelName, ProviderCatalog.config(for: .bailian).mainModel)
-    XCTAssertEqual(model.draft.referenceImageMode, .visionModel)
+    XCTAssertEqual(model.generation.draft.mainModelName, ProviderCatalog.config(for: .bailian).mainModel)
+    XCTAssertEqual(model.generation.draft.referenceImageMode, .visionModel)
 
-    model.selectProvider(.openrouter)
+    model.generation.selectProvider(.openrouter)
 
-    XCTAssertEqual(model.draft.mainModelName, ProviderCatalog.config(for: .openrouter).mainModel)
-    XCTAssertEqual(model.draft.referenceImageMode, .mainModel)
+    XCTAssertEqual(model.generation.draft.mainModelName, ProviderCatalog.config(for: .openrouter).mainModel)
+    XCTAssertEqual(model.generation.draft.referenceImageMode, .mainModel)
   }
 
   func testMainModelSelectionRealignsReferenceImageModeLikeWeb() {
     let model = AppModel()
-    model.draft.configurationMode = .advanced
-    model.selectProvider(.bailian)
+    model.generation.draft.configurationMode = .advanced
+    model.generation.selectProvider(.bailian)
 
-    model.selectMainModel("qwen3.7-plus")
+    model.generation.selectMainModel("qwen3.7-plus")
 
-    XCTAssertEqual(model.draft.referenceImageMode, .mainModel)
+    XCTAssertEqual(model.generation.draft.referenceImageMode, .mainModel)
 
-    model.selectMainModel("qwen3.7-max")
+    model.generation.selectMainModel("qwen3.7-max")
 
-    XCTAssertEqual(model.draft.referenceImageMode, .visionModel)
+    XCTAssertEqual(model.generation.draft.referenceImageMode, .visionModel)
   }
 
   func testBeginRefineInitializesIndependentTargetSettings() throws {
     let model = AppModel()
-    model.draft.configurationMode = .advanced
-    model.draft.aspectRatio = "3:2"
-    model.draft.imageSize = .twoK
-    model.refineInstruction = "old instruction"
+    model.generation.draft.configurationMode = .advanced
+    model.generation.draft.aspectRatio = "3:2"
+    model.generation.draft.imageSize = .twoK
+    model.generation.refineInstruction = "old instruction"
     let image = try JSONDecoder().decode(ResultImage.self, from: Data("""
     {
       "filename": "candidate.png",
@@ -80,33 +80,33 @@ final class AppModelSubmissionTests: XCTestCase {
     }
     """.utf8))
 
-    model.beginRefine(image)
+    model.generation.beginRefine(image)
 
-    XCTAssertEqual(model.refineSourceImage, image)
-    XCTAssertEqual(model.refineInstruction, "")
-    XCTAssertEqual(model.refineAspectRatio, "3:2")
-    XCTAssertEqual(model.refineImageSize, .twoK)
+    XCTAssertEqual(model.generation.refineSourceImage, image)
+    XCTAssertEqual(model.generation.refineInstruction, "")
+    XCTAssertEqual(model.generation.refineAspectRatio, "3:2")
+    XCTAssertEqual(model.generation.refineImageSize, .twoK)
 
-    model.refineAspectRatio = "1:1"
-    model.refineImageSize = .oneK
+    model.generation.refineAspectRatio = "1:1"
+    model.generation.refineImageSize = .oneK
 
-    XCTAssertEqual(model.draft.aspectRatio, "3:2")
-    XCTAssertEqual(model.draft.imageSize, .twoK)
+    XCTAssertEqual(model.generation.draft.aspectRatio, "3:2")
+    XCTAssertEqual(model.generation.draft.imageSize, .twoK)
   }
 
   func testRefineImageSizeFollowsSelectedProviderSupport() {
     let model = AppModel()
-    model.refineImageSize = .fourK
+    model.generation.refineImageSize = .fourK
 
-    model.selectProvider(.bailian)
+    model.generation.selectProvider(.bailian)
 
-    XCTAssertEqual(model.refineImageSize, .oneK)
+    XCTAssertEqual(model.generation.refineImageSize, .oneK)
 
-    model.selectProvider(.openai)
-    model.refineImageSize = .fourK
-    model.selectProvider(.gemini)
+    model.generation.selectProvider(.openai)
+    model.generation.refineImageSize = .fourK
+    model.generation.selectProvider(.gemini)
 
-    XCTAssertEqual(model.refineImageSize, .oneK)
+    XCTAssertEqual(model.generation.refineImageSize, .oneK)
   }
 
   func testFeedbackCategoriesMatchWebContract() {
@@ -122,14 +122,14 @@ final class AppModelSubmissionTests: XCTestCase {
 
   func testFeedbackMessageLengthMatchesWebLimit() {
     let model = AppModel()
-    model.feedbackMessage = "体验很好"
+    model.settings.feedbackMessage = "体验很好"
 
-    XCTAssertTrue(model.canSubmitFeedback)
+    XCTAssertTrue(model.settings.canSubmitFeedback)
 
-    model.feedbackMessage = ""
-    XCTAssertFalse(model.canSubmitFeedback)
+    model.settings.feedbackMessage = ""
+    XCTAssertFalse(model.settings.canSubmitFeedback)
 
-    model.feedbackMessage = String(repeating: "图", count: 2001)
-    XCTAssertFalse(model.canSubmitFeedback)
+    model.settings.feedbackMessage = String(repeating: "图", count: 2001)
+    XCTAssertFalse(model.settings.canSubmitFeedback)
   }
 }

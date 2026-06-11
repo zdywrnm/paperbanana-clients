@@ -14,6 +14,21 @@ struct CreateJobEnvelope: Decodable {
   }
 }
 
+struct PreparedReferenceUpload: Decodable {
+  let clientId: String
+  let uploadURL: String
+  let objectKey: String
+  let uploadToken: String?
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: DynamicCodingKey.self)
+    clientId = container.string("clientId", "client_id")
+    uploadURL = container.string("uploadUrl", "uploadURL", "upload_url")
+    objectKey = container.string("objectKey", "object_key")
+    uploadToken = container.optionalString("uploadToken", "upload_token")
+  }
+}
+
 struct UploadEnvelope: Decodable {
   let uploads: [PreparedReferenceUpload]
 }
