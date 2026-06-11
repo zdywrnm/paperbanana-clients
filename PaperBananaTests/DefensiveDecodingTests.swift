@@ -2,9 +2,13 @@ import XCTest
 @testable import PaperBanana
 
 /// SYNC 2026-06-10：小程序端 getJob 曾报"非法 JSON"（最终判定为误报），
-/// 小程序端加了 coerceJsonResponse 防御。iOS 对齐：requestJSON 首次解码失败后，
-/// 移除响应里裸出现的非法控制字符（保留 \t \n \r，它们是合法 JSON whitespace；
-/// 字符串内的合法转义如 \n 是两个 ASCII 字符，不受影响）再重试解码一次。
+/// 小程序端加了 coerceJsonResponse 防御。iOS 对齐其语义：requestJSON 发现原始响应
+/// 不是合法 JSON 时，裸 \t \n \r 替换为空格（空格在 JSON 字符串内外都合法，可修复
+/// 字符串值内混入裸换行的损坏模式，如 logs_tail 事故场景），其余 0x00-0x1F 裸控制
+/// 字节移除，envelope 失败检查与解码整体换用清洗后的数据——和小程序一样先清洗、
+/// 再跑失败检查，避免把损坏的服务端错误响应误报为成功、把损坏字段静默置空
+/// （JSONDecoder 对字符串值内裸控制字节是惰性校验，EmptyEnvelope/宽松字段不会触发解码失败）。
+/// 字符串内的合法转义如 \n 是两个 ASCII 字符，不含裸控制字节，不受影响。
 final class DefensiveDecodingTests: XCTestCase {
   override func tearDown() {
     DefensiveDecodingURLProtocolStub.requestHandler = nil
@@ -32,6 +36,53 @@ final class DefensiveDecodingTests: XCTestCase {
     XCTAssertEqual(job.title, "abcdef")
     // 合法 JSON 转义（\n）不被清洗破坏，仍解码为换行。
     XCTAssertEqual(job.failureLogsText, "line1\nline2")
+  }
+
+  func testBareNewlineInsideStringValueDecodesWithSpaceReplacement() async throws {
+    let client = PaperBananaAPIClient(session: URLSession.defensiveDecodingStubbedSession())
+    // 原始事故场景：logs_tail 字符串值内混入裸换行/制表符（JSONDecoder 必拒）。
+    // 对齐小程序 coerceJsonResponse：\t \n \r 替换为空格后成功解码。
+    var body = Data(#"{"code":0,"job":{"id":"job-5","status":"failed","logs_tail":"line1"#.utf8)
+    body.append(0x0A)
+    body.append(Data("line2".utf8))
+    body.append(0x09)
+    body.append(Data(#"line3"}}"#.utf8))
+    DefensiveDecodingURLProtocolStub.requestHandler = { request in
+      DefensiveDecodingURLProtocolStub.response(url: request.url, statusCode: 200, body: body)
+    }
+
+    let job = try await client.getJob(apiBase: "https://gateway.example", jobID: "job-5")
+
+    XCTAssertEqual(job.id, "job-5")
+    XCTAssertEqual(job.statusKind, .failed)
+    // 字符串值内的裸换行/制表符变为空格，其余内容保持原样。
+    XCTAssertEqual(job.failureLogsText, "line1 line2 line3")
+  }
+
+  func testCorruptedErrorEnvelopeThrowsServerErrorInsteadOfFalseSuccess() async {
+    let client = PaperBananaAPIClient(session: URLSession.defensiveDecodingStubbedSession())
+    // 200 + 错误 envelope（code!=0）+ 字符串值内裸控制字节：原始 JSONSerialization
+    // 解析失败导致首轮 envelope 失败检查落空；清洗后必须补查并抛服务端错误，
+    // 不能让 EmptyEnvelope 解码成功把它误报为成功（signIn/signUp/submitFeedback 路径）。
+    var body = Data(#"{"code":1,"error":"server"#.utf8)
+    body.append(0x00)
+    body.append(Data(#" exploded"}"#.utf8))
+    DefensiveDecodingURLProtocolStub.requestHandler = { request in
+      DefensiveDecodingURLProtocolStub.response(url: request.url, statusCode: 200, body: body)
+    }
+
+    do {
+      try await client.signIn(apiBase: "https://gateway.example", email: "a@b.c", password: "secret123")
+      XCTFail("Expected server error, got false success")
+    } catch let error as PaperBananaAPIError {
+      guard case .http(let details) = error else {
+        return XCTFail("Expected .http, got \(error)")
+      }
+      XCTAssertEqual(details.statusCode, 200)
+      XCTAssertEqual(details.message, "server exploded")
+    } catch {
+      XCTFail("Expected PaperBananaAPIError.http, got \(error)")
+    }
   }
 
   func testWellFormedJSONWithLegalWhitespaceIsUnaffected() async throws {
@@ -78,9 +129,11 @@ final class DefensiveDecodingTests: XCTestCase {
       _ = try await client.getJob(apiBase: "https://gateway.example", jobID: "job-4")
       XCTFail("Expected decoding error")
     } catch let error as PaperBananaAPIError {
-      guard case .decoding = error else {
+      guard case .decoding(let message) = error else {
         return XCTFail("Expected .decoding, got \(error)")
       }
+      // 清洗后重试仍失败时带标注前缀，与首次解码即失败的路径可区分，便于排障。
+      XCTAssertTrue(message.hasPrefix("清洗控制字符后仍解码失败"), "unexpected message: \(message)")
     } catch {
       XCTFail("Expected PaperBananaAPIError.decoding, got \(error)")
     }

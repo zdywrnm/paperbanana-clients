@@ -207,7 +207,23 @@ final class PaperBananaAPIClient {
 
     let (data, response) = try await session.data(for: request)
     guard let httpResponse = response as? HTTPURLResponse else { throw PaperBananaAPIError.invalidResponse }
-    let object = data.isEmpty ? [:] : ((try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:])
+
+    // 防御性解析（对齐小程序端 coerceJsonResponse，SYNC 2026-06-10）：
+    // 原始 payload 不是合法 JSON 且清洗有改动时，envelope 失败检查与解码整体换用
+    // 清洗后的数据——与小程序一致（coerceJsonResponse 先清洗，再跑 code/statusCode 检查）。
+    // 必须在两者之前换，不能等"解码失败后再重试"：JSONDecoder 对字符串值内的裸控制
+    // 字节是惰性校验，EmptyEnvelope 或 try? 宽松字段根本不会触发解码失败——否则损坏的
+    // 错误 envelope（{"code":1,…} + 裸控制字节）会被误报为成功，损坏字段会被静默置空。
+    var payload = data.isEmpty ? Data("{}".utf8) : data
+    var parsed = try? JSONSerialization.jsonObject(with: payload)
+    var didSanitize = false
+    if parsed == nil, let sanitized = Self.strippingBareControlCharacters(payload) {
+      payload = sanitized
+      didSanitize = true
+      parsed = try? JSONSerialization.jsonObject(with: sanitized)
+    }
+
+    let object = parsed as? [String: Any] ?? [:]
     let isHTTPError = !(200..<300).contains(httpResponse.statusCode)
     let isEnvelopeFailure = objectIndicatesFailure(object)
     if isHTTPError || isEnvelopeFailure {
@@ -217,31 +233,39 @@ final class PaperBananaAPIClient {
         message: serverErrorMessage(from: object)
       ))
     }
-    let payload = data.isEmpty ? Data("{}".utf8) : data
     do {
       return try decoder.decode(T.self, from: payload)
-    } catch let firstError {
-      // 防御性解析（对齐小程序端 coerceJsonResponse，SYNC 2026-06-10）：
-      // 个别后端响应可能混入裸控制字符导致解码失败，清洗后重试一次。
-      let sanitized = Self.strippingBareControlCharacters(payload)
-      guard sanitized.count != payload.count else {
-        throw PaperBananaAPIError.decoding(firstError.localizedDescription)
-      }
-      do {
-        return try decoder.decode(T.self, from: sanitized)
-      } catch {
-        throw PaperBananaAPIError.decoding(error.localizedDescription)
-      }
+    } catch {
+      // 带标注前缀区分两条失败路径，便于排障（Minor #3）。
+      throw PaperBananaAPIError.decoding(
+        didSanitize
+          ? "清洗控制字符后仍解码失败：\(error.localizedDescription)"
+          : error.localizedDescription
+      )
     }
   }
 
-  /// 移除 JSON 中不可能合法裸出现的控制字节（0x00-0x08、0x0B、0x0C、0x0E-0x1F）。
-  /// 保留 \t(0x09) \n(0x0A) \r(0x0D)——它们在字符串外是合法 whitespace；
+  /// 清洗裸控制字节，语义对齐小程序端 coerceJsonResponse
+  /// （apps/miniprogram/miniprogram/utils/api.ts）：
+  /// - \t(0x09) \n(0x0A) \r(0x0D) → 替换为空格（0x20 在 JSON 字符串内外都合法，
+  ///   能修复字符串值内混入裸换行的损坏模式，如 logs_tail 事故场景）；
+  /// - 其余 0x00-0x08、0x0B、0x0C、0x0E-0x1F → 移除。
   /// 字符串内的合法转义（如 "\n"）是两个 ASCII 字符，不含裸控制字节，不受影响。
-  private static func strippingBareControlCharacters(_ data: Data) -> Data {
-    data.filter { byte in
-      byte >= 0x20 || byte == 0x09 || byte == 0x0A || byte == 0x0D
+  /// 没有任何改动时返回 nil（替换不改变 count，不能用长度判断是否清洗过）。
+  private static func strippingBareControlCharacters(_ data: Data) -> Data? {
+    var sanitized = Data(capacity: data.count)
+    var didChange = false
+    for byte in data {
+      if byte >= 0x20 {
+        sanitized.append(byte)
+      } else if byte == 0x09 || byte == 0x0A || byte == 0x0D {
+        sanitized.append(0x20)
+        didChange = true
+      } else {
+        didChange = true
+      }
     }
+    return didChange ? sanitized : nil
   }
 
   private func dictionary<T: Encodable>(from value: T) throws -> [String: Any] {
