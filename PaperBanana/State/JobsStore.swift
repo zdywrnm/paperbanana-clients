@@ -45,6 +45,14 @@ final class JobsStore {
     poller.resume()
   }
 
+  /// 轮询因超时 / 连续失败停止后，由 UI「重新检查」触发的恢复入口：
+  /// 清除错误并对当前任务重新启动轮询。
+  func retryPolling() {
+    guard !currentJobID.isEmpty else { return }
+    pollingError = ""
+    startPolling(jobID: currentJobID)
+  }
+
   func loadUserJobs(silent: Bool) async {
     guard auth.currentUser != nil else { return }
     if !silent {

@@ -53,7 +53,11 @@ struct JobDetailView: View {
             }
           }
         } else if job.statusKind == .running || job.statusKind == .queued {
-          ProgressView("生成中")
+          if job.id == model.jobs.currentJobID, !model.jobs.pollingError.isEmpty {
+            pollingErrorRow
+          } else {
+            ProgressView("生成中")
+          }
         }
         if !job.visibleReferenceImages.isEmpty {
           ReferenceEchoGrid(model: model, references: job.visibleReferenceImages)
@@ -70,6 +74,21 @@ struct JobDetailView: View {
     .padding()
     .background(AppBackground())
     .navigationTitle("任务详情")
+  }
+
+  /// 轮询异常停止（超时 / 连续失败）时的最小提示 + 恢复入口；精致 UI 留给 Phase 5。
+  private var pollingErrorRow: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Label(model.jobs.pollingError, systemImage: "exclamationmark.triangle")
+        .font(.footnote)
+        .foregroundStyle(.orange)
+      Button("重新检查") {
+        model.jobs.retryPolling()
+      }
+      .buttonStyle(.bordered)
+      .controlSize(.small)
+      .paperGlassButton()
+    }
   }
 }
 

@@ -12,7 +12,10 @@ final class ExportCenter {
   var exportingJobArchiveID: Job.ID?
 
   /// 错误弹窗（由 AppModel 注入的跨域门面）。
-  @ObservationIgnored var presentAlert: (String) -> Void = { _ in }
+  /// 默认实现 debug 下断言提醒忘记接线（release 下仍是 no-op），避免错误静默丢失。
+  @ObservationIgnored var presentAlert: (String) -> Void = { message in
+    assertionFailure("presentAlert not wired: \(message)")
+  }
 
   private let apiClient: PaperBananaAPIClient
   private let settings: SettingsStore

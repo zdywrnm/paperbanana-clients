@@ -3,7 +3,8 @@ import Foundation
 /// 任务轮询器：指数退避 + 总时长上限 + 连续失败熔断。
 ///
 /// - 初始间隔 2s，每次 ×1.5 退避，封顶 15s。
-/// - 总时长超过 10 分钟停止并产出 `.timedOut`。
+/// - 总时长超过 10 分钟停止并产出 `.timedOut`；预算按 `now()` 墙钟真实流逝判断
+///   （包含 fetch 耗时与暂停期间），而非只累计 sleep 时长。
 /// - 连续 5 次请求失败停止并产出 `.repeatedFailures`；单次失败不中断。
 /// - 任务到达 terminal 状态（succeeded/failed）立即停止。
 /// - 任务状态变化（status 或 stages 数量变化）会把退避间隔重置回初始值，
@@ -31,18 +32,23 @@ final class JobPoller {
 
   /// 可注入的睡眠实现；测试里替换成只记录间隔的 fake，避免真实等待。
   var sleep: @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+  /// 可注入的当前时刻来源；测试里替换成手动推进的 fake，让预算判断可控。
+  var now: @MainActor () -> ContinuousClock.Instant = { ContinuousClock.now }
 
   private(set) var isPaused = false
   private(set) var isActive = false
 
   private let configuration: Configuration
-  private var task: Task<Void, Never>?
+  /// 轮询循环任务。标记 nonisolated(unsafe) 仅为允许 deinit 兜底取消；
+  /// 其余读写都发生在 MainActor 上。
+  private nonisolated(unsafe) var task: Task<Void, Never>?
   private var fetch: Fetch?
   private var onUpdate: UpdateHandler?
   private var onFinish: FinishHandler?
 
   private var currentInterval: Duration
-  private var elapsed: Duration = .zero
+  /// 轮询起始时刻：预算按 `now() - startedAt` 的真实墙钟流逝判断。
+  private var startedAt: ContinuousClock.Instant = ContinuousClock.now
   private var consecutiveFailures = 0
   private var lastStatus: String?
   private var lastStageCount: Int?
@@ -53,13 +59,18 @@ final class JobPoller {
     currentInterval = configuration.initialInterval
   }
 
+  deinit {
+    // 兜底：持有方释放时取消遗留的轮询任务，避免孤儿循环继续请求。
+    task?.cancel()
+  }
+
   func start(fetch: @escaping Fetch, onUpdate: @escaping UpdateHandler, onFinish: @escaping FinishHandler) {
     stop()
     self.fetch = fetch
     self.onUpdate = onUpdate
     self.onFinish = onFinish
     currentInterval = configuration.initialInterval
-    elapsed = .zero
+    startedAt = now()
     consecutiveFailures = 0
     lastStatus = nil
     lastStageCount = nil
@@ -104,7 +115,7 @@ final class JobPoller {
       guard isActive, !Task.isCancelled else { return }
 
       let interval = currentInterval
-      if elapsed + interval > configuration.overallBudget {
+      if now() - startedAt + interval > configuration.overallBudget {
         finish(.timedOut)
         return
       }
@@ -114,7 +125,6 @@ final class JobPoller {
         return
       }
       guard isActive, !Task.isCancelled else { return }
-      elapsed += interval
     }
   }
 

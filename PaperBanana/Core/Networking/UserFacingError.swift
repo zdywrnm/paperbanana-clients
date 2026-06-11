@@ -7,10 +7,15 @@ import Foundation
 /// 2. 已知英文错误消息（Better Auth / 网关返回的固定文案）
 /// 3. HTTP 状态码（401 → 提示登录、403 → 无权限、429 → 稍后再试、5xx → 服务暂时不可用；
 ///    5xx 仅在响应没有更具体的消息时映射，避免吃掉后端给出的真实原因）
-/// 4. 原始消息字符串 contains() 兜底
+/// 4. URLError.code 显式映射（localizedDescription 在非英文设备上是本地化文案，
+///    字符串子串兜底永不命中，所以传输层错误按 code 映射）
+/// 5. 原始消息字符串 contains() 兜底
 func formatUserFacingError(_ error: Error) -> String {
   if let apiError = error as? PaperBananaAPIError, case .http(let details) = apiError {
     return userFacingMessage(for: details)
+  }
+  if let urlError = error as? URLError, let mapped = mappedURLErrorCode(urlError.code) {
+    return mapped
   }
   return formatUserFacingError(error.localizedDescription)
 }
@@ -58,6 +63,20 @@ private func mappedStatusCode(_ statusCode: Int, hasSpecificMessage: Bool) -> St
     return hasSpecificMessage ? nil : "服务暂时不可用，请稍后重试。"
   default:
     return nil
+  }
+}
+
+/// URLError 传输层错误的显式映射；都不命中时返回 nil 落入字符串兜底。
+private func mappedURLErrorCode(_ code: URLError.Code) -> String? {
+  switch code {
+  case .timedOut:
+    "请求超时，请稍后重试。"
+  case .notConnectedToInternet, .networkConnectionLost:
+    "网络未连接，请检查网络后重试。"
+  case .cannotFindHost, .cannotConnectToHost:
+    "无法连接服务器，请确认网络可访问 Sealos 后端地址。"
+  default:
+    nil
   }
 }
 

@@ -92,6 +92,27 @@ final class ErrorMappingTests: XCTestCase {
     XCTAssertEqual(formatUserFacingError(error), "I'm a teapot")
   }
 
+  // MARK: - URLError code 显式映射（不依赖 localizedDescription 的语言）
+
+  func testURLErrorTimedOutMapsToTimeoutMessage() {
+    XCTAssertEqual(formatUserFacingError(URLError(.timedOut)), "请求超时，请稍后重试。")
+  }
+
+  func testURLErrorOfflineCodesMapToNoNetworkMessage() {
+    XCTAssertEqual(formatUserFacingError(URLError(.notConnectedToInternet)), "网络未连接，请检查网络后重试。")
+    XCTAssertEqual(formatUserFacingError(URLError(.networkConnectionLost)), "网络未连接，请检查网络后重试。")
+  }
+
+  func testURLErrorHostCodesMapToCannotReachServerMessage() {
+    XCTAssertEqual(formatUserFacingError(URLError(.cannotFindHost)), "无法连接服务器，请确认网络可访问 Sealos 后端地址。")
+    XCTAssertEqual(formatUserFacingError(URLError(.cannotConnectToHost)), "无法连接服务器，请确认网络可访问 Sealos 后端地址。")
+  }
+
+  func testUnmappedURLErrorFallsBackToDescriptionPath() {
+    let error = URLError(.badServerResponse)
+    XCTAssertEqual(formatUserFacingError(error), formatUserFacingError(error.localizedDescription))
+  }
+
   // MARK: - localizedDescription
 
   func testHTTPErrorDescriptionPrefersMessageThenFallsBackToStatus() {
