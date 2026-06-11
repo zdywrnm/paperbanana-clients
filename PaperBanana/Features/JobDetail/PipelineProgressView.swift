@@ -83,9 +83,10 @@ struct PipelineProgressView: View {
     .frame(maxWidth: .infinity)
   }
 
-  /// Dynamic Type 放大溢出时：两列 Grid，行内保留短连接线。
+  /// Dynamic Type 放大溢出时：两列 Grid，行内保留短连接线，
+  /// 行与行之间补一段竖向连接线（上一行尾节点 → 下一行首节点），保持与单行布局相同的连贯语义。
   private var compactGrid: some View {
-    Grid(alignment: .leading, horizontalSpacing: Theme.Spacing.sm, verticalSpacing: Theme.Spacing.lg) {
+    Grid(alignment: .leading, horizontalSpacing: Theme.Spacing.sm, verticalSpacing: Theme.Spacing.sm) {
       ForEach(Array(stride(from: 0, to: state.nodes.count, by: 2)), id: \.self) { start in
         GridRow {
           nodeView(state.nodes[start])
@@ -94,6 +95,15 @@ struct PipelineProgressView: View {
               .frame(width: Theme.Spacing.xl)
               .padding(.top, nodeSize / 2 - 1.5)
             nodeView(state.nodes[start + 1])
+          }
+        }
+        if start + 2 < state.nodes.count {
+          GridRow {
+            Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
+            Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
+            connector(after: start + 1, axis: .vertical)
+              .frame(height: Theme.Spacing.lg)
+              .frame(maxWidth: .infinity)
           }
         }
       }
@@ -202,9 +212,13 @@ struct PipelineProgressView: View {
 
   // MARK: - 连接线
 
+  private enum ConnectorAxis {
+    case horizontal, vertical
+  }
+
   /// index → index+1 之间的连接段：两端 done 实色；指向 active 的段流动渐变；其余灰。
   @ViewBuilder
-  private func connector(after index: Int) -> some View {
+  private func connector(after index: Int, axis: ConnectorAxis = .horizontal) -> some View {
     let leading = state.nodes[index].phase
     let trailing = state.nodes[index + 1].phase
 
@@ -212,23 +226,26 @@ struct PipelineProgressView: View {
       if leading == .done, trailing == .done || trailing == .failed {
         Capsule().fill(Theme.Palette.banana)
       } else if trailing == .active {
-        flowingLine
+        flowingLine(axis: axis)
       } else {
         Capsule().fill(.quaternary)
       }
     }
-    .frame(height: 3)
+    .frame(
+      width: axis == .vertical ? 3 : nil,
+      height: axis == .horizontal ? 3 : nil
+    )
   }
 
   /// active 段：LinearGradient 相位流动（周期 Theme.Motion.flowPeriod）；减弱动态效果时静止渐变。
   @ViewBuilder
-  private var flowingLine: some View {
+  private func flowingLine(axis: ConnectorAxis) -> some View {
     if reduceMotion {
       Capsule().fill(
         LinearGradient(
           colors: [Theme.Palette.banana, Theme.Palette.banana.opacity(0.2)],
-          startPoint: .leading,
-          endPoint: .trailing
+          startPoint: axis == .horizontal ? .leading : .top,
+          endPoint: axis == .horizontal ? .trailing : .bottom
         )
       )
     } else {
@@ -242,8 +259,12 @@ struct PipelineProgressView: View {
               Theme.Palette.banana,
               Theme.Palette.banana.opacity(0.25)
             ],
-            startPoint: UnitPoint(x: CGFloat(progress) * 2 - 1, y: 0.5),
-            endPoint: UnitPoint(x: CGFloat(progress) * 2 + 1, y: 0.5)
+            startPoint: axis == .horizontal
+              ? UnitPoint(x: CGFloat(progress) * 2 - 1, y: 0.5)
+              : UnitPoint(x: 0.5, y: CGFloat(progress) * 2 - 1),
+            endPoint: axis == .horizontal
+              ? UnitPoint(x: CGFloat(progress) * 2 + 1, y: 0.5)
+              : UnitPoint(x: 0.5, y: CGFloat(progress) * 2 + 1)
           )
         )
       }
@@ -275,6 +296,19 @@ struct PipelineProgressView: View {
     PipelineProgressView(
       state: PipelineState(job: JobPreviewFixtures.running),
       lastPolledAt: .now.addingTimeInterval(-12),
+      isLive: true,
+      onRefresh: {}
+    )
+    .padding()
+  }
+}
+
+#Preview("精修放大中") {
+  ZStack {
+    AppBackground(isGenerating: true)
+    PipelineProgressView(
+      state: PipelineState(job: JobPreviewFixtures.refining),
+      lastPolledAt: .now.addingTimeInterval(-5),
       isLive: true,
       onRefresh: {}
     )

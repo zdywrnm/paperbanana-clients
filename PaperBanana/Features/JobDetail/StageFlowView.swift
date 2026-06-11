@@ -34,7 +34,15 @@ struct StageCard: View {
   @State private var isExpanded = false
 
   private var nodeID: PipelineState.NodeID? {
-    PipelineState.NodeID(stageType: stage.type)
+    PipelineState.NodeID(stageType: stage.type, title: stage.title)
+  }
+
+  /// 阶段卡图标：流水线节点图标优先；stylist 不映射节点（跟随小程序的通用标记处理），
+  /// 但阶段卡单独给配色风格图标；其余未知类型用虚线圆占位。
+  private var stageIconName: String {
+    if let nodeID { return nodeID.systemImage }
+    if stage.type.lowercased() == "stylist" { return "paintpalette" }
+    return "circle.dashed"
   }
 
   private var summaryText: String {
@@ -61,7 +69,7 @@ struct StageCard: View {
 
   private var header: some View {
     HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
-      Image(systemName: nodeID?.systemImage ?? "circle.dashed")
+      Image(systemName: stageIconName)
         .font(.body.weight(.semibold))
         .foregroundStyle(Theme.Palette.banana)
         .frame(width: 24)

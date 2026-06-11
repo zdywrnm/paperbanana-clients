@@ -100,7 +100,6 @@ struct JobStage: Decodable, Identifiable, Equatable {
 
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: DynamicCodingKey.self)
-    id = container.string("id", "_id", default: UUID().uuidString)
     candidateID = container.int("candidate_id", "candidateId")
     type = container.string("type")
     title = container.string("title")
@@ -109,6 +108,22 @@ struct JobStage: Decodable, Identifiable, Equatable {
     suggestion = container.string("suggestion", "criticSuggestion")
     image = try container.decodeIfPresent(StageImage.self, forKey: .key("image"))
     error = container.string("error")
+    // 后端 recordStage 总是带 id；缺失时合成确定性 id（type+candidate+round+title hash），
+    // 保证同一 stage 跨轮询解码 id 稳定——随机 UUID 会让 ForEach 每次轮询都视为新元素。
+    let explicitID = container.string("id", "_id")
+    id = explicitID.isEmpty
+      ? "stage-\(type)-\(candidateID)-\(round)-\(Self.stableHash("\(type)|\(candidateID)|\(round)|\(title)"))"
+      : explicitID
+  }
+
+  /// 确定性字符串 hash（FNV-1a）：Swift 原生 hashValue 每次启动随机化，不能用于合成稳定 id。
+  private static func stableHash(_ string: String) -> String {
+    var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+    for byte in string.utf8 {
+      hash ^= UInt64(byte)
+      hash = hash &* 0x0000_0100_0000_01b3
+    }
+    return String(hash, radix: 36)
   }
 }
 

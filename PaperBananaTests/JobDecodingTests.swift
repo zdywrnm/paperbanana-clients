@@ -158,4 +158,42 @@ final class JobDecodingTests: XCTestCase {
     XCTAssertEqual(metadata["候选图"], "3 张")
     XCTAssertEqual(metadata["阶段"], "2 个")
   }
+
+  // MARK: - stage id 合成（后端缺 id 时的确定性回退）
+
+  func testStageWithoutIDGetsDeterministicSyntheticID() throws {
+    // 后端 recordStage 总是带 id；缺失时合成 id 必须跨解码稳定（随机 UUID 会让
+    // SwiftUI ForEach 每次轮询都把同一 stage 当新元素）。
+    let json = Data("""
+    {
+      "id": "job-stage-id",
+      "status": "running",
+      "stages": [
+        {"candidate_id": 1, "type": "render", "title": "初次渲染", "round": 0},
+        {"candidate_id": 1, "type": "render", "title": "重渲染（第1轮）", "round": 1}
+      ]
+    }
+    """.utf8)
+
+    let first = try JSONDecoder().decode(Job.self, from: json)
+    let second = try JSONDecoder().decode(Job.self, from: json)
+
+    XCTAssertEqual(first.stages.map(\.id), second.stages.map(\.id), "同一 stage 跨轮询解码 id 必须稳定")
+    XCTAssertNotEqual(first.stages[0].id, first.stages[1].id, "不同 stage 必须得到不同 id")
+    XCTAssertTrue(first.stages[0].id.hasPrefix("stage-render-1-0-"))
+  }
+
+  func testStageWithExplicitIDKeepsBackendID() throws {
+    let json = Data("""
+    {
+      "id": "job-stage-id",
+      "status": "running",
+      "stages": [{"id": "stage-from-backend", "candidate_id": 0, "type": "critic", "round": 1}]
+    }
+    """.utf8)
+
+    let job = try JSONDecoder().decode(Job.self, from: json)
+
+    XCTAssertEqual(job.stages.first?.id, "stage-from-backend")
+  }
 }

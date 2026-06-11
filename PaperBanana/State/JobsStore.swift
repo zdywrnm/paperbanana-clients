@@ -47,6 +47,8 @@ final class JobsStore {
     currentJobID = jobID
     currentJob = Job(id: jobID, status: status)
     pollingError = ""
+    // 新任务还没拿到过数据：清掉上一个任务的刷新时间，避免"刷新于 X 前"显示旧任务的时刻。
+    lastPolledAt = nil
     startPolling(jobID: jobID)
   }
 
@@ -70,8 +72,11 @@ final class JobsStore {
   /// 单次失败静默（轮询循环自己负责错误上报），成功则更新数据与刷新时间。
   func refreshCurrentJob() async {
     guard !currentJobID.isEmpty else { return }
+    let jobID = currentJobID
     do {
-      let job = try await apiClient.getJob(apiBase: settings.apiBase, jobID: currentJobID)
+      let job = try await apiClient.getJob(apiBase: settings.apiBase, jobID: jobID)
+      // await 期间可能已 track 了新任务：旧任务的慢响应不得覆盖新任务的 currentJob。
+      guard jobID == currentJobID else { return }
       currentJob = job
       lastPolledAt = Date()
     } catch {
