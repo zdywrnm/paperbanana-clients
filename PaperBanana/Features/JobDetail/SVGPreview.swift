@@ -25,6 +25,8 @@ struct SVGPreviewCard: View {
 
 struct SVGWebPreview: UIViewRepresentable {
   let url: URL
+  /// 全屏查看器模式：开启滚动与捏合缩放（内联缩略图保持静态）。
+  var zoomable = false
 
   func makeCoordinator() -> Coordinator {
     Coordinator()
@@ -33,13 +35,21 @@ struct SVGWebPreview: UIViewRepresentable {
   func makeUIView(context: Context) -> WKWebView {
     let configuration = WKWebViewConfiguration()
     configuration.defaultWebpagePreferences.allowsContentJavaScript = false
+    if zoomable {
+      configuration.ignoresViewportScaleLimits = true
+    }
 
     let webView = WKWebView(frame: .zero, configuration: configuration)
     webView.isOpaque = false
     webView.backgroundColor = .clear
     webView.scrollView.backgroundColor = .clear
-    webView.scrollView.isScrollEnabled = false
+    webView.scrollView.isScrollEnabled = zoomable
     webView.scrollView.contentInsetAdjustmentBehavior = .never
+    if zoomable {
+      webView.scrollView.minimumZoomScale = 1
+      webView.scrollView.maximumZoomScale = 4
+      webView.scrollView.bouncesZoom = true
+    }
     return webView
   }
 

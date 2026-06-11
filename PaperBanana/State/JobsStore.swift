@@ -12,6 +12,8 @@ final class JobsStore {
   var recordsLoading = false
   /// 轮询的结构化失败结果（连续失败 / 超时）转成的可展示文案；为空表示无异常。
   var pollingError = ""
+  /// 最近一次成功拿到 currentJob 数据的时刻（轮询或手动刷新），驱动"最后刷新 X 前"。
+  var lastPolledAt: Date?
   /// 当前 userJobs 来自本地缓存（尚未被网络刷新覆盖）。
   var isShowingCachedData = false
 
@@ -64,6 +66,19 @@ final class JobsStore {
     startPolling(jobID: currentJobID)
   }
 
+  /// 手动"立即刷新"：对当前任务做一次性 getJob，不打断退避轮询节奏。
+  /// 单次失败静默（轮询循环自己负责错误上报），成功则更新数据与刷新时间。
+  func refreshCurrentJob() async {
+    guard !currentJobID.isEmpty else { return }
+    do {
+      let job = try await apiClient.getJob(apiBase: settings.apiBase, jobID: currentJobID)
+      currentJob = job
+      lastPolledAt = Date()
+    } catch {
+      // 一次性刷新失败不展示错误：常驻错误通道是 pollingError。
+    }
+  }
+
   func loadUserJobs(silent: Bool) async {
     guard auth.currentUser != nil else { return }
     if !silent {
@@ -100,6 +115,7 @@ final class JobsStore {
       fetch: { try await apiClient.getJob(apiBase: settings.apiBase, jobID: jobID) },
       onUpdate: { [weak self] job in
         self?.currentJob = job
+        self?.lastPolledAt = Date()
       },
       onFinish: { [weak self] termination in
         self?.handlePollingTermination(termination)

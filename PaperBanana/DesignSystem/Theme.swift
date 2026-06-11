@@ -35,6 +35,12 @@ enum Theme {
     static let playful: Animation = .bouncy(extraBounce: 0.1)
     /// 背景 mesh 漂移一圈的周期（秒）。
     static let backgroundDriftPeriod: TimeInterval = 8
+    /// 流水线 active 节点呼吸脉冲一个来回的周期（秒）。
+    static let pulsePeriod: TimeInterval = 1.6
+    /// 流水线 active 节点脉冲的单程曲线（半个周期）。
+    static let pulseSegment: Animation = .easeInOut(duration: pulsePeriod / 2)
+    /// 流水线连接线渐变流动一圈的周期（秒）。
+    static let flowPeriod: TimeInterval = 2
   }
 
   // MARK: - 色板

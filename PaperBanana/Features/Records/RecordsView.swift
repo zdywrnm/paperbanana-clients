@@ -32,6 +32,7 @@ struct RecordsView: View {
             if let job = model.jobs.userJobs.first(where: { $0.id == id }) {
               ScrollView {
                 JobDetailView(model: model, job: job)
+                  .padding()
               }
               .background(AppBackground(isGenerating: model.jobs.isActivelyGenerating))
               .navigationTitle("任务详情")
