@@ -68,6 +68,9 @@ struct SettingsView: View {
         TextField("网关地址", text: $model.settings.apiBase)
           .textInputAutocapitalization(.never)
           .textFieldStyle(.roundedBorder)
+        Text("请使用网关域名；直连 Laf 域名将被拒绝身份相关操作")
+          .font(.footnote)
+          .foregroundStyle(.secondary)
         HStack {
           Button("恢复默认") { model.settings.resetBackendBase() }
           Button("检测连接") { Task { await model.settings.refreshHealth() } }

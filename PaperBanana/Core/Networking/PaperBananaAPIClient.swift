@@ -217,10 +217,30 @@ final class PaperBananaAPIClient {
         message: serverErrorMessage(from: object)
       ))
     }
+    let payload = data.isEmpty ? Data("{}".utf8) : data
     do {
-      return try decoder.decode(T.self, from: data.isEmpty ? Data("{}".utf8) : data)
-    } catch {
-      throw PaperBananaAPIError.decoding(error.localizedDescription)
+      return try decoder.decode(T.self, from: payload)
+    } catch let firstError {
+      // 防御性解析（对齐小程序端 coerceJsonResponse，SYNC 2026-06-10）：
+      // 个别后端响应可能混入裸控制字符导致解码失败，清洗后重试一次。
+      let sanitized = Self.strippingBareControlCharacters(payload)
+      guard sanitized.count != payload.count else {
+        throw PaperBananaAPIError.decoding(firstError.localizedDescription)
+      }
+      do {
+        return try decoder.decode(T.self, from: sanitized)
+      } catch {
+        throw PaperBananaAPIError.decoding(error.localizedDescription)
+      }
+    }
+  }
+
+  /// 移除 JSON 中不可能合法裸出现的控制字节（0x00-0x08、0x0B、0x0C、0x0E-0x1F）。
+  /// 保留 \t(0x09) \n(0x0A) \r(0x0D)——它们在字符串外是合法 whitespace；
+  /// 字符串内的合法转义（如 "\n"）是两个 ASCII 字符，不含裸控制字节，不受影响。
+  private static func strippingBareControlCharacters(_ data: Data) -> Data {
+    data.filter { byte in
+      byte >= 0x20 || byte == 0x09 || byte == 0x0A || byte == 0x0D
     }
   }
 
