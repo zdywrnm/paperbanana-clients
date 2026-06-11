@@ -57,6 +57,7 @@ struct GenerationStatusAccessory: View {
       .contentShape(.rect)
     }
     .buttonStyle(.plain)
-    .accessibilityLabel(hasPollingError ? "任务轮询中断，点按查看详情" : "任务\(primaryText)，点按查看详情")
+    .accessibilityLabel(hasPollingError ? "任务轮询中断" : "任务\(primaryText)")
+    .accessibilityHint("点按查看详情")
   }
 }

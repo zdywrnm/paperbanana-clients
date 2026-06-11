@@ -18,7 +18,6 @@ struct TemplatesView: View {
                 Button("使用模板") {
                   model.applyExample(example)
                 }
-                .buttonStyle(.borderedProminent)
                 .paperGlassButton(prominent: true)
               }
             }
@@ -26,7 +25,7 @@ struct TemplatesView: View {
         }
         .padding()
       }
-      .background(AppBackground(isGenerating: model.jobs.hasActiveJob))
+      .background(AppBackground(isGenerating: model.jobs.isActivelyGenerating))
       .navigationTitle("示例模板")
     }
   }

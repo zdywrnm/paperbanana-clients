@@ -19,7 +19,6 @@ struct JobDetailView: View {
           } label: {
             Label(model.exports.exportingJobArchiveID == job.id ? "打包中" : "分享全部", systemImage: model.exports.exportingJobArchiveID == job.id ? "hourglass" : "archivebox")
           }
-          .buttonStyle(.bordered)
           .paperGlassButton()
           .disabled(model.exports.exportingJobArchiveID == job.id)
         }
@@ -72,8 +71,6 @@ struct JobDetailView: View {
       }
     }
     .padding()
-    .background(AppBackground(isGenerating: model.jobs.hasActiveJob))
-    .navigationTitle("任务详情")
   }
 
   /// 轮询异常停止（超时 / 连续失败）时的最小提示 + 恢复入口；精致 UI 留给 Phase 5。
@@ -85,7 +82,6 @@ struct JobDetailView: View {
       Button("重新检查") {
         model.jobs.retryPolling()
       }
-      .buttonStyle(.bordered)
       .controlSize(.small)
       .paperGlassButton()
     }

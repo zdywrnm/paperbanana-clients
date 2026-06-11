@@ -8,7 +8,6 @@ final class JobsStore {
   var currentJobID = ""
   var currentJob: Job?
   var userJobs: [Job] = []
-  var selectedRecordID: Job.ID?
   var recordsError = ""
   var recordsLoading = false
   /// 轮询的结构化失败结果（连续失败 / 超时）转成的可展示文案；为空表示无异常。
@@ -16,10 +15,16 @@ final class JobsStore {
   /// 当前 userJobs 来自本地缓存（尚未被网络刷新覆盖）。
   var isShowingCachedData = false
 
-  /// 当前任务是否仍在进行中（排队 / 生成），驱动全局状态胶囊与背景动画。
+  /// 当前任务是否仍在进行中（排队 / 生成），驱动全局状态胶囊的显示。
   var hasActiveJob: Bool {
     guard let status = currentJob?.statusKind else { return false }
     return status == .queued || status == .running
+  }
+
+  /// 背景漂移等装饰动画的驱动条件：任务进行中且轮询未中断。
+  /// 轮询超时 / 连续失败后停止动画省电；状态胶囊仍按 `hasActiveJob` 显示（错误态是恢复入口）。
+  var isActivelyGenerating: Bool {
+    hasActiveJob && pollingError.isEmpty
   }
 
   private let apiClient: PaperBananaAPIClient
@@ -68,7 +73,6 @@ final class JobsStore {
     defer { recordsLoading = false }
     do {
       userJobs = try await apiClient.userJobs(apiBase: settings.apiBase)
-      selectedRecordID = selectedRecordID ?? userJobs.first?.id
       isShowingCachedData = false
       recordsCache.save(userJobs)
     } catch {
@@ -85,7 +89,6 @@ final class JobsStore {
 
   func clearForSignOut() {
     userJobs = []
-    selectedRecordID = nil
     isShowingCachedData = false
     recordsCache.clear()
   }

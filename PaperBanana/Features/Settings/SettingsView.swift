@@ -13,7 +13,7 @@ struct SettingsView: View {
         }
         .padding()
       }
-      .background(AppBackground(isGenerating: model.jobs.hasActiveJob))
+      .background(AppBackground(isGenerating: model.jobs.isActivelyGenerating))
       .navigationTitle("设置")
     }
   }
@@ -47,7 +47,6 @@ struct SettingsView: View {
           Button(model.auth.authSubmitting ? "提交中" : "登录 / 注册") {
             Task { await model.auth.signInOrSignUp() }
           }
-          .buttonStyle(.borderedProminent)
           .paperGlassButton(prominent: true)
           if !model.auth.authError.isEmpty {
             Text(model.auth.authError)
@@ -107,7 +106,6 @@ struct SettingsView: View {
         Button(model.settings.feedbackSubmitting ? "提交中" : "提交反馈") {
           Task { await model.settings.submitFeedback() }
         }
-        .buttonStyle(.borderedProminent)
         .paperGlassButton(prominent: true)
         .disabled(!model.settings.canSubmitFeedback)
         if model.settings.feedbackSuccess {

@@ -34,7 +34,7 @@ struct GenerateView: View {
         }
         .padding()
       }
-      .background(AppBackground(isGenerating: model.jobs.hasActiveJob))
+      .background(AppBackground(isGenerating: model.jobs.isActivelyGenerating))
       .navigationTitle("PaperBanana")
       .task(id: model.generation.modelCapabilityQueryID) {
         await model.generation.refreshMainModelCapability()
@@ -232,7 +232,6 @@ struct GenerateView: View {
         Label(model.generation.isSubmitting ? "提交中" : "生成候选图", systemImage: model.generation.isSubmitting ? "hourglass" : "paperplane.fill")
           .frame(maxWidth: .infinity)
       }
-      .buttonStyle(.borderedProminent)
       .controlSize(.large)
       .disabled(!model.generation.canSubmit)
       .paperGlassButton(prominent: true)

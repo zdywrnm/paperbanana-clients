@@ -25,6 +25,7 @@ enum Theme {
 
   // MARK: - 动画
 
+  /// 动画一律取 Motion 语义常量，不要在 feature 代码手写 .spring/.easeInOut。
   enum Motion {
     /// 状态切换（选中、展开、内容替换）。
     static let stateChange: Animation = .snappy

@@ -15,7 +15,7 @@ struct RecordsView: View {
             Button("去登录") { model.selectedTab = .settings }
           }
         } else {
-          List(selection: $model.jobs.selectedRecordID) {
+          List {
             if model.jobs.isShowingCachedData {
               Text("正在显示本地缓存的记录，下拉刷新获取最新数据。")
                 .font(.footnote)
@@ -27,14 +27,20 @@ struct RecordsView: View {
               }
             }
           }
+          .scrollContentBackground(.hidden)
           .navigationDestination(for: String.self) { id in
             if let job = model.jobs.userJobs.first(where: { $0.id == id }) {
-              JobDetailView(model: model, job: job)
+              ScrollView {
+                JobDetailView(model: model, job: job)
+              }
+              .background(AppBackground(isGenerating: model.jobs.isActivelyGenerating))
+              .navigationTitle("任务详情")
             }
           }
           .refreshable { await model.jobs.loadUserJobs(silent: false) }
         }
       }
+      .background(AppBackground(isGenerating: model.jobs.isActivelyGenerating))
       .navigationTitle("任务记录")
       .toolbar {
         Button {

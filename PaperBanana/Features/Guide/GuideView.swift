@@ -20,7 +20,7 @@ struct GuideView: View {
         }
         .padding()
       }
-      .background(AppBackground(isGenerating: model.jobs.hasActiveJob))
+      .background(AppBackground(isGenerating: model.jobs.isActivelyGenerating))
       .navigationTitle("使用指南")
     }
   }
@@ -47,7 +47,6 @@ struct GuideView: View {
           Label("开始生成", systemImage: "wand.and.stars")
             .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.borderedProminent)
         .paperGlassButton(prominent: true)
 
         Button {
@@ -56,7 +55,6 @@ struct GuideView: View {
           Label("意见反馈", systemImage: "message")
             .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.bordered)
         .paperGlassButton()
       }
     }
