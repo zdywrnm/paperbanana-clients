@@ -50,6 +50,7 @@ struct ReferenceUploadStrip: View {
             } label: {
               Image(systemName: "trash")
             }
+            .accessibilityLabel("移除参考图 \(image.filename)")
           }
           .padding(10)
           .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))

@@ -11,17 +11,32 @@ struct AppBackground: View {
   @Environment(\.colorScheme) private var colorScheme
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+  /// 本轮漂移动画的起始时刻：相位从 0 起，而不是取 wall-clock 相位。
+  /// 否则进入生成态的第一帧控制点就从基准布局突跳到任意相位（P4 遗留）。
+  /// nil 表示静止（未生成 / 减弱动态效果），渲染基准控制点布局。
+  @State private var driftStart: Date?
+
+  private var shouldDrift: Bool { isGenerating && !reduceMotion }
+
   var body: some View {
-    Group {
-      if isGenerating && !reduceMotion {
-        TimelineView(.animation(minimumInterval: 1.0 / 24.0)) { context in
-          mesh(at: context.date.timeIntervalSinceReferenceDate)
-        }
-      } else {
-        mesh(at: nil)
-      }
+    // 单一 TimelineView 保持视图身份稳定：进出生成态只改 driftStart，
+    // MeshGradient 控制点在同一视图内插值，退出时经 Theme.Motion 平滑回到基准布局
+    // 而不是分支切换的一帧突跳。
+    TimelineView(.animation(minimumInterval: 1.0 / 24.0, paused: driftStart == nil)) { context in
+      mesh(at: driftStart.map { max(0, context.date.timeIntervalSince($0)) })
     }
     .ignoresSafeArea()
+    .accessibilityHidden(true)
+    .onChange(of: shouldDrift, initial: true) { _, active in
+      if active {
+        // 入场：相位从 0 起，首帧与基准布局重合，无需动画。
+        driftStart = Date()
+      } else {
+        withAnimation(reduceMotion ? nil : Theme.Motion.entrance) {
+          driftStart = nil
+        }
+      }
+    }
   }
 
   /// `time == nil` 表示静止布局（基准控制点）。
@@ -32,11 +47,13 @@ struct AppBackground: View {
     var ey: Float = 0
     if let time {
       let angle = time * 2 * .pi / Theme.Motion.backgroundDriftPeriod
-      // 中心点画小圆，边中点沿各自边缘缓慢往复；幅度都很小。
+      // 全部用 sin：t=0 时所有偏移为 0，与静止基准布局重合，
+      // 进入生成态时从基准平滑启动而不是跳到任意相位。
+      // 中心点走 ∞ 字形，边中点沿各自边缘缓慢往复；幅度都很小。
       dx = Float(sin(angle)) * 0.05
-      dy = Float(cos(angle)) * 0.05
+      dy = Float(sin(angle * 2)) * 0.03
       ex = Float(sin(angle * 0.5)) * 0.035
-      ey = Float(cos(angle * 0.5)) * 0.035
+      ey = Float(sin(angle * 0.7)) * 0.035
     }
     return MeshGradient(
       width: 3,

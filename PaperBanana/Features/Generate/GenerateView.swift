@@ -95,6 +95,7 @@ struct GenerateView: View {
           Image(systemName: "graduationcap.fill")
             .font(.title2)
             .foregroundStyle(Theme.Palette.banana)
+            .accessibilityHidden(true)
           VStack(alignment: .leading, spacing: 2) {
             Text("论文图示工作台")
               .font(.title2.bold())

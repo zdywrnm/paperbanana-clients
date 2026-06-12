@@ -23,9 +23,8 @@ struct GenerationStatusAccessory: View {
   }
 
   private var secondaryText: String {
-    guard let job else { return "" }
-    let title = job.title.trimmingCharacters(in: .whitespacesAndNewlines)
-    return title == job.id ? "" : title
+    guard let job, job.hasUserVisibleTitle else { return "" }
+    return job.title.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
   var body: some View {

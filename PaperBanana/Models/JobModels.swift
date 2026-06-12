@@ -177,6 +177,13 @@ struct Job: Decodable, Identifiable, Equatable {
     return id
   }
 
+  /// `title` 是否来自用户输入（图注 / 方法内容），而非回退到任务 id。
+  /// 给展示层（如全局状态胶囊副标题）判断"标题值不值得展示"用，
+  /// 避免用 `title == id` 这类脆弱推断。
+  var hasUserVisibleTitle: Bool {
+    !caption.isEmpty || !methodContent.isEmpty
+  }
+
   var failureText: String {
     let trimmedError = failureErrorText
     if !trimmedError.isEmpty { return trimmedError }

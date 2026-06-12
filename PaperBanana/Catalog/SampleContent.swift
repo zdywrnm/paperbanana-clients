@@ -30,6 +30,22 @@ enum PaperBananaSamples {
     InfographicCategory(id: "concept_map", label: "概念关系图", detail: "突出关键词、层级、类别和概念之间的关系。")
   ]
 
+  /// 信息图类别 → SF Symbol（纯展示映射：记录列表占位图、模板卡装饰用）。
+  /// Job 里存的是中文 label，模板里存的是 id，两种入口都支持。
+  static func categorySymbol(idOrLabel value: String) -> String {
+    switch value {
+    case "method_framework", "方法框架图": "rectangle.3.group"
+    case "workflow", "流程图": "arrow.triangle.branch"
+    case "system_architecture", "系统架构图": "server.rack"
+    case "mechanism", "机制示意图": "gearshape.2"
+    case "comparison", "对比图": "rectangle.split.2x1"
+    case "timeline", "时间线/路线图": "calendar.day.timeline.left"
+    case "data_stat", "数据统计图": "chart.bar"
+    case "concept_map", "概念关系图": "circle.hexagongrid"
+    default: "photo.on.rectangle.angled"
+    }
+  }
+
   static let quickStartExamples: [QuickStartExample] = [
     QuickStartExample(
       id: "paper-framework",
