@@ -285,7 +285,7 @@ struct PipelineProgressView: View {
     VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
       Label(pollingError, systemImage: "exclamationmark.triangle")
         .font(.footnote)
-        .foregroundStyle(Theme.Palette.warning)
+        .foregroundStyle(Theme.Palette.warningText)
       if let onRetry {
         Button("重新检查", action: onRetry)
           .font(.footnote.weight(.semibold))

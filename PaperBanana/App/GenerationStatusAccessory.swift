@@ -42,7 +42,7 @@ struct GenerationStatusAccessory: View {
         }
         Text(primaryText)
           .font(.footnote.weight(.semibold))
-          .foregroundStyle(hasPollingError ? AnyShapeStyle(Theme.Palette.warning) : AnyShapeStyle(.primary))
+          .foregroundStyle(hasPollingError ? AnyShapeStyle(Theme.Palette.warningText) : AnyShapeStyle(.primary))
           .lineLimit(1)
         if placement == .expanded, !secondaryText.isEmpty {
           Text(secondaryText)
