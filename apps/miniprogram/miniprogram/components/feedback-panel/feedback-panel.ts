@@ -61,8 +61,9 @@ Component({
     },
 
     refreshFeedbackCanSubmit() {
+      // 门槛与后端/web 一致：非空即可提交（后端校验 1–2000 字，textarea maxlength 已限上限）
       this.setData({
-        feedbackCanSubmit: Boolean(this.data.feedbackMessage.trim().length >= 4 && !this.data.isFeedbackSubmitting),
+        feedbackCanSubmit: Boolean(this.data.feedbackMessage.trim().length >= 1 && !this.data.isFeedbackSubmitting),
       })
     },
 
