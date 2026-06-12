@@ -129,8 +129,7 @@ struct GenerateView: View {
 
       SecureField(model.generation.selectedProviderConfig.keyPlaceholder, text: Binding(get: { model.generation.selectedAPIKey }, set: { model.generation.updateSelectedAPIKey($0) }))
         .textContentType(.password)
-        .padding(Theme.Spacing.md)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.control))
+        .fieldWell()
         .accessibilityLabel("\(model.generation.selectedProviderConfig.label) API Key 输入")
 
       APIKeyGuideView(config: model.generation.selectedProviderConfig)
@@ -413,9 +412,7 @@ struct GenerateView: View {
     GlassPanel {
       VStack(alignment: .leading, spacing: Theme.Spacing.md) {
         HStack(alignment: .firstTextBaseline) {
-          Text(title)
-            .font(.headline)
-            .accessibilityAddTraits(.isHeader)
+          SectionHeader(title: title)
           Spacer()
           trailing()
         }

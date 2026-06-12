@@ -24,9 +24,7 @@ struct SettingsView: View {
   private var accountPanel: some View {
     GlassPanel {
       VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-        Label("账号", systemImage: "person.crop.circle")
-          .font(.headline)
-          .accessibilityAddTraits(.isHeader)
+        SectionHeader(title: "账号", systemImage: "person.crop.circle")
         if let user = model.auth.currentUser {
           signedInContent(user: user)
         } else {
@@ -37,25 +35,26 @@ struct SettingsView: View {
   }
 
   private func signedInContent(user: CurrentUser) -> some View {
-    VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+    // 昵称与邮箱不同且非空时，昵称为主行、邮箱降级为辅行。
+    let showsDistinctName = !user.name.isEmpty && user.name != user.email
+    return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
       HStack(spacing: Theme.Spacing.md) {
         Image(systemName: "person.crop.circle.fill")
           .font(.title2)
           .foregroundStyle(Theme.Palette.banana)
           .accessibilityHidden(true)
         VStack(alignment: .leading, spacing: 2) {
-          if user.name != user.email, !user.name.isEmpty {
+          if showsDistinctName {
             Text(user.name)
               .font(.callout.weight(.semibold))
           }
           Text(user.email)
-            .font(user.name != user.email && !user.name.isEmpty ? .footnote : .callout.weight(.semibold))
-            .foregroundStyle(user.name != user.email && !user.name.isEmpty ? .secondary : .primary)
+            .font(showsDistinctName ? .footnote : .callout.weight(.semibold))
+            .foregroundStyle(showsDistinctName ? .secondary : .primary)
         }
       }
-      .padding(Theme.Spacing.md)
       .frame(maxWidth: .infinity, alignment: .leading)
-      .background(.thinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.control))
+      .fieldWell()
       .accessibilityElement(children: .combine)
       .accessibilityLabel("已登录：\(user.email)")
 
@@ -79,14 +78,14 @@ struct SettingsView: View {
         .autocorrectionDisabled()
         .keyboardType(.emailAddress)
         .textContentType(.emailAddress)
-        .settingsFieldChrome()
+        .fieldWell()
       if model.auth.authMode == "sign-up" {
         TextField("昵称", text: $model.auth.authName)
-          .settingsFieldChrome()
+          .fieldWell()
       }
       SecureField("密码", text: $model.auth.authPassword)
         .textContentType(.password)
-        .settingsFieldChrome()
+        .fieldWell()
 
       Button {
         Task { await model.auth.signInOrSignUp() }
@@ -104,6 +103,15 @@ struct SettingsView: View {
           .fixedSize(horizontal: false, vertical: true)
       }
     }
+    // 登录 ↔ 注册切换时清掉上一模式的错误，避免陈旧文案误导新表单。
+    .onChange(of: model.auth.authMode) { _, _ in
+      model.auth.authError = ""
+    }
+    // 错误出现时主动播报，VoiceOver 用户不用扫到红字才知道失败。
+    .onChange(of: model.auth.authError) { _, newValue in
+      guard !newValue.isEmpty else { return }
+      AccessibilityNotification.Announcement(newValue).post()
+    }
   }
 
   // MARK: - ② 后端连接
@@ -111,15 +119,13 @@ struct SettingsView: View {
   private var backendPanel: some View {
     GlassPanel {
       VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-        Label("后端", systemImage: "antenna.radiowaves.left.and.right")
-          .font(.headline)
-          .accessibilityAddTraits(.isHeader)
+        SectionHeader(title: "后端", systemImage: "antenna.radiowaves.left.and.right")
 
         TextField("网关地址", text: $model.settings.apiBase)
           .textInputAutocapitalization(.never)
           .autocorrectionDisabled()
           .keyboardType(.URL)
-          .settingsFieldChrome()
+          .fieldWell()
           .accessibilityLabel("网关地址输入")
         Text("请使用网关域名；直连 Laf 域名将被拒绝身份相关操作")
           .font(.footnote)
@@ -148,9 +154,8 @@ struct SettingsView: View {
         .foregroundStyle(model.settings.health == nil && model.settings.healthError.isEmpty ? .secondary : .primary)
         .fixedSize(horizontal: false, vertical: true)
     }
-    .padding(Theme.Spacing.md)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.control))
+    .fieldWell()
     .accessibilityElement(children: .combine)
     .accessibilityLabel("后端连接状态：\(healthStatusText)")
   }
@@ -185,9 +190,7 @@ struct SettingsView: View {
   private var feedbackPanel: some View {
     GlassPanel {
       VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-        Label("反馈", systemImage: "message")
-          .font(.headline)
-          .accessibilityAddTraits(.isHeader)
+        SectionHeader(title: "反馈", systemImage: "message")
 
         Picker("类别", selection: $model.settings.feedbackCategory) {
           ForEach(FeedbackCategory.allCases) { category in
@@ -202,7 +205,7 @@ struct SettingsView: View {
           .foregroundStyle(.secondary)
           .frame(maxWidth: .infinity, alignment: .trailing)
         TextField("联系方式（可选）", text: feedbackContactBinding)
-          .settingsFieldChrome()
+          .fieldWell()
 
         Button {
           Task { await model.settings.submitFeedback() }
@@ -233,9 +236,7 @@ struct SettingsView: View {
   private var aboutPanel: some View {
     GlassPanel {
       VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-        Label("关于", systemImage: "info.circle")
-          .font(.headline)
-          .accessibilityAddTraits(.isHeader)
+        SectionHeader(title: "关于", systemImage: "info.circle")
 
         HStack {
           Text("版本")
@@ -245,33 +246,12 @@ struct SettingsView: View {
             .font(.callout.monospacedDigit())
             .foregroundStyle(.secondary)
         }
-        .padding(Theme.Spacing.md)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.control))
+        .fieldWell()
         .accessibilityElement(children: .combine)
         .accessibilityLabel("版本 \(appVersionText)")
 
         ForEach(aboutLinks) { resource in
-          Link(destination: resource.url) {
-            HStack(spacing: Theme.Spacing.md) {
-              Image(systemName: resource.systemImage)
-                .foregroundStyle(Theme.Palette.banana)
-                .frame(width: 24)
-                .accessibilityHidden(true)
-              Text(resource.title)
-                .font(.callout)
-              Spacer(minLength: Theme.Spacing.sm)
-              Image(systemName: "safari")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-            }
-            .padding(Theme.Spacing.md)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.control))
-            .contentShape(.rect)
-          }
-          .buttonStyle(.plain)
-          .accessibilityHint("在浏览器中打开")
+          GuideResourceRow(resource: resource, embeddedInPanel: true)
         }
       }
     }
@@ -301,16 +281,6 @@ struct SettingsView: View {
       get: { model.settings.feedbackContact },
       set: { model.settings.feedbackContact = String($0.prefix(300)) }
     )
-  }
-}
-
-// MARK: - 字段样式
-
-private extension View {
-  /// 设置页输入框统一外观：与生成页 API Key 输入一致的 thinMaterial 圆角底。
-  func settingsFieldChrome() -> some View {
-    padding(Theme.Spacing.md)
-      .background(.thinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.control))
   }
 }
 

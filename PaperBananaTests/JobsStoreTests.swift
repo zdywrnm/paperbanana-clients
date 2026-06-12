@@ -17,6 +17,20 @@ final class JobsStoreTests: XCTestCase {
     return JobsStore(apiClient: client, settings: settings, auth: auth)
   }
 
+  /// loadUserJobs 有登录闸门（auth.currentUser == nil 直接 return），记录类测试用已登录的 store。
+  private func makeSignedInStore() throws -> JobsStore {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [JobsStoreStub.self]
+    let client = PaperBananaAPIClient(session: URLSession(configuration: configuration))
+    let settings = SettingsStore(apiClient: client)
+    let auth = AuthStore(apiClient: client, settings: settings)
+    auth.currentUser = try JSONDecoder().decode(
+      CurrentUser.self,
+      from: Data(#"{"id":"u-test","email":"test@paperbanana.app"}"#.utf8)
+    )
+    return JobsStore(apiClient: client, settings: settings, auth: auth)
+  }
+
   // MARK: - refreshCurrentJob
 
   func testRefreshCurrentJobUpdatesJobAndLastPolledAt() async throws {
@@ -53,6 +67,49 @@ final class JobsStoreTests: XCTestCase {
     XCTAssertNil(store.lastPolledAt)
   }
 
+  // MARK: - loadUserJobs · recordsError 生命周期
+
+  func testSilentLoadUserJobsFailureDoesNotSetRecordsError() async throws {
+    // 静默后台刷新（如登录后自动刷新）失败不得弹常驻红卡。
+    let store = try makeSignedInStore()
+    JobsStoreStub.requestHandler = { request in
+      JobsStoreStub.jsonResponse(url: request.url, body: #"{"code":1,"error":"boom"}"#, statusCode: 500)
+    }
+
+    await store.loadUserJobs(silent: true)
+
+    XCTAssertEqual(store.recordsError, "")
+    XCTAssertFalse(store.recordsLoading)
+  }
+
+  func testLoadUserJobsSuccessClearsStaleRecordsError() async throws {
+    // 静默成功必须清掉历史错误：旧红卡不能赖在新数据上。
+    let store = try makeSignedInStore()
+    store.recordsError = "之前显式刷新留下的错误"
+    JobsStoreStub.requestHandler = { request in
+      JobsStoreStub.jsonResponse(url: request.url, body: #"{"code":0,"jobs":[{"id":"job-1","status":"running"}]}"#)
+    }
+
+    await store.loadUserJobs(silent: true)
+
+    XCTAssertEqual(store.recordsError, "")
+    XCTAssertEqual(store.userJobs.map(\.id), ["job-1"])
+    // 成功路径会写共享磁盘缓存（默认 user-jobs.json），清掉避免污染其他用例。
+    store.clearForSignOut()
+  }
+
+  func testExplicitLoadUserJobsFailureStillSetsRecordsError() async throws {
+    // 显式刷新（下拉 / 工具栏 / 重试按钮）失败仍要可见。
+    let store = try makeSignedInStore()
+    JobsStoreStub.requestHandler = { request in
+      JobsStoreStub.jsonResponse(url: request.url, body: #"{"code":1,"error":"boom"}"#, statusCode: 500)
+    }
+
+    await store.loadUserJobs(silent: false)
+
+    XCTAssertFalse(store.recordsError.isEmpty)
+  }
+
   // MARK: - track
 
   func testTrackResetsLastPolledAtFromPreviousJob() {
@@ -75,11 +132,11 @@ final class JobsStoreTests: XCTestCase {
 private final class JobsStoreStub: URLProtocol {
   nonisolated(unsafe) static var requestHandler: ((URLRequest) -> (HTTPURLResponse, Data))?
 
-  static func jsonResponse(url: URL?, body: String) -> (HTTPURLResponse, Data) {
+  static func jsonResponse(url: URL?, body: String, statusCode: Int = 200) -> (HTTPURLResponse, Data) {
     let resolvedURL = url ?? URL(string: "https://gateway.example/paperbanana-api")!
     let response = HTTPURLResponse(
       url: resolvedURL,
-      statusCode: 200,
+      statusCode: statusCode,
       httpVersion: "HTTP/1.1",
       headerFields: ["Content-Type": "application/json"]
     )!

@@ -37,10 +37,14 @@ struct PipelineProgressView: View {
         .font(.headline)
       Spacer()
       if isLive, let lastPolledAt {
-        Text("刷新于 \(lastPolledAt, style: .relative)前")
-          .font(.caption2)
-          .foregroundStyle(.secondary)
-          .monospacedDigit()
+        // 相对时间走 DateDisplay（固定 zh-Hans，修复英文设备混出 "1 min"）；
+        // Text(style: .relative) 不支持指定 locale，改用 TimelineView 每秒重算保持跳动。
+        TimelineView(.periodic(from: .now, by: 1)) { _ in
+          Text("刷新于 \(DateDisplay.relative(lastPolledAt))")
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .monospacedDigit()
+        }
       }
       if isLive, let onRefresh {
         Button(action: onRefresh) {

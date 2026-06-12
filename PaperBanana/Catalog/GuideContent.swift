@@ -20,6 +20,19 @@ struct GuideResource: Identifiable, Equatable {
   let url: URL
 }
 
+/// FAQ 条目：结构化 (title, detail)，不再靠"，/；"切分启发式拆标题。
+struct GuideFAQItem: Identifiable, Equatable {
+  let id: String
+  let title: String
+  /// 为 nil 时整条平铺展示（无可展开详情）。
+  let detail: String?
+
+  /// 跨字段子串检查（保持既有 `faq.contains { $0.contains(…) }` 断言语义）。
+  func contains(_ substring: String) -> Bool {
+    title.contains(substring) || (detail?.contains(substring) ?? false)
+  }
+}
+
 enum PaperBananaGuide {
   static let intro = "PaperBanana 是一个多智能体学术配图生成工具：把论文方法描述和目标图注交给它，多个 AI 角色协作产出框架图、流程图、架构图或统计图。模型 API Key 由你自带，只保存在本机 Keychain。"
 
@@ -82,12 +95,32 @@ enum PaperBananaGuide {
     GuideTerm(id: "stage-timeline", name: "生成演化", detail: "展示规划、渲染、评审和中间图，便于理解模型为什么这样画。")
   ]
 
-  static let faq: [String] = [
-    "方法描述越具体，图中的模块、连接关系和层级越稳定。",
-    "API Key 只保存在本机 Keychain；建议在各平台控制台定期轮换。",
-    "出图不理想时，可以加评审轮数、换更强模型，或上传风格接近的参考图。",
-    "某个清晰度选不到时，说明当前图像模型不支持该档位。",
-    "任务记录页可回看历史任务、结果图、中间阶段和失败原因。"
+  static let faq: [GuideFAQItem] = [
+    GuideFAQItem(
+      id: "method-detail",
+      title: "方法描述越具体",
+      detail: "图中的模块、连接关系和层级越稳定。"
+    ),
+    GuideFAQItem(
+      id: "key-rotation",
+      title: "API Key 只保存在本机 Keychain",
+      detail: "建议在各平台控制台定期轮换。"
+    ),
+    GuideFAQItem(
+      id: "improve-results",
+      title: "出图不理想时",
+      detail: "可以加评审轮数、换更强模型，或上传风格接近的参考图。"
+    ),
+    GuideFAQItem(
+      id: "resolution-missing",
+      title: "某个清晰度选不到时",
+      detail: "说明当前图像模型不支持该档位。"
+    ),
+    GuideFAQItem(
+      id: "records-history",
+      title: "任务记录页可回看历史任务、结果图、中间阶段和失败原因。",
+      detail: nil
+    )
   ]
 
   static let resources: [GuideResource] = [

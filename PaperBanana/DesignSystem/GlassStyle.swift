@@ -35,6 +35,14 @@ extension View {
     glassEffect(style.glass, in: shape)
   }
 
+  /// 玻璃面板内的"井底"内容块：thinMaterial 圆角浅底（输入框、术语卡、状态行、链接行等）。
+  /// 玻璃不叠玻璃：面板内需要再分层时用这个，不要嵌套 paperGlass。
+  /// 需要撑满宽度时把 `.frame(maxWidth: .infinity, …)` 放在 fieldWell 之前。
+  func fieldWell() -> some View {
+    padding(Theme.Spacing.md)
+      .background(.thinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.control))
+  }
+
   @ViewBuilder
   func paperGlassButton(prominent: Bool = false) -> some View {
     if prominent {

@@ -178,6 +178,7 @@ struct JobRow: View {
       text: job.statusKind.title,
       systemImage: statusIconName,
       tint: Theme.Palette.tint(for: job.statusKind),
+      textTint: Theme.Palette.textTint(for: job.statusKind),
       accessibilityLabel: "任务状态：\(job.statusKind.title)"
     )
   }
@@ -206,24 +207,8 @@ struct JobRow: View {
   }
 
   private var relativeCreatedAt: String {
-    guard let date = Self.parseISODate(job.createdAt) else {
-      // 解析失败时回退到截断的原始字符串（与详情页元数据一致）。
-      let normalized = job.createdAt.replacingOccurrences(of: "T", with: " ")
-      return String(normalized.prefix(16))
-    }
-    // 全 app 文案为简体中文硬编码，相对时间固定 zh-Hans，
-    // 避免系统非中文 locale 下混出 "18 hours ago"。
-    return date.formatted(.relative(presentation: .named).locale(Locale(identifier: "zh-Hans")))
-  }
-
-  private static func parseISODate(_ value: String) -> Date? {
-    guard !value.isEmpty else { return nil }
-    let fractional = ISO8601DateFormatter()
-    fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    if let date = fractional.date(from: value) { return date }
-    let plain = ISO8601DateFormatter()
-    plain.formatOptions = [.withInternetDateTime]
-    return plain.date(from: value)
+    // 相对时间策略（zh-Hans 固定 + 解析失败截断回退）集中在 DateDisplay。
+    DateDisplay.relative(fromISO: job.createdAt)
   }
 
   // MARK: 缩略图

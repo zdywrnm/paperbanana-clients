@@ -53,6 +53,14 @@ enum Theme {
         : UIColor(red: 0.90, green: 0.71, blue: 0.22, alpha: 1) // ≈ #E6B538
     })
 
+    /// 香蕉黄的小字版本：浅色界面亮黄对白底只有 ~1.9:1，小字（caption 级）必须用
+    /// 深 ochre 保证 ≥4.5:1；深色界面沿用亮黄。底色 / 图形仍用 `banana`。
+    static let bananaText = Color(uiColor: UIColor { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.96, green: 0.80, blue: 0.34, alpha: 1) // ≈ #F5CC57
+        : UIColor(red: 0.48, green: 0.36, blue: 0.06, alpha: 1) // ≈ #7A5C0F 深 ochre
+    })
+
     /// 警示色（轮询中断等非致命异常）。
     static let warning = Color.orange
 
@@ -65,6 +73,11 @@ enum Theme {
       case .failed: .red
       case .unknown: .gray
       }
+    }
+
+    /// JobStatus → 小字前景色：running 用 `bananaText`（浅色亮黄小字对比不足），其余同 tint。
+    static func textTint(for status: JobStatus) -> Color {
+      status == .running ? bananaText : tint(for: status)
     }
 
     // MARK: 背景画布色（AppBackground MeshGradient 专用）

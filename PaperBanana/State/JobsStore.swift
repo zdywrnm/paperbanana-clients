@@ -94,9 +94,14 @@ final class JobsStore {
     do {
       userJobs = try await apiClient.userJobs(apiBase: settings.apiBase)
       isShowingCachedData = false
+      // 成功路径必须清掉历史错误：否则旧红卡会赖在新数据上。
+      recordsError = ""
       recordsCache.save(userJobs)
     } catch {
-      recordsError = formatUserFacingError(error)
+      // 静默后台刷新失败不打扰用户（列表数据保持原样即可）；错误卡只服务于显式刷新。
+      if !silent {
+        recordsError = formatUserFacingError(error)
+      }
     }
   }
 

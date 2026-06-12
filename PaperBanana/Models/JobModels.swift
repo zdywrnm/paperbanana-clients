@@ -378,7 +378,7 @@ struct Job: Decodable, Identifiable, Equatable {
 
   private func formattedRecordDate(_ value: String) -> String {
     guard !value.isEmpty else { return "未记录" }
-    let normalized = value.replacingOccurrences(of: "T", with: " ")
-    return String(normalized.prefix(16))
+    // 绝对时间策略（本地时区 + 解析失败截断回退）集中在 DateDisplay。
+    return DateDisplay.absolute(fromISO: value)
   }
 }

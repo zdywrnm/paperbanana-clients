@@ -31,10 +31,16 @@ struct TemplatesView: View {
     reduceMotion || appearedCards.contains(id)
   }
 
+  /// 无论是否减弱动态都要记录"已出现"——运行中把减弱动态从开切到关时，
+  /// 已出现的卡片不能因 appearedCards 缺位而翻回 opacity 0；仅入场动画按需跳过。
   private func revealCard(_ id: String, index: Int) {
-    guard !reduceMotion, !appearedCards.contains(id) else { return }
-    withAnimation(Theme.Motion.entrance.delay(Double(index) * 0.08)) {
-      _ = appearedCards.insert(id)
+    guard !appearedCards.contains(id) else { return }
+    if reduceMotion {
+      appearedCards.insert(id)
+    } else {
+      withAnimation(Theme.Motion.entrance.delay(Double(index) * 0.08)) {
+        _ = appearedCards.insert(id)
+      }
     }
   }
 }
@@ -53,7 +59,7 @@ struct TemplateCard: View {
         Spacer(minLength: Theme.Spacing.sm)
         Text(example.label)
           .font(.caption.weight(.semibold))
-          .foregroundStyle(Theme.Palette.banana)
+          .foregroundStyle(Theme.Palette.bananaText)
           .padding(.horizontal, Theme.Spacing.md)
           .padding(.vertical, Theme.Spacing.xs)
           .background(Theme.Palette.banana.opacity(0.14), in: .capsule)
@@ -103,8 +109,7 @@ struct TemplateCard: View {
         .fixedSize(horizontal: false, vertical: true)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
-    .padding(Theme.Spacing.md)
-    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.control))
+    .fieldWell()
   }
 }
 
