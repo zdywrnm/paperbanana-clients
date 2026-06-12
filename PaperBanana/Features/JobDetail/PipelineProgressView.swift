@@ -15,6 +15,9 @@ struct PipelineProgressView: View {
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @ScaledMetric(relativeTo: .body) private var nodeSize: CGFloat = 42
+  /// 卡片滚出可视区时暂停流动连接线的 TimelineView tick（省电）；
+  /// 不影响 reduceMotion 的静态渐变路径。初始 true：不在 ScrollView 里时回调不触发，保持流动。
+  @State private var isVisible = true
 
   var body: some View {
     VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
@@ -27,6 +30,7 @@ struct PipelineProgressView: View {
     .padding(Theme.Spacing.lg)
     .frame(maxWidth: .infinity, alignment: .leading)
     .paperGlass(.panel)
+    .onScrollVisibilityChange { isVisible = $0 }
   }
 
   // MARK: - 标题行
@@ -253,7 +257,7 @@ struct PipelineProgressView: View {
         )
       )
     } else {
-      TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+      TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !isVisible)) { context in
         let progress = context.date.timeIntervalSinceReferenceDate
           .truncatingRemainder(dividingBy: Theme.Motion.flowPeriod) / Theme.Motion.flowPeriod
         Capsule().fill(

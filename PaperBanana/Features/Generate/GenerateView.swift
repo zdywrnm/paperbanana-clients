@@ -69,9 +69,7 @@ struct GenerateView: View {
       .fileImporter(isPresented: $isImporterPresented, allowedContentTypes: ReferenceImportPipeline.referenceContentTypes, allowsMultipleSelection: true) { result in
         switch result {
         case .success(let urls):
-          for url in urls.prefix(ReferenceImageLimits.maxCount - model.generation.draft.referenceImages.count) {
-            importPipeline.addReference(url)
-          }
+          importPipeline.addFileReferences(urls)
         case .failure(let error):
           model.generation.referenceUploadError = formatUserFacingError(error)
         }
@@ -91,26 +89,44 @@ struct GenerateView: View {
   private var hero: some View {
     GlassPanel {
       VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-        HStack(spacing: Theme.Spacing.md) {
-          Image(systemName: "graduationcap.fill")
-            .font(.title2)
-            .foregroundStyle(Theme.Palette.banana)
-            .accessibilityHidden(true)
-          VStack(alignment: .leading, spacing: 2) {
-            Text("论文图示工作台")
-              .font(.title2.bold())
-            Text(model.settings.health?.runtime == "gateway" ? "已连接 Sealos 网关" : (model.settings.healthError.isEmpty ? "默认连接 PaperBanana 网关" : model.settings.healthError))
-              .font(.footnote)
-              .foregroundStyle(.secondary)
+        // 标题块 + 账号胶囊：放得下时同行，AX 大字号时上下排（与 JobRow 同模式），
+        // 避免胶囊把标题挤成一字一行。
+        ViewThatFits(in: .horizontal) {
+          HStack(spacing: Theme.Spacing.md) {
+            heroTitleBlock
+            Spacer(minLength: Theme.Spacing.sm)
+            heroAccountPill
           }
-          Spacer()
-          StatusPill(text: model.auth.currentUser?.email ?? "未登录", systemImage: model.auth.currentUser == nil ? "person.crop.circle.badge.exclamationmark" : "person.crop.circle.fill")
+          VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            heroTitleBlock
+            heroAccountPill
+          }
         }
         Text("生成论文框架图、流程图、系统架构图和数据统计图；API Key 仅保存在本机 Keychain。")
           .font(.callout)
           .foregroundStyle(.secondary)
       }
     }
+  }
+
+  private var heroTitleBlock: some View {
+    HStack(spacing: Theme.Spacing.md) {
+      Image(systemName: "graduationcap.fill")
+        .font(.title2)
+        .foregroundStyle(Theme.Palette.banana)
+        .accessibilityHidden(true)
+      VStack(alignment: .leading, spacing: 2) {
+        Text("论文图示工作台")
+          .font(.title2.bold())
+        Text(model.settings.health?.runtime == "gateway" ? "已连接 Sealos 网关" : (model.settings.healthError.isEmpty ? "默认连接 PaperBanana 网关" : model.settings.healthError))
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+      }
+    }
+  }
+
+  private var heroAccountPill: some View {
+    StatusPill(text: model.auth.currentUser?.email ?? "未登录", systemImage: model.auth.currentUser == nil ? "person.crop.circle.badge.exclamationmark" : "person.crop.circle.fill")
   }
 
   // MARK: - ① 平台与密钥

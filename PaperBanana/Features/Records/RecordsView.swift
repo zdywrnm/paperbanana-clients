@@ -49,6 +49,7 @@ struct RecordsView: View {
             text: "离线数据",
             systemImage: "wifi.slash",
             tint: Theme.Palette.warning,
+            textTint: Theme.Palette.warningText,
             accessibilityLabel: "正在显示本地缓存的记录，下拉刷新获取最新数据"
           )
         }
@@ -226,7 +227,8 @@ struct JobRow: View {
   private var thumbnail: some View {
     Group {
       if let url = thumbnailURL {
-        AsyncImage(url: url) { phase in
+        // 行头像只有 64pt：降采样解码，2K/4K 结果图不再全量进内存。
+        DownsampledAsyncImage(url: url, maxDimension: 64) { phase in
           switch phase {
           case .success(let image):
             image.resizable().scaledToFill()

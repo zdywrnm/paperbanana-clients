@@ -18,6 +18,22 @@ struct ReferenceImportPipeline {
     ]
   }
 
+  /// 文件导入入口：超过剩余槽位时与照片路径同样给用户提示，不再静默丢弃多余文件。
+  func addFileReferences(_ urls: [URL]) {
+    let remainingSlots = ReferenceImageLimits.maxCount - generation.draft.referenceImages.count
+    guard remainingSlots > 0 else {
+      generation.referenceUploadError = "最多只能上传 \(ReferenceImageLimits.maxCount) 张参考图。"
+      return
+    }
+    for url in urls.prefix(remainingSlots) {
+      addReference(url)
+    }
+    // 注意放在循环后：addReferenceFile 每次会先清空 referenceUploadError。
+    if urls.count > remainingSlots {
+      generation.referenceUploadError = "最多 \(ReferenceImageLimits.maxCount) 张参考图，多余文件已忽略。"
+    }
+  }
+
   func addReference(_ url: URL) {
     let didStart = url.startAccessingSecurityScopedResource()
     defer {
@@ -41,6 +57,10 @@ struct ReferenceImportPipeline {
 
     for (index, item) in items.prefix(remainingSlots).enumerated() {
       await addPhotoReference(item, index: index)
+    }
+    // 与文件路径同语义：部分超限也提示，不静默丢弃（addReferenceFile 会清错误，放循环后）。
+    if items.count > remainingSlots {
+      generation.referenceUploadError = "最多 \(ReferenceImageLimits.maxCount) 张参考图，多余照片已忽略。"
     }
   }
 

@@ -378,7 +378,7 @@ struct Job: Decodable, Identifiable, Equatable {
 
   private func formattedRecordDate(_ value: String) -> String {
     guard !value.isEmpty else { return "未记录" }
-    // 绝对时间策略（本地时区 + 解析失败截断回退）集中在 DateDisplay。
+    // 绝对时间策略（UTC，与 web 端记录页一致、冻结断言锁定 + 解析失败截断回退）集中在 DateDisplay。
     return DateDisplay.absolute(fromISO: value)
   }
 }

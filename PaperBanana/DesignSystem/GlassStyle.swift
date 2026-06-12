@@ -47,8 +47,29 @@ extension View {
   func paperGlassButton(prominent: Bool = false) -> some View {
     if prominent {
       self.buttonStyle(.glassProminent)
+        .modifier(ProminentGlassLabelColor())
     } else {
       self.buttonStyle(.glass)
+    }
+  }
+}
+
+/// prominent 玻璃按钮的标签色：AccentColor 深色模式是亮香蕉黄，系统默认白字只有 ~1.5:1，
+/// 改黑字（黄底黑字，9.6:1）；浅色深金底保持白字（4.8:1）。disabled 不覆盖，保留系统变暗。
+private struct ProminentGlassLabelColor: ViewModifier {
+  @Environment(\.isEnabled) private var isEnabled
+
+  private static let labelColor = Color(uiColor: UIColor { traits in
+    traits.userInterfaceStyle == .dark
+      ? UIColor.black.withAlphaComponent(0.85)
+      : UIColor.white
+  })
+
+  func body(content: Content) -> some View {
+    if isEnabled {
+      content.foregroundStyle(Self.labelColor)
+    } else {
+      content
     }
   }
 }

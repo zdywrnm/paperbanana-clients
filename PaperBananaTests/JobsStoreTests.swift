@@ -85,6 +85,9 @@ final class JobsStoreTests: XCTestCase {
   func testLoadUserJobsSuccessClearsStaleRecordsError() async throws {
     // 静默成功必须清掉历史错误：旧红卡不能赖在新数据上。
     let store = try makeSignedInStore()
+    // 成功路径会写共享磁盘缓存（默认 user-jobs.json）：defer 兜底清理，
+    // 断言失败时也不污染其他用例。
+    defer { store.clearForSignOut() }
     store.recordsError = "之前显式刷新留下的错误"
     JobsStoreStub.requestHandler = { request in
       JobsStoreStub.jsonResponse(url: request.url, body: #"{"code":0,"jobs":[{"id":"job-1","status":"running"}]}"#)
@@ -94,8 +97,6 @@ final class JobsStoreTests: XCTestCase {
 
     XCTAssertEqual(store.recordsError, "")
     XCTAssertEqual(store.userJobs.map(\.id), ["job-1"])
-    // 成功路径会写共享磁盘缓存（默认 user-jobs.json），清掉避免污染其他用例。
-    store.clearForSignOut()
   }
 
   func testExplicitLoadUserJobsFailureStillSetsRecordsError() async throws {

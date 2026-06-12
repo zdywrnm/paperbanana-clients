@@ -83,11 +83,12 @@ struct JobDetailView: View {
   }
 
   /// 卡内状态徽标：tint 胶囊（不嵌套玻璃）。
+  /// 小字前景走 textTint（running 态浅色亮黄对比不足，与 StatusPill / TemplateCard 同方案）。
   private var statusChip: some View {
     let tint = Theme.Palette.tint(for: job.statusKind)
     return Label(job.statusKind.title, systemImage: job.statusKind == .failed ? "xmark.circle" : "sparkles")
       .font(.caption.weight(.semibold))
-      .foregroundStyle(tint)
+      .foregroundStyle(Theme.Palette.textTint(for: job.statusKind))
       .padding(.horizontal, Theme.Spacing.md)
       .padding(.vertical, Theme.Spacing.xs)
       .background(tint.opacity(0.14), in: .capsule)

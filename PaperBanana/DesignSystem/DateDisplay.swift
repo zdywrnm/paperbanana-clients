@@ -44,7 +44,8 @@ enum DateDisplay {
     return relative(date)
   }
 
-  /// 原始时间串 → 绝对时间（本地时区 "yyyy-MM-dd HH:mm"）；解析失败回退到截断的原始字符串。
+  /// 原始时间串 → 绝对时间（UTC "yyyy-MM-dd HH:mm"，与 web 端记录页一致，冻结断言锁定）；
+  /// 解析失败回退到截断的原始字符串。
   static func absolute(fromISO raw: String) -> String {
     guard let date = parseISODate(raw) else { return truncatedRaw(raw) }
     return absoluteFormatter.string(from: date)

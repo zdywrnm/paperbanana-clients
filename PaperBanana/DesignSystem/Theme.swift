@@ -47,6 +47,8 @@ enum Theme {
 
   enum Palette {
     /// 品牌香蕉黄：浅色界面用偏深的金黄保证对比，深色界面用亮黄。
+    /// 系统控件 tint 走 Assets 的 AccentColor（浅 #8F6D12 / 深 #F5CC57，带高对比变体），
+    /// 与这里同一品牌方向；视图代码引用品牌色仍用本 token，不要直接写 Color.accentColor。
     static let banana = Color(uiColor: UIColor { traits in
       traits.userInterfaceStyle == .dark
         ? UIColor(red: 0.96, green: 0.80, blue: 0.34, alpha: 1) // ≈ #F5CC57
@@ -63,6 +65,15 @@ enum Theme {
 
     /// 警示色（轮询中断等非致命异常）。
     static let warning = Color.orange
+
+    /// 警示色的小字版本：系统橙对白底只有 ~2.2:1，小字（caption 级）浅色界面用
+    /// 加深的橙棕（#9A4A00，对白底 6.3:1），深色界面用亮橙保证深底对比。
+    /// 底色 / 图形仍用 `warning`。
+    static let warningText = Color(uiColor: UIColor { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 1.00, green: 0.70, blue: 0.25, alpha: 1) // ≈ #FFB340 亮橙
+        : UIColor(red: 0.60, green: 0.29, blue: 0.00, alpha: 1) // ≈ #9A4A00 橙棕
+    })
 
     /// JobStatus → 语义 tint 映射。
     static func tint(for status: JobStatus) -> Color {

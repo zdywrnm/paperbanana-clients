@@ -37,6 +37,15 @@ final class AppModel {
     auth.onSignedOut = { [weak jobs] in jobs?.clearForSignOut() }
     generation.presentAlert = { [weak self] message in self?.presentAlert(message) }
     exports.presentAlert = { [weak self] message in self?.presentAlert(message) }
+
+    #if DEBUG
+    // 截图 / QA 走查用：`simctl launch ... -pb-initial-tab records` 直达指定 tab
+    // （launch argument 自动桥接进 UserDefaults）。仅 DEBUG，发布构建不带此入口。
+    if let raw = UserDefaults.standard.string(forKey: "pb-initial-tab"),
+       let tab = AppTab(rawValue: raw) {
+      selectedTab = tab
+    }
+    #endif
   }
 
   func bootstrap() async {

@@ -16,7 +16,7 @@ https://yifbnnzrwmxn.sealoshzh.site
 ## Build
 
 ```bash
-xcodebuild -project apps/ios/PaperBanana.xcodeproj \
+xcodebuild -project paperbanana.xcodeproj \
   -scheme PaperBanana \
   -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' \
   build
@@ -25,7 +25,7 @@ xcodebuild -project apps/ios/PaperBanana.xcodeproj \
 Run tests:
 
 ```bash
-xcodebuild -project apps/ios/PaperBanana.xcodeproj \
+xcodebuild -project paperbanana.xcodeproj \
   -scheme PaperBanana \
   -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' \
   test
@@ -41,7 +41,7 @@ read -s PB_PASSWORD
 export PB_PASSWORD
 export PB_BAILIAN_API_KEY="sk-..."
 export PB_REFERENCE_IMAGE="/absolute/path/to/reference.png"
-node apps/ios/Scripts/e2e-gateway-smoke.mjs
+node Scripts/e2e-gateway-smoke.mjs
 ```
 
 The smoke test signs in through Better Auth, sends the trusted Web `Origin`/`Referer`, uploads one reference image, creates a Bailian `createJob`, polls `getJob`, and fails unless the job succeeds with at least one result image.

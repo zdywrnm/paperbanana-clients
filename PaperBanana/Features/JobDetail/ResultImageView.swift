@@ -49,7 +49,8 @@ struct ResultImageView: View {
         if image.format == "svg" {
           SVGPreviewCard(url: resolvedURL)
         } else if let url = resolvedURL {
-          AsyncImage(url: url) { phase in
+          // 网格卡缩略图：降采样解码（细节看全屏 ImageViewer，那边保持全量解码）。
+          DownsampledAsyncImage(url: url, maxDimension: 480) { phase in
             switch phase {
             case .success(let loaded):
               loaded.resizable().scaledToFit()
