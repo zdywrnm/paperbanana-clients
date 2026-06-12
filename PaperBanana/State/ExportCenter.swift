@@ -21,10 +21,12 @@ final class ExportCenter {
   private let settings: SettingsStore
   private let exporter: ResultFileExporter
 
-  init(apiClient: PaperBananaAPIClient, settings: SettingsStore, exporter: ResultFileExporter = ResultFileExporter()) {
+  // 默认参数用 nil 占位、在隔离的 init 体内构造，
+  // 避免"默认参数表达式在非隔离上下文调用隔离 init"的编译警告。
+  init(apiClient: PaperBananaAPIClient, settings: SettingsStore, exporter: ResultFileExporter? = nil) {
     self.apiClient = apiClient
     self.settings = settings
-    self.exporter = exporter
+    self.exporter = exporter ?? ResultFileExporter()
   }
 
   func exportResultImage(_ image: ResultImage, outputFormat: OutputFormat) async {

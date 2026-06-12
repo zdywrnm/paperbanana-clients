@@ -12,7 +12,9 @@ import Foundation
 /// - `pause()`/`resume()` 供 scenePhase 接线；resume 会立即刷一次。
 @MainActor
 final class JobPoller {
-  struct Configuration {
+  // 纯值类型，无需 MainActor 隔离；nonisolated 让 init 的默认参数
+  // `Configuration()` 可以在非隔离上下文求值（消除编译警告）。
+  nonisolated struct Configuration {
     var initialInterval: Duration = .seconds(2)
     var backoffMultiplier: Double = 1.5
     var maxInterval: Duration = .seconds(15)
