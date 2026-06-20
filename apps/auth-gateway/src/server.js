@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import cors from 'cors';
 import express from 'express';
+import { ObjectId } from 'mongodb';
 import { fromNodeHeaders, toNodeHandler } from 'better-auth/node';
 import { auth, authDb, closeAuthDatabase } from './auth.js';
 import { parseList, requiredEnv } from './env.js';
@@ -54,6 +55,70 @@ app.get('/health', async (_req, res) => {
     auth: 'better-auth',
     laf,
   });
+});
+
+// Account deletion (App Store guideline 5.1.1(v)).
+// Flow:
+//   1. Require a valid session and confirm it belongs to body.email.
+//   2. Re-authenticate email+password via Better Auth (second confirmation).
+//   3. Purge business data in Laf (deleteAccount) — done first so the user row
+//      survives if it fails and the client can retry.
+//   4. Hard delete the Better Auth user + all their sessions from Mongo so the
+//      account can never log in again.
+//   5. Clear the client session cookie and return { ok: true }.
+app.post('/api/account/delete', async (req, res) => {
+  try {
+    const session = await requireSession(req);
+    const sessionEmail = String(session.user.email || '').trim().toLowerCase();
+    const requestedEmail = String(req.body?.email || '').trim().toLowerCase();
+    const password = String(req.body?.password || '');
+
+    if (!requestedEmail || !password) {
+      return res.status(400).json({ code: 400, error: 'email and password are required' });
+    }
+    if (sessionEmail !== requestedEmail) {
+      // The logged-in session does not own the account being deleted.
+      return res.status(403).json({ code: 403, error: 'EMAIL_MISMATCH' });
+    }
+
+    // Step 2: second confirmation — re-verify the password. signInEmail throws
+    // (Better Auth APIError) when the password is wrong. The email already maps
+    // to the authenticated session, so a failure here means a bad password.
+    try {
+      await auth.api.signInEmail({
+        body: { email: session.user.email, password },
+        headers: fromNodeHeaders(req.headers),
+      });
+    } catch {
+      return res.status(401).json({ code: 401, error: 'INVALID_PASSWORD' });
+    }
+
+    const userId = String(session.user.id || '');
+    const userEmail = String(session.user.email || '');
+
+    // Step 3: purge business data first. If Laf fails we stop here WITHOUT
+    // deleting the auth user, so the still-valid session can retry. deleteAccount
+    // is idempotent on the Laf side.
+    await callLaf(
+      withGatewayToken({ action: 'deleteAccount', userId, userEmail }),
+      req,
+    );
+
+    // Step 4: clear the client session cookie while the session still exists, so
+    // Better Auth's signOut reliably emits the cookie-clearing Set-Cookie header.
+    await clearSessionCookie(req, res);
+
+    // Step 5: hard delete the Better Auth user + every remaining session. Done
+    // directly against the adapter's Mongo collections (the Better Auth
+    // deleteUser API is not enabled and would trigger an email-confirmation flow
+    // we must avoid). Idempotent, so it also mops up the just-signed-out session.
+    await deleteAuthUser(userId);
+
+    return res.json({ code: 0, ok: true });
+  } catch (error) {
+    const status = Number(error.status || error.statusCode || 500);
+    return res.status(status).json({ code: status, error: error.message || String(error) });
+  }
 });
 
 app.get('/paperbanana-api', async (_req, res) => {
@@ -235,6 +300,50 @@ async function optionalSession(req) {
     headers: fromNodeHeaders(req.headers),
   });
   return session;
+}
+
+// Hard delete a Better Auth user and all of their sessions from Mongo.
+// Better Auth's mongo adapter stores user.id as the stringified _id ObjectId and
+// session.userId may be stored as either an ObjectId or its string form (see
+// latestSessionsByUser), so we match both shapes. Idempotent: re-running with an
+// already-deleted id is a no-op.
+async function deleteAuthUser(userId) {
+  const id = String(userId || '');
+  if (!id) return;
+
+  const idCandidates = [id];
+  let objectId = null;
+  if (ObjectId.isValid(id)) {
+    objectId = new ObjectId(id);
+    idCandidates.push(objectId);
+  }
+
+  await authDb.collection('session').deleteMany({ userId: { $in: idCandidates } });
+  await authDb.collection('account').deleteMany({ userId: { $in: idCandidates } }).catch(() => {});
+  await authDb.collection('user').deleteOne(
+    objectId ? { $or: [{ _id: objectId }, { id }] } : { $or: [{ _id: id }, { id }] },
+  );
+}
+
+// Sign the current session out and relay Better Auth's own clearing Set-Cookie
+// header to the client, so the cookie name, prefix and attributes always match
+// this deployment's config. Best-effort: the user is deleted regardless.
+async function clearSessionCookie(req, res) {
+  try {
+    const response = await auth.api.signOut({
+      headers: fromNodeHeaders(req.headers),
+      asResponse: true,
+    });
+    const setCookies =
+      typeof response?.headers?.getSetCookie === 'function'
+        ? response.headers.getSetCookie()
+        : [];
+    for (const cookie of setCookies) {
+      res.append('Set-Cookie', cookie);
+    }
+  } catch {
+    // Cookie clearing is best-effort; the account is already deleted.
+  }
 }
 
 async function callLaf(body, req) {

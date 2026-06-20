@@ -141,6 +141,12 @@ type UserJobsBody = {
   limit?: number
 }
 
+type DeleteAccountBody = {
+  action: 'deleteAccount'
+  userId?: string
+  userEmail?: string
+}
+
 type ImportReferencesBody = {
   action: 'importReferences'
   adminToken: string
@@ -230,6 +236,7 @@ type RequestBody =
   | SubmitFeedbackBody
   | AdminFeedbackBody
   | UserJobsBody
+  | DeleteAccountBody
   | ModelCapabilityBody
   | ReferenceLibraryBody
   | ImportReferencesBody
@@ -352,6 +359,7 @@ const identityScopedActions = new Set([
   'userJobs',
   'getJob',
   'prepareReferenceUpload',
+  'deleteAccount',
 ])
 
 export default async function (ctx: FunctionContext) {
@@ -402,6 +410,9 @@ export default async function (ctx: FunctionContext) {
     }
     if (action === 'userJobs') {
       return await userJobs(body as UserJobsBody)
+    }
+    if (action === 'deleteAccount') {
+      return await deleteAccount(body as DeleteAccountBody)
     }
     if (action === 'importReferences') {
       return await importReferences(body as ImportReferencesBody)
@@ -720,6 +731,92 @@ async function userJobs(body: UserJobsBody) {
     : { $or: [{ userEmail }, { user_email: userEmail }] }
   const list = await jobs.find(query).sort({ createdAt: -1 }).limit(limit).toArray()
   return ok({ jobs: await Promise.all(list.map(publicJob)) })
+}
+
+// Account deletion (App Store guideline 5.1.1(v)). Only reachable through the
+// auth-gateway (gatewayToken) or admin tooling (adminToken) — see
+// identityScopedActions / requireTrustedCaller — because it trusts the
+// caller-supplied userId/userEmail. The gateway has already re-authenticated the
+// user (session + password) before forwarding this call.
+//
+// Scope: purge this user's business data. Generation jobs and feedback are hard
+// deleted. Reference images in object storage are best-effort deleted (failures
+// only logged, never block). Result images (`<jobId>/...`) are intentionally
+// kept. Deletion of the Better Auth user/session lives in the gateway.
+//
+// Idempotent: deleteMany / deleteFile are safe to re-run, so the gateway can
+// retry this action without leaving the account half-deleted.
+async function deleteAccount(body: DeleteAccountBody) {
+  const userId = String(body.userId || '').trim()
+  const userEmail = String(body.userEmail || '').trim()
+  if (!userId && !userEmail) return fail('userId or userEmail is required', 400)
+
+  const jobIdConditions: any[] = []
+  const feedbackIdConditions: any[] = []
+  if (userId) {
+    jobIdConditions.push({ userId }, { user_id: userId })
+    feedbackIdConditions.push({ userId }, { user_id: userId })
+  }
+  if (userEmail) {
+    jobIdConditions.push({ userEmail }, { user_email: userEmail })
+    feedbackIdConditions.push({ userEmail }, { user_email: userEmail })
+  }
+
+  const jobsResult = await jobs.deleteMany({ $or: jobIdConditions })
+  const feedbackResult = await feedback.deleteMany({ $or: feedbackIdConditions })
+
+  // Best-effort purge of the user's uploaded reference images. They are stored
+  // under references/<owner>/... where owner = sanitizePathPart(userId || userEmail
+  // || 'anon') at upload time (see prepareReferenceUpload). We try both possible
+  // owner prefixes. Any storage error is logged and swallowed so it never blocks
+  // account deletion.
+  const ownerPrefixes = new Set<string>()
+  if (userId) ownerPrefixes.add(sanitizePathPart(userId))
+  if (userEmail) ownerPrefixes.add(sanitizePathPart(userEmail))
+  let deletedReferenceObjectCount = 0
+  for (const owner of ownerPrefixes) {
+    deletedReferenceObjectCount += await deleteReferenceObjectsForOwner(owner)
+  }
+
+  return ok({
+    ok: true,
+    deletedJobCount: jobsResult?.deletedCount || 0,
+    deletedFeedbackCount: feedbackResult?.deletedCount || 0,
+    deletedReferenceObjectCount,
+  })
+}
+
+// List and delete every object under references/<owner>/. Pure best-effort:
+// returns the number of objects deleted, logs and swallows all errors.
+async function deleteReferenceObjectsForOwner(owner: string): Promise<number> {
+  const prefix = `references/${owner}/`
+  let deleted = 0
+  try {
+    const bucket = cloud.storage.bucket(bucketName)
+    let continuationMarker: string | undefined
+    // ListObjects is paginated (max 1000 keys); loop until the bucket reports
+    // no more truncation.
+    do {
+      const listing: any = await bucket.listFiles({ Prefix: prefix, Marker: continuationMarker })
+      const contents: any[] = listing?.Contents || []
+      for (const object of contents) {
+        const key = object?.Key
+        if (!key) continue
+        try {
+          await bucket.deleteFile(key)
+          deleted += 1
+        } catch (error: any) {
+          console.warn(`[deleteAccount] failed to delete reference object ${key}: ${error?.message || error}`)
+        }
+      }
+      continuationMarker = listing?.IsTruncated
+        ? (listing?.NextMarker || (contents.length ? contents[contents.length - 1]?.Key : undefined))
+        : undefined
+    } while (continuationMarker)
+  } catch (error: any) {
+    console.warn(`[deleteAccount] failed to list reference objects for ${prefix}: ${error?.message || error}`)
+  }
+  return deleted
 }
 
 async function resolveReferenceImageMode(body: CreateJobBody & { referenceImageMode: ReferenceImageMode }) {
