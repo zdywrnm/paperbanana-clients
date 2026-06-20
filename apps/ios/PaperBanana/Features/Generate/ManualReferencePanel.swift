@@ -173,11 +173,11 @@ private struct ManualReferenceCard: View {
   let previewAction: () -> Void
 
   var body: some View {
-    HStack(alignment: .center, spacing: Theme.Spacing.md) {
+    HStack(alignment: .top, spacing: Theme.Spacing.md) {
       previewButton
 
       Button(action: selectAction) {
-        HStack(alignment: .center, spacing: Theme.Spacing.sm) {
+        HStack(alignment: .top, spacing: Theme.Spacing.sm) {
           copy
             .layoutPriority(1)
           Spacer(minLength: 0)
@@ -191,7 +191,7 @@ private struct ManualReferenceCard: View {
       .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
     .padding(Theme.Spacing.md)
-    .frame(maxWidth: .infinity, minHeight: 116, alignment: .leading)
+    .frame(maxWidth: .infinity, minHeight: 132, alignment: .leading)
     .background(cardBackground, in: RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous))
     .overlay {
       RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
@@ -273,27 +273,14 @@ private struct ManualReferenceCard: View {
         .minimumScaleFactor(0.82)
         .multilineTextAlignment(.leading)
       Text(item.chineseBriefIntro)
-        .font(.caption2)
+        .font(.footnote)
         .foregroundStyle(.secondary)
-        .lineLimit(2)
-        .minimumScaleFactor(0.82)
+        .lineLimit(4)
+        .minimumScaleFactor(0.9)
         .truncationMode(.tail)
         .multilineTextAlignment(.leading)
-      sourceBadge
     }
     .frame(maxWidth: .infinity, alignment: .leading)
-  }
-
-  private var sourceBadge: some View {
-    Text(item.source)
-      .font(.caption2.weight(.semibold))
-      .foregroundStyle(Theme.Palette.paperGreenText.opacity(0.82))
-      .lineLimit(1)
-      .minimumScaleFactor(0.78)
-      .truncationMode(.middle)
-      .padding(.horizontal, 7)
-      .padding(.vertical, 2)
-      .background(Theme.Palette.paperGreen.opacity(0.08), in: Capsule())
   }
 }
 

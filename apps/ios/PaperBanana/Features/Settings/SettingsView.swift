@@ -218,38 +218,42 @@ struct SettingsView: View {
     GlassPanel {
       VStack(alignment: .leading, spacing: Theme.Spacing.md) {
         SectionHeader(title: "联系作者", systemImage: "qrcode")
-        HStack(alignment: .center, spacing: Theme.Spacing.md) {
-          Image("AuthorQRCode")
-            .resizable()
-            .interpolation(.none)
-            .scaledToFit()
-            .frame(width: 168, height: 214)
-            .padding(Theme.Spacing.sm)
-            .background(.white, in: RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous))
-            .overlay {
-              RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
-                .strokeBorder(Theme.Palette.paperBorder, lineWidth: 1)
-            }
-            .accessibilityLabel("作者微信二维码")
 
-          VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Text("赵")
-              .font(.callout.weight(.semibold))
-            Text("美国边远小岛")
-              .font(.footnote)
-              .foregroundStyle(.secondary)
-            Text("扫码添加微信")
-              .font(.caption.weight(.semibold))
-              .foregroundStyle(Theme.Palette.paperGreenText)
-              .padding(.horizontal, 9)
-              .padding(.vertical, 4)
-              .background(Theme.Palette.paperGreen.opacity(0.1), in: Capsule())
+        if let authorQRCodeURL {
+          ShareLink(
+            item: authorQRCodeURL,
+            preview: SharePreview("作者微信二维码", image: Image("AuthorQRCode"))
+          ) {
+            authorQRCodeImage
           }
-          .frame(maxWidth: .infinity, alignment: .leading)
+          .buttonStyle(.plain)
+          .accessibilityLabel("保存作者微信二维码")
+          .accessibilityHint("打开系统分享面板，可保存图片")
+        } else {
+          authorQRCodeImage
         }
-        .accessibilityElement(children: .combine)
       }
     }
+  }
+
+  private var authorQRCodeImage: some View {
+    Image("AuthorQRCode")
+      .resizable()
+      .interpolation(.none)
+      .scaledToFit()
+      .frame(maxWidth: .infinity)
+      .frame(maxHeight: 420)
+      .padding(Theme.Spacing.sm)
+      .background(.white, in: RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous))
+      .overlay {
+        RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
+          .strokeBorder(Theme.Palette.paperBorder, lineWidth: 1)
+      }
+      .accessibilityLabel("作者微信二维码")
+  }
+
+  private var authorQRCodeURL: URL? {
+    Bundle.main.url(forResource: "author-qr", withExtension: "jpg")
   }
 
   // MARK: - ④ 关于
