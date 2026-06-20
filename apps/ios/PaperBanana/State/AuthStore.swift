@@ -49,7 +49,7 @@ final class AuthStore {
     do {
       let email = authEmail.trimmingCharacters(in: .whitespacesAndNewlines)
       if authMode == "sign-up" {
-        let name = authName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? String(email.split(separator: "@").first ?? "PaperBanana") : authName
+        let name = authName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? String(email.split(separator: "@").first ?? "图研") : authName
         try await apiClient.signUp(apiBase: settings.apiBase, email: email, password: authPassword, name: name)
       } else {
         try await apiClient.signIn(apiBase: settings.apiBase, email: email, password: authPassword)

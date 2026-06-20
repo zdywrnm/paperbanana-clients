@@ -142,7 +142,7 @@ struct GenerateView: View {
 
   private var heroTitleBlock: some View {
     VStack(alignment: .leading, spacing: 2) {
-      Text("PaperBanana")
+      Text("图研 Tuyan")
         .font(.callout.bold())
       Text("学术图示工作台")
         .font(.footnote)

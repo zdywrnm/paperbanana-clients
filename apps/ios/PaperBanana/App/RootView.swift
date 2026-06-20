@@ -22,7 +22,7 @@ struct RootView: View {
       .sheet(isPresented: $isFeedbackSheetPresented) {
         FeedbackSheet(model: model)
       }
-      .alert("PaperBanana", isPresented: $model.isAlertPresented) {
+      .alert("图研 Tuyan", isPresented: $model.isAlertPresented) {
         Button("好", role: .cancel) {}
       } message: {
         Text(model.alertMessage)

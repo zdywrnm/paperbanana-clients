@@ -34,7 +34,7 @@ struct GuideFAQItem: Identifiable, Equatable {
 }
 
 enum PaperBananaGuide {
-  static let intro = "PaperBanana 是一个多智能体学术配图生成工具：把论文方法描述和目标图注交给它，多个 AI 角色协作产出框架图、流程图、架构图或统计图。模型 API Key 由你自带，只保存在本机 Keychain。"
+  static let intro = "图研 Tuyan 是一个多智能体学术配图生成工具：把论文方法描述和目标图注交给它，多个 AI 角色协作产出框架图、流程图、架构图或统计图。模型 API Key 由你自带，只保存在本机 Keychain。"
 
   static let onboardingSteps: [GuideStep] = [
     GuideStep(
@@ -126,7 +126,7 @@ enum PaperBananaGuide {
   static let resources: [GuideResource] = [
     GuideResource(
       id: "website",
-      title: "PaperBanana 网站",
+      title: "图研 Tuyan 官网",
       subtitle: "打开线上 Web 工作台",
       systemImage: "safari",
       url: URL(string: "https://www.paperbanana.asia/")!
@@ -141,7 +141,7 @@ enum PaperBananaGuide {
     GuideResource(
       id: "github",
       title: "GitHub",
-      subtitle: "PaperBanana 多端 monorepo",
+      subtitle: "图研 Tuyan 多端仓库",
       systemImage: "chevron.left.forwardslash.chevron.right",
       url: URL(string: "https://github.com/zdywrnm/PaperBanana-clients")!
     ),
