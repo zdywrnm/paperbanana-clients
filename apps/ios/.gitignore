@@ -1,0 +1,6 @@
+.DS_Store
+xcuserdata/
+DerivedData/
+*.xcresult
+build/
+.claude/codex_session.json
