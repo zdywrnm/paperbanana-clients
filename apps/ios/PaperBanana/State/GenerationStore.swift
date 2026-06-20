@@ -214,6 +214,18 @@ final class GenerationStore {
     }
   }
 
+  func applyTemplate(_ configuration: SavedGenerationTemplateConfiguration) {
+    saveSelectedProviderKey()
+    configuration.apply(to: &draft)
+    referenceUploadError = ""
+    mainModelCapability = nil
+    if draft.referenceImageMode == .mainModel && !mainModelCanReadReferenceImages {
+      draft.referenceImageMode = .visionModel
+    }
+    ensureSupportedImageSize()
+    loadSelectedProviderKey()
+  }
+
   // MARK: - 网络操作
 
   func refreshMainModelCapability() async {
@@ -293,7 +305,7 @@ final class GenerationStore {
       )
       let created = try await apiClient.createJob(apiBase: settings.apiBase, payload: payload)
       guard !created.id.isEmpty else { throw PaperBananaAPIError.server("后端没有返回任务 ID。") }
-      jobs.track(jobID: created.id, status: created.status)
+      jobs.track(jobID: created.id, status: created.status, localDraft: Job(id: created.id, status: created.status, payload: payload))
       await jobs.loadUserJobs(silent: true)
     } catch {
       submitError = formatUserFacingError(error)

@@ -17,6 +17,7 @@ final class AppModel {
   var jobs: JobsStore
   var generation: GenerationStore
   var exports: ExportCenter
+  var templates: SavedTemplateStore
 
   private let apiClient: PaperBananaAPIClient
 
@@ -31,6 +32,7 @@ final class AppModel {
     self.jobs = jobs
     generation = GenerationStore(apiClient: client, settings: settings, jobs: jobs)
     exports = ExportCenter(apiClient: client, settings: settings)
+    templates = SavedTemplateStore()
 
     settings.currentJobIDProvider = { [weak jobs] in jobs?.currentJob?.id }
     auth.onAuthenticated = { [weak jobs] in await jobs?.loadUserJobs(silent: true) }
@@ -62,6 +64,16 @@ final class AppModel {
     generation.draft.infographicCategoryID = example.categoryID
     generation.draft.methodContent = example.methodContent
     generation.draft.caption = example.caption
+    selectedTab = .generate
+  }
+
+  @discardableResult
+  func saveCurrentTemplate(title: String) -> SavedGenerationTemplate {
+    templates.save(draft: generation.draft, title: title)
+  }
+
+  func applyTemplate(_ template: SavedGenerationTemplate) {
+    generation.applyTemplate(template.configuration)
     selectedTab = .generate
   }
 

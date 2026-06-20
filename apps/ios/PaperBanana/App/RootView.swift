@@ -2,8 +2,39 @@ import SwiftUI
 
 struct RootView: View {
   @Bindable var model: AppModel
+  @State private var isFeedbackSheetPresented = false
 
   var body: some View {
+    tabs
+      .overlay(alignment: .bottomTrailing) {
+        if showsFeedbackFloatingButton {
+          FeedbackFloatingButton {
+            isFeedbackSheetPresented = true
+          }
+          .padding(.trailing, Theme.Spacing.lg)
+          .padding(.bottom, feedbackBottomPadding)
+        }
+      }
+      .sheet(item: $model.exports.exportedResultFile) { file in
+        ShareSheet(items: [file.url])
+          .presentationDetents([.medium, .large])
+      }
+      .sheet(isPresented: $isFeedbackSheetPresented) {
+        FeedbackSheet(model: model)
+      }
+      .alert("PaperBanana", isPresented: $model.isAlertPresented) {
+        Button("好", role: .cancel) {}
+      } message: {
+        Text(model.alertMessage)
+      }
+  }
+
+  @ViewBuilder
+  private var tabs: some View {
+    baseTabs
+  }
+
+  private var baseTabs: some View {
     TabView(selection: $model.selectedTab) {
       Tab(AppTab.generate.title, systemImage: AppTab.generate.symbol, value: AppTab.generate) {
         GenerateView(model: model)
@@ -23,19 +54,13 @@ struct RootView: View {
     }
     .tabViewStyle(.sidebarAdaptable)
     .tabBarMinimizeBehavior(.onScrollDown)
-    .tabViewBottomAccessory {
-      if model.jobs.hasActiveJob {
-        GenerationStatusAccessory(model: model)
-      }
-    }
-    .sheet(item: $model.exports.exportedResultFile) { file in
-      ShareSheet(items: [file.url])
-        .presentationDetents([.medium, .large])
-    }
-    .alert("PaperBanana", isPresented: $model.isAlertPresented) {
-      Button("好", role: .cancel) {}
-    } message: {
-      Text(model.alertMessage)
-    }
+  }
+
+  private var feedbackBottomPadding: CGFloat {
+    return 88
+  }
+
+  private var showsFeedbackFloatingButton: Bool {
+    false
   }
 }

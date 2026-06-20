@@ -273,6 +273,48 @@ struct Job: Decodable, Identifiable, Equatable {
     completedAt = ""
   }
 
+  init(id: String, status: String, payload: JobCreatePayload, createdAt date: Date = Date()) {
+    self.id = id
+    self.status = status
+    provider = payload.provider.rawValue
+    jobType = "generate"
+    userID = ""
+    userEmail = ""
+    configurationMode = payload.configurationMode.rawValue
+    methodContent = payload.methodContent
+    caption = payload.caption
+    infographicCategory = payload.infographicCategory
+    outputFormat = payload.outputFormat
+    imageSize = payload.imageSize
+    mainModelName = payload.mainModelName
+    imageModelName = payload.imageModelName
+    referenceVisionModelName = payload.referenceVisionModelName
+    referenceImageMode = payload.referenceImageMode
+    referenceImageModeUsed = payload.referenceImageMode?.rawValue ?? ""
+    pipelineMode = payload.pipelineMode.lafValue
+    taskName = payload.taskName
+    retrievalSetting = payload.referenceImages.isEmpty ? payload.retrievalSetting : .none
+    retrievedReferenceIDs = []
+    retrievedReferences = []
+    stages = []
+    criticMode = ""
+    aspectRatio = payload.aspectRatio
+    numCandidates = payload.numCandidates
+    maxCriticRounds = payload.maxCriticRounds
+    promptCharCount = payload.methodContent.count
+    resultImageCount = 0
+    referenceImageCount = payload.referenceImages.count
+    resultImages = []
+    referenceImages = payload.referenceImages
+    logsTail = ""
+    error = ""
+    let timestamp = Self.localTimestampFormatter.string(from: date)
+    createdAt = timestamp
+    updatedAt = timestamp
+    startedAt = ""
+    completedAt = ""
+  }
+
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: DynamicCodingKey.self)
     id = container.string("id", "_id")
@@ -326,6 +368,12 @@ struct Job: Decodable, Identifiable, Equatable {
     }
     return displayValue(provider)
   }
+
+  private static let localTimestampFormatter: ISO8601DateFormatter = {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return formatter
+  }()
 
   private var displayConfigurationMode: String {
     switch configurationMode {

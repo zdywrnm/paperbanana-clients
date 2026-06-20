@@ -47,6 +47,42 @@ final class JobsStoreTests: XCTestCase {
     XCTAssertNotNil(store.lastPolledAt)
   }
 
+  func testRefreshCurrentJobUpdatesSignedInRecordSummary() async throws {
+    // 当前任务轮询完成后，记录页不能继续显示旧的 running 摘要。
+    let store = try makeSignedInStore()
+    defer {
+      store.clearForSignOut()
+      store.clearLocalJobs()
+    }
+    store.currentJobID = "job-1"
+    store.userJobs = [Job(id: "job-1", status: "running")]
+    JobsStoreStub.requestHandler = { request in
+      JobsStoreStub.jsonResponse(
+        url: request.url,
+        body: """
+        {
+          "code": 0,
+          "job": {
+            "id": "job-1",
+            "status": "succeeded",
+            "caption": "图 1：完成态",
+            "result_image_count": 1,
+            "result_images": []
+          }
+        }
+        """
+      )
+    }
+
+    await store.refreshCurrentJob()
+
+    XCTAssertEqual(store.currentJob?.statusKind, .succeeded)
+    XCTAssertEqual(store.userJobs.first?.id, "job-1")
+    XCTAssertEqual(store.userJobs.first?.statusKind, .succeeded)
+    XCTAssertEqual(store.userJobs.first?.title, "图 1：完成态")
+    XCTAssertEqual(store.userJobs.first?.resultImageCount, 1)
+  }
+
   func testRefreshCurrentJobSlowResponseDoesNotOverwriteNewerJob() async throws {
     // 旧任务的 getJob 在 await 期间用户已切换跟踪新任务：慢响应不得覆盖新任务的 currentJob。
     let store = makeStore()

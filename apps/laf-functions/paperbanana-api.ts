@@ -13,7 +13,7 @@ type ReferenceImageMode = 'auto' | 'main_model' | 'vision_model'
 type ReferenceImageModeUsed = 'none' | 'main_model' | 'vision_model'
 type ModelCapabilityStatus = 'supported' | 'unsupported' | 'unknown'
 type FeedbackCategory = 'bug' | 'feature' | 'experience' | 'other'
-type FeedbackPlatform = 'web' | 'miniprogram' | 'android' | 'windows' | 'macos'
+type FeedbackPlatform = 'web' | 'miniprogram' | 'android' | 'ios' | 'windows' | 'macos'
 
 type ApiKeys = {
   openrouter?: string
@@ -251,7 +251,7 @@ const openRouterModelCacheTtlMs = Number(process.env.OPENROUTER_MODEL_CACHE_TTL_
 const feedbackRateLimitWindowMs = 10 * 60 * 1000
 const feedbackRateLimitMax = 5
 const allowedFeedbackCategories = new Set<FeedbackCategory>(['bug', 'feature', 'experience', 'other'])
-const allowedFeedbackPlatforms = new Set<FeedbackPlatform>(['web', 'miniprogram', 'android', 'windows', 'macos'])
+const allowedFeedbackPlatforms = new Set<FeedbackPlatform>(['web', 'miniprogram', 'android', 'ios', 'windows', 'macos'])
 const allowedRetrievalSettings = new Set<RetrievalSetting>(['none', 'auto', 'random', 'manual'])
 let openRouterModelCache: { expiresAt: number; modalities: Map<string, string[]> } | null = null
 let resvgWasmPromise: Promise<ResvgWasmModule> | null = null

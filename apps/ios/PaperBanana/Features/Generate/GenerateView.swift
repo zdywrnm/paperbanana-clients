@@ -4,9 +4,11 @@ import PhotosUI
 struct GenerateView: View {
   @Bindable var model: AppModel
   @State private var isImporterPresented = false
+  @State private var isQuickStartExpanded = false
   @State private var selectedPhotoItems: [PhotosPickerItem] = []
   @Namespace private var submitNamespace
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
   private var importPipeline: ReferenceImportPipeline {
     ReferenceImportPipeline(generation: model.generation)
@@ -20,28 +22,38 @@ struct GenerateView: View {
     NavigationStack {
       ScrollViewReader { proxy in
         ScrollView {
-          VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+          VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             hero
-            providerSection
+            quickStartSection
+            generationSettingsSection
             inputSection
-            outputSection
-            advancedSection
             submitHints
             if let job = model.jobs.currentJob {
               JobDetailView(model: model, job: job)
                 .id("pipeline")
             }
           }
-          .padding()
+          .padding(.horizontal, Theme.Spacing.md)
+          .padding(.top, Theme.Spacing.md)
+          .padding(.bottom, bottomContentPadding)
         }
-        .scrollDismissesKeyboard(.interactively)
-        .safeAreaBar(edge: .bottom) {
-          // 任务进行中：本页底栏隐藏，进度交给页内流水线卡 + 全局 tab accessory，避免三处重复。
-          if !model.jobs.hasActiveJob {
+        .safeAreaInset(edge: .top, spacing: 0) {
+          if topScrollGuardHeight > 0 {
+            Color.clear
+              .frame(height: topScrollGuardHeight)
+              .allowsHitTesting(false)
+          }
+        }
+        .safeAreaInset(edge: .bottom) {
+          if showsFixedSubmitBar {
             submitBar
+              .padding(.top, Theme.Spacing.sm)
+              .padding(.bottom, Theme.Spacing.xs)
+              .background(.clear)
               .transition(.move(edge: .bottom).combined(with: .opacity))
           }
         }
+        .scrollDismissesKeyboard(.interactively)
         .animation(Theme.Motion.stateChange, value: model.jobs.hasActiveJob)
         .onChange(of: model.jobs.currentJobID) { _, newID in
           guard !newID.isEmpty else { return }
@@ -51,20 +63,9 @@ struct GenerateView: View {
         }
       }
       .background(AppBackground(isGenerating: model.jobs.isActivelyGenerating))
-      .navigationTitle("PaperBanana")
+      .toolbar(.hidden, for: .navigationBar)
       .task(id: model.generation.modelCapabilityQueryID) {
         await model.generation.refreshMainModelCapability()
-      }
-      .toolbar {
-        ToolbarItem(placement: .topBarTrailing) {
-          Button {
-            Task { await model.settings.refreshHealth() }
-          } label: {
-            Image(systemName: "arrow.clockwise")
-          }
-          .paperGlassButton()
-          .accessibilityLabel("刷新后端状态")
-        }
       }
       .fileImporter(isPresented: $isImporterPresented, allowedContentTypes: ReferenceImportPipeline.referenceContentTypes, allowsMultipleSelection: true) { result in
         switch result {
@@ -84,44 +85,68 @@ struct GenerateView: View {
     }
   }
 
+  private var showsFixedSubmitBar: Bool {
+    model.jobs.currentJob == nil
+      && !model.jobs.hasActiveJob
+      && (model.generation.canSubmit || model.generation.isSubmitting)
+  }
+
+  private var bottomContentPadding: CGFloat {
+    showsFixedSubmitBar ? 112 : 96
+  }
+
+  private var topScrollGuardHeight: CGFloat {
+    horizontalSizeClass == .compact ? 44 : 0
+  }
+
+  private var quickStartExamples: [QuickStartExample] {
+    Array(PaperBananaSamples.quickStartExamples.prefix(2))
+  }
+
   // MARK: - Hero
 
   private var hero: some View {
     GlassPanel {
-      VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-        // 标题块 + 账号胶囊：放得下时同行，AX 大字号时上下排（与 JobRow 同模式），
-        // 避免胶囊把标题挤成一字一行。
+      VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
         ViewThatFits(in: .horizontal) {
           HStack(spacing: Theme.Spacing.md) {
+            brandMark
             heroTitleBlock
             Spacer(minLength: Theme.Spacing.sm)
             heroAccountPill
           }
           VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            heroTitleBlock
+            HStack(spacing: Theme.Spacing.sm) {
+              brandMark
+              heroTitleBlock
+            }
             heroAccountPill
           }
         }
-        Text("生成论文框架图、流程图、系统架构图和数据统计图；API Key 仅保存在本机 Keychain。")
-          .font(.callout)
-          .foregroundStyle(.secondary)
       }
     }
   }
 
+  private var brandMark: some View {
+    ZStack {
+      RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
+        .fill(Theme.Palette.paperGreen.opacity(0.12))
+      Image("AppIconSource")
+        .resizable()
+        .scaledToFit()
+        .padding(5)
+    }
+    .frame(width: 46, height: 46)
+    .accessibilityHidden(true)
+  }
+
   private var heroTitleBlock: some View {
-    HStack(spacing: Theme.Spacing.md) {
-      Image(systemName: "graduationcap.fill")
-        .font(.title2)
-        .foregroundStyle(Theme.Palette.banana)
-        .accessibilityHidden(true)
-      VStack(alignment: .leading, spacing: 2) {
-        Text("论文图示工作台")
-          .font(.title2.bold())
-        Text(model.settings.health?.runtime == "gateway" ? "已连接 Sealos 网关" : (model.settings.healthError.isEmpty ? "默认连接 PaperBanana 网关" : model.settings.healthError))
-          .font(.footnote)
-          .foregroundStyle(.secondary)
-      }
+    VStack(alignment: .leading, spacing: 2) {
+      Text("PaperBanana")
+        .font(.callout.bold())
+      Text("学术图示工作台")
+        .font(.footnote)
+        .foregroundStyle(.secondary)
     }
   }
 
@@ -165,237 +190,419 @@ struct GenerateView: View {
     return localPart.isEmpty ? email : localPart
   }
 
-  // MARK: - ① 平台与密钥
+  // MARK: - 快速案例
 
-  private var providerSection: some View {
-    sectionCard("平台与密钥") {
-      ScrollView(.horizontal, showsIndicators: false) {
-        HStack(spacing: Theme.Spacing.sm) {
-          ForEach(ProviderCatalog.order) { provider in
-            providerChip(provider)
+  private var quickStartSection: some View {
+    sectionCard("快速上手案例", trailing: {
+      Button {
+        toggleQuickStart()
+      } label: {
+        Label(isQuickStartExpanded ? "收起" : "展开", systemImage: isQuickStartExpanded ? "chevron.up" : "chevron.down")
+          .font(.caption.weight(.semibold))
+      }
+      .buttonStyle(.plain)
+      .foregroundStyle(Theme.Palette.paperGreenText)
+      .accessibilityLabel(isQuickStartExpanded ? "收起快速上手案例" : "展开快速上手案例")
+    }) {
+      if isQuickStartExpanded {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 148), spacing: Theme.Spacing.md)], spacing: Theme.Spacing.md) {
+          ForEach(quickStartExamples) { example in
+            Button {
+              model.applyExample(example)
+            } label: {
+              QuickStartMiniCard(example: example)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("套用案例 \(example.title)")
           }
         }
-        .animation(Theme.Motion.stateChange, value: model.generation.draft.provider)
+        .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+      } else {
+        quickStartCollapsedSummary
       }
-      .accessibilityLabel("模型平台选择")
+    }
+    .animation(Theme.Motion.stateChange, value: isQuickStartExpanded)
+  }
 
-      SecureField(model.generation.selectedProviderConfig.keyPlaceholder, text: Binding(get: { model.generation.selectedAPIKey }, set: { model.generation.updateSelectedAPIKey($0) }))
-        .textContentType(.password)
-        .fieldWell()
-        .accessibilityLabel("\(model.generation.selectedProviderConfig.label) API Key 输入")
-
-      APIKeyGuideView(config: model.generation.selectedProviderConfig)
+  private func toggleQuickStart() {
+    withAnimation(reduceMotion ? nil : Theme.Motion.stateChange) {
+      isQuickStartExpanded.toggle()
     }
   }
 
-  private func providerChip(_ provider: ProviderID) -> some View {
-    let isSelected = model.generation.draft.provider == provider
-    let label = ProviderCatalog.config(for: provider).label
-    return Button {
-      model.generation.selectProvider(provider)
+  private var quickStartCollapsedSummary: some View {
+    Button {
+      toggleQuickStart()
     } label: {
-      Text(label)
-        .font(.subheadline.weight(isSelected ? .semibold : .regular))
-        .padding(.horizontal, Theme.Spacing.lg)
-        .padding(.vertical, Theme.Spacing.sm)
-        .background {
-          if isSelected {
-            Capsule().fill(Theme.Palette.banana.opacity(0.22))
-          }
-          Capsule().strokeBorder(isSelected ? AnyShapeStyle(Theme.Palette.banana) : AnyShapeStyle(.quaternary), lineWidth: 1.5)
+      HStack(spacing: Theme.Spacing.md) {
+        Image(systemName: "sparkles.rectangle.stack")
+          .font(.title3)
+          .foregroundStyle(Theme.Palette.warningText)
+          .frame(width: 34, height: 34)
+          .background(Theme.Palette.paperAmber.opacity(0.22), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+          .accessibilityHidden(true)
+        VStack(alignment: .leading, spacing: 2) {
+          Text(quickStartExamples.map(\.label).joined(separator: " · "))
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.primary)
+            .lineLimit(1)
+          Text("展开后可一键套用示例内容")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
         }
-        .contentShape(.capsule)
+        Spacer(minLength: Theme.Spacing.sm)
+        Image(systemName: "chevron.down")
+          .font(.caption.weight(.bold))
+          .foregroundStyle(.secondary)
+          .accessibilityHidden(true)
+      }
+      .padding(Theme.Spacing.md)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .background(Theme.Palette.paperWell, in: RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous))
+      .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous))
     }
     .buttonStyle(.plain)
-    .accessibilityLabel("模型平台 \(label)")
-    .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+    .accessibilityLabel("展开快速上手案例，包含 \(quickStartExamples.map(\.label).joined(separator: "、"))")
+  }
+
+  // MARK: - ① 生成设置
+
+  private var generationSettingsSection: some View {
+    sectionCard("生成设置") {
+      Text("普通模式使用平台默认配置；专业模式可调整模型、比例和模型名称。")
+        .font(.footnote)
+        .foregroundStyle(.secondary)
+
+      modeSwitch
+      providerControls
+      if !isAdvanced {
+        defaultSummaryChips
+      }
+      outputControls
+      apiKeyControls
+
+      if isAdvanced {
+        Text("专业配置")
+          .font(.subheadline.weight(.semibold))
+          .padding(.top, Theme.Spacing.xs)
+        advancedControls
+          .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+      }
+
+      categoryControls
+    }
+    .animation(Theme.Motion.stateChange, value: isAdvanced)
+  }
+
+  private var modeSwitch: some View {
+    HStack(spacing: Theme.Spacing.xs) {
+      ModeChoiceButton(
+        title: "普通模式",
+        subtitle: "默认流程",
+        systemImage: "sparkles",
+        isSelected: model.generation.draft.configurationMode == .simple
+      ) {
+        model.generation.draft.configurationMode = .simple
+      }
+      ModeChoiceButton(
+        title: "专业模式",
+        subtitle: "自定义参数",
+        systemImage: "slider.horizontal.3",
+        isSelected: model.generation.draft.configurationMode == .advanced
+      ) {
+        model.generation.draft.configurationMode = .advanced
+      }
+    }
+    .padding(5)
+    .background(Theme.Palette.paperWell, in: RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous))
+    .accessibilityElement(children: .contain)
+    .accessibilityLabel("使用模式")
+  }
+
+  private var providerControls: some View {
+    VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+      paperMenuTile(
+        title: isAdvanced ? "模型接口" : "模型平台",
+        systemImage: "antenna.radiowaves.left.and.right",
+        value: model.generation.selectedProviderConfig.label,
+        options: ProviderCatalog.order,
+        optionTitle: { ProviderCatalog.config(for: $0).label },
+        isSelected: { $0 == model.generation.draft.provider },
+        action: { model.generation.selectProvider($0) }
+      )
+      .accessibilityLabel("模型平台")
+    }
+  }
+
+  private var defaultSummaryChips: some View {
+    ScrollView(.horizontal, showsIndicators: false) {
+      HStack(spacing: Theme.Spacing.sm) {
+        ForEach(defaultSummaryItems, id: \.self) { item in
+          Text(item)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.primary)
+            .lineLimit(1)
+            .padding(.horizontal, Theme.Spacing.sm)
+            .padding(.vertical, 6)
+            .background(Theme.Palette.paperWell, in: .capsule)
+            .overlay {
+              Capsule()
+                .strokeBorder(Theme.Palette.paperBorder, lineWidth: 1)
+            }
+        }
+      }
+      .padding(.vertical, 1)
+    }
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel("默认配置：\(defaultSummaryItems.joined(separator: "，"))")
+  }
+
+  private var defaultSummaryItems: [String] {
+    var items = [
+      modelDisplayName(model.generation.activeMainModelName, in: model.generation.selectedProviderConfig.mainModels),
+      "规划器 + 评审器",
+      model.generation.draft.aspectRatio,
+      model.generation.draft.outputFormat.title
+    ]
+    if model.generation.draft.outputFormat != .svg {
+      items.insert(modelDisplayName(model.generation.activeImageModelName, in: model.generation.selectedProviderConfig.imageModels), at: 1)
+      items.append(model.generation.draft.imageSize.title)
+    }
+    return items
+  }
+
+  private func modelDisplayName(_ value: String, in options: [ModelOption]) -> String {
+    options.first { $0.value == value }?.label ?? value
+  }
+
+  private var apiKeyControls: some View {
+    return VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+      Text("\(model.generation.selectedProviderConfig.label) API 密钥")
+        .font(.subheadline.weight(.semibold))
+      SecureField(model.generation.selectedProviderConfig.keyPlaceholder, text: Binding(get: { model.generation.selectedAPIKey }, set: { model.generation.updateSelectedAPIKey($0) }))
+        .textContentType(.password)
+        .paperFieldWell()
+        .accessibilityLabel("\(model.generation.selectedProviderConfig.label) API Key 输入")
+
+      APIKeyGuideView(config: model.generation.selectedProviderConfig)
+        .padding(Theme.Spacing.md)
+        .background(Theme.Palette.paperAmber.opacity(0.18), in: RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous))
+    }
   }
 
   // MARK: - ② 内容输入
 
   private var inputSection: some View {
     sectionCard("内容输入") {
-      LabeledTextEditor(title: "论文方法内容", text: $model.generation.draft.methodContent, minHeight: 180)
-      LabeledTextEditor(title: "目标图注", text: $model.generation.draft.caption, minHeight: 90)
-
-      HStack {
-        Text("信息图类别")
-          .font(.subheadline)
-        Spacer()
-        Picker("信息图类别", selection: $model.generation.draft.infographicCategoryID) {
-          ForEach(PaperBananaSamples.categories) { category in
-            Text(category.label).tag(category.id)
-          }
-        }
-        .accessibilityLabel("信息图类别")
-      }
-      Text(model.generation.draft.selectedCategory.detail)
+      Text("粘贴论文方法部分或业务流程，再填写目标图注。")
         .font(.footnote)
         .foregroundStyle(.secondary)
-      if model.generation.draft.taskName == .plot {
-        Label("统计图会走独立 plot worker 渲染。", systemImage: "chart.xyaxis.line")
-          .font(.footnote)
-          .foregroundStyle(.secondary)
-      }
+      LabeledTextEditor(title: "论文方法内容", text: $model.generation.draft.methodContent, minHeight: 180)
+      LabeledTextEditor(title: "目标图注", text: $model.generation.draft.caption, minHeight: 90)
 
       ReferenceUploadStrip(
         model: model,
         selectedPhotoItems: $selectedPhotoItems,
         showImporter: { isImporterPresented = true }
       )
+
+      if !showsFixedSubmitBar {
+        inlineSubmitBlock
+      }
     }
   }
 
-  // MARK: - ③ 输出设置
+  private var categoryControls: some View {
+    return VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+      paperPickerTile(title: "信息图类别", systemImage: PaperBananaSamples.categorySymbol(idOrLabel: model.generation.draft.infographicCategoryID)) {
+        Picker("信息图类别", selection: $model.generation.draft.infographicCategoryID) {
+          ForEach(PaperBananaSamples.categories) { category in
+            Text(category.label).tag(category.id)
+          }
+        }
+        .labelsHidden()
+        .accessibilityLabel("信息图类别")
+      }
+      Text(model.generation.draft.selectedCategory.detail)
+        .font(.footnote)
+        .foregroundStyle(.secondary)
+      if model.generation.draft.taskName == .plot {
+        Label("统计图由独立渲染服务生成，可能稍慢。", systemImage: "chart.xyaxis.line")
+          .font(.footnote)
+          .foregroundStyle(Theme.Palette.warningText)
+          .padding(Theme.Spacing.md)
+          .background(Theme.Palette.paperAmber.opacity(0.20), in: RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous))
+      }
+    }
+  }
 
-  private var outputSection: some View {
-    sectionCard("输出设置") {
-      HStack {
-        Text("导出格式")
-          .font(.subheadline)
-        Spacer()
-        Picker("导出格式", selection: $model.generation.draft.outputFormat) {
-          ForEach(OutputFormat.allCases) { format in
-            Text(format.title).tag(format)
-          }
-        }
-        .pickerStyle(.segmented)
-        .fixedSize()
+  private var outputControls: some View {
+    let outputColumns = model.generation.draft.outputFormat == .svg
+      ? [GridItem(.flexible(), spacing: Theme.Spacing.md)]
+      : [GridItem(.flexible(), spacing: Theme.Spacing.md), GridItem(.flexible(), spacing: Theme.Spacing.md)]
+
+    return VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+      LazyVGrid(columns: outputColumns, spacing: Theme.Spacing.md) {
+        paperMenuTile(
+          title: "导出格式",
+          systemImage: "square.and.arrow.down",
+          value: model.generation.draft.outputFormat.title,
+          options: OutputFormat.allCases,
+          optionTitle: { $0.title },
+          isSelected: { $0 == model.generation.draft.outputFormat },
+          action: { model.generation.draft.outputFormat = $0 }
+        )
         .accessibilityLabel("导出格式")
-      }
-      HStack {
-        Text("清晰度")
-          .font(.subheadline)
-        Spacer()
-        Picker("清晰度", selection: $model.generation.draft.imageSize) {
-          ForEach(ProviderCatalog.supportedResolutions(provider: model.generation.draft.provider, imageModel: model.generation.activeImageModelName)) { size in
-            Text(size.title).tag(size)
-          }
+        if model.generation.draft.outputFormat != .svg {
+          paperMenuTile(
+            title: "输出清晰度",
+            systemImage: "sparkle.magnifyingglass",
+            value: model.generation.draft.imageSize.title,
+            options: ProviderCatalog.supportedResolutions(provider: model.generation.draft.provider, imageModel: model.generation.activeImageModelName),
+            optionTitle: { $0.title },
+            isSelected: { $0 == model.generation.draft.imageSize },
+            action: { model.generation.draft.imageSize = $0 }
+          )
+          .accessibilityLabel("清晰度")
         }
-        .accessibilityLabel("清晰度")
       }
-      HStack {
-        Text("画面比例")
-          .font(.subheadline)
-        Spacer()
-        Picker("画面比例", selection: $model.generation.draft.aspectRatio) {
-          ForEach(["16:9", "21:9", "3:2", "1:1"], id: \.self) { ratio in
-            Text(ratio).tag(ratio)
-          }
-        }
-        .accessibilityLabel("画面比例")
-      }
-      if !isAdvanced {
-        Text("普通模式固定 16:9 提交；切换专业参数后画面比例才会生效。")
+      Text(model.generation.draft.outputFormat == .svg
+        ? "SVG 为矢量格式，适合排版精修；由主模型直接生成，无需清晰度与图像生成模型。"
+        : "PNG 适合直接预览保存；1K 仅基础渲染，2K/4K 出图后自动精修放大。")
           .font(.caption)
           .foregroundStyle(.secondary)
-      }
     }
-  }
-
-  // MARK: - ④ 专业参数
-
-  private var advancedSection: some View {
-    sectionCard("专业参数", trailing: {
-      Picker("模式", selection: $model.generation.draft.configurationMode) {
-        ForEach(ConfigurationMode.allCases) { mode in
-          Text(mode.title).tag(mode)
-        }
-      }
-      .pickerStyle(.segmented)
-      .fixedSize()
-      .accessibilityLabel("配置模式")
-      .accessibilityHint("专业模式可调模型、流水线与评审参数")
-    }) {
-      if isAdvanced {
-        advancedControls
-          .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
-      } else {
-        Text("普通模式使用平台推荐的模型与流水线参数。")
-          .font(.footnote)
-          .foregroundStyle(.secondary)
-      }
-    }
-    .animation(Theme.Motion.stateChange, value: isAdvanced)
   }
 
   @ViewBuilder
   private var advancedControls: some View {
-    labeledPickerRow("主模型") {
-      Picker("主模型", selection: Binding(get: { model.generation.draft.mainModelName }, set: { model.generation.selectMainModel($0) })) {
-        ForEach(model.generation.selectedProviderConfig.mainModels) { option in
-          Text(option.displayName).tag(option.value)
+    VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+      LazyVGrid(columns: [GridItem(.flexible(), spacing: Theme.Spacing.md), GridItem(.flexible(), spacing: Theme.Spacing.md)], spacing: Theme.Spacing.md) {
+        paperPickerTile(title: "生成流程", systemImage: "point.3.connected.trianglepath.dotted") {
+          Picker("生成流程", selection: $model.generation.draft.pipelineMode) {
+            ForEach(PipelineMode.allCases) { mode in
+              Text(mode.title).tag(mode)
+            }
+          }
+          .labelsHidden()
+        }
+        paperPickerTile(title: "检索设置", systemImage: "magnifyingglass") {
+          Picker(
+            "检索设置",
+            selection: Binding(
+              get: { model.generation.draft.retrievalSetting },
+              set: { model.generation.selectRetrievalSetting($0) }
+            )
+          ) {
+            ForEach(RetrievalSetting.allCases) { setting in
+              Text(setting.title).tag(setting)
+            }
+          }
+          .labelsHidden()
+          .disabled(!model.generation.draft.referenceImages.isEmpty)
+        }
+        paperPickerTile(title: "画面比例", systemImage: "aspectratio") {
+          Picker("画面比例", selection: $model.generation.draft.aspectRatio) {
+            ForEach(["16:9", "21:9", "3:2", "1:1"], id: \.self) { ratio in
+              Text(ratio).tag(ratio)
+            }
+          }
+          .labelsHidden()
+        }
+        StepperTile(title: "候选数量", valueText: "\(model.generation.draft.numCandidates) 张") {
+          Stepper("候选数量", value: $model.generation.draft.numCandidates, in: 1...3)
+            .labelsHidden()
+        }
+        StepperTile(title: "评审轮数", valueText: "\(model.generation.draft.maxCriticRounds) 轮") {
+          Stepper("评审轮数", value: $model.generation.draft.maxCriticRounds, in: 0...3)
+            .labelsHidden()
         }
       }
-      .accessibilityLabel("主模型")
-    }
-    labeledPickerRow("图像生成模型") {
-      Picker("图像生成模型", selection: Binding(get: { model.generation.draft.imageModelName }, set: { model.generation.selectImageModel($0) })) {
-        ForEach(model.generation.selectedProviderConfig.imageModels) { option in
-          Text(option.displayName).tag(option.value)
-        }
+
+      if !model.generation.draft.referenceImages.isEmpty {
+        Text("已上传参考图，当前不使用检索（以本地参考图作为唯一视觉风格来源）。")
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+      } else if model.generation.referenceUploadBlockedByRetrieval {
+        Text("已启用检索参考，此时不能上传本地参考图；如需自传，请选择“不使用检索”。")
+          .font(.footnote)
+          .foregroundStyle(Theme.Palette.warningText)
       }
-      .accessibilityLabel("图像生成模型")
-    }
-    if model.generation.activeReferenceImageMode != .mainModel {
-      labeledPickerRow("参考图识别模型") {
-        Picker("参考图识别模型", selection: $model.generation.draft.referenceVisionModelName) {
-          ForEach(model.generation.selectedProviderConfig.visionModels) { option in
-            Text(option.displayName).tag(option.value)
+
+      LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: Theme.Spacing.md)], spacing: Theme.Spacing.md) {
+        paperPickerTile(title: "主模型", systemImage: "brain.head.profile") {
+          Picker("主模型", selection: Binding(get: { model.generation.draft.mainModelName }, set: { model.generation.selectMainModel($0) })) {
+            ForEach(model.generation.selectedProviderConfig.mainModels) { option in
+              Text(option.displayName).tag(option.value)
+            }
+          }
+          .labelsHidden()
+        }
+        if model.generation.draft.outputFormat != .svg {
+          paperPickerTile(title: "图像模型", systemImage: "photo") {
+            Picker("图像生成模型", selection: Binding(get: { model.generation.draft.imageModelName }, set: { model.generation.selectImageModel($0) })) {
+              ForEach(model.generation.selectedProviderConfig.imageModels) { option in
+                Text(option.displayName).tag(option.value)
+              }
+            }
+            .labelsHidden()
           }
         }
-        .accessibilityLabel("参考图识别模型")
-      }
-    }
-    labeledPickerRow("生成流程") {
-      Picker("生成流程", selection: $model.generation.draft.pipelineMode) {
-        ForEach(PipelineMode.allCases) { mode in
-          Text(mode.title).tag(mode)
+        if model.generation.activeReferenceImageMode != .mainModel {
+          paperPickerTile(title: "参考图识别模型", systemImage: "eye") {
+            Picker("参考图识别模型", selection: $model.generation.draft.referenceVisionModelName) {
+              ForEach(model.generation.selectedProviderConfig.visionModels) { option in
+                Text(option.displayName).tag(option.value)
+              }
+            }
+            .labelsHidden()
+          }
         }
       }
-      .accessibilityLabel("生成流程")
-    }
-    labeledPickerRow("检索设置") {
-      Picker(
-        "检索设置",
-        selection: Binding(
-          get: { model.generation.draft.retrievalSetting },
-          set: { model.generation.selectRetrievalSetting($0) }
-        )
-      ) {
-        ForEach(RetrievalSetting.allCases) { setting in
-          Text(setting.title).tag(setting)
+
+      if !model.generation.draft.referenceImages.isEmpty {
+        Picker("参考图处理方式", selection: $model.generation.draft.referenceImageMode) {
+          Text(ReferenceImageMode.visionModel.title).tag(ReferenceImageMode.visionModel)
+          Text(ReferenceImageMode.mainModel.title).tag(ReferenceImageMode.mainModel)
+            .disabled(!model.generation.mainModelCanReadReferenceImages)
         }
+        .pickerStyle(.segmented)
+        Text(model.generation.referenceCapabilityNote)
+          .font(.footnote)
+          .foregroundStyle(model.generation.mainModelDirectUnsupported ? .red : .secondary)
       }
-      .accessibilityLabel("检索设置")
-      .disabled(!model.generation.draft.referenceImages.isEmpty)
-    }
-    if !model.generation.draft.referenceImages.isEmpty {
-      Text("已上传参考图，当前不使用检索（以本地参考图作为唯一视觉风格来源）。")
-        .font(.footnote)
-        .foregroundStyle(.secondary)
-      Picker("参考图处理方式", selection: $model.generation.draft.referenceImageMode) {
-        Text(ReferenceImageMode.visionModel.title).tag(ReferenceImageMode.visionModel)
-        Text(ReferenceImageMode.mainModel.title).tag(ReferenceImageMode.mainModel)
-          .disabled(!model.generation.mainModelCanReadReferenceImages)
+
+      if model.generation.draft.retrievalSetting == .manual && model.generation.draft.referenceImages.isEmpty {
+        ManualReferencePanel(model: model)
       }
-      .pickerStyle(.segmented)
-      Text(model.generation.referenceCapabilityNote)
-        .font(.footnote)
-        .foregroundStyle(model.generation.mainModelDirectUnsupported ? .red : .secondary)
-    } else if model.generation.referenceUploadBlockedByRetrieval {
-      Text("已启用检索参考，此时不能上传本地参考图；如需自传，请选择“不使用检索”。")
-        .font(.footnote)
-        .foregroundStyle(Theme.Palette.warningText)
-    }
-    Stepper("候选图数量 \(model.generation.draft.numCandidates)", value: $model.generation.draft.numCandidates, in: 1...3)
-    Stepper("评审轮数 \(model.generation.draft.maxCriticRounds)", value: $model.generation.draft.maxCriticRounds, in: 0...3)
-    if model.generation.draft.retrievalSetting == .manual && model.generation.draft.referenceImages.isEmpty {
-      ManualReferencePanel(model: model)
     }
   }
 
   // MARK: - 提交提示
+
+  private var inlineSubmitBlock: some View {
+    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+      Button {
+        Task { await model.generation.submitJob() }
+      } label: {
+        Label("生成候选图", systemImage: "sparkles")
+          .font(.headline)
+          .frame(maxWidth: .infinity)
+      }
+      .paperGlassButton(prominent: true)
+      .disabled(!model.generation.canSubmit)
+      .accessibilityLabel("生成候选图")
+
+      if !model.generation.canSubmit {
+        Text(submitRequirementText)
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+    }
+    .padding(.top, Theme.Spacing.xs)
+  }
 
   @ViewBuilder
   private var submitHints: some View {
@@ -413,6 +620,16 @@ struct GenerateView: View {
         .font(.footnote)
         .foregroundStyle(.secondary)
     }
+  }
+
+  private var submitRequirementText: String {
+    if model.generation.mainModelDirectUnsupported {
+      return "当前参考图处理方式不可用，请改用独立识别模型或更换主模型。"
+    }
+    if isAdvanced {
+      return "需要填写 API Key、模型名称、至少 20 字内容和目标图注；手动参考需至少选 1 个案例。"
+    }
+    return "需要填写 API Key、至少 20 字内容和目标图注。"
   }
 
   // MARK: - 底部提交栏
@@ -436,7 +653,7 @@ struct GenerateView: View {
         Button {
           Task { await model.generation.submitJob() }
         } label: {
-          Label("开始生成", systemImage: "sparkles")
+          Label("生成候选图", systemImage: "sparkles")
             .font(.headline)
             .frame(maxWidth: .infinity)
         }
@@ -444,7 +661,7 @@ struct GenerateView: View {
         .paperGlassButton(prominent: true)
         .glassEffectID("submit", in: submitNamespace)
         .disabled(!model.generation.canSubmit)
-        .accessibilityLabel("开始生成")
+        .accessibilityLabel("生成候选图")
         .accessibilityHint("提交论文方法内容，启动多智能体生成流水线")
       }
     }
@@ -454,16 +671,69 @@ struct GenerateView: View {
 
   // MARK: - 分组卡
 
-  private func labeledPickerRow(_ title: String, @ViewBuilder picker: () -> some View) -> some View {
-    HStack(spacing: Theme.Spacing.lg) {
-      Text(title)
-        .font(.subheadline)
-        .fixedSize()
-      Spacer(minLength: 0)
-      picker()
-        .labelsHidden()
+  private func paperPickerTile(title: String, systemImage: String, @ViewBuilder content: () -> some View) -> some View {
+    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+      Label(title, systemImage: systemImage)
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(.secondary)
+      content()
+        .font(.body.weight(.semibold))
         .lineLimit(1)
+        .minimumScaleFactor(0.86)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
+    .padding(.horizontal, Theme.Spacing.md)
+    .padding(.vertical, 10)
+    .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
+    .background(Theme.Palette.paperWell, in: RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous))
+  }
+
+  private func paperMenuTile<Option: Identifiable & Hashable>(
+    title: String,
+    systemImage: String,
+    value: String,
+    options: [Option],
+    optionTitle: @escaping (Option) -> String,
+    isSelected: @escaping (Option) -> Bool,
+    action: @escaping (Option) -> Void
+  ) -> some View {
+    Menu {
+      ForEach(options, id: \.self) { option in
+        Button {
+          action(option)
+        } label: {
+          if isSelected(option) {
+            Label(optionTitle(option), systemImage: "checkmark")
+          } else {
+            Text(optionTitle(option))
+          }
+        }
+      }
+    } label: {
+      HStack(alignment: .center, spacing: Theme.Spacing.sm) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+          Label(title, systemImage: systemImage)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+          Text(value)
+            .font(.body.weight(.semibold))
+            .foregroundStyle(.primary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.86)
+        }
+        Spacer(minLength: Theme.Spacing.sm)
+        Image(systemName: "chevron.up.chevron.down")
+          .font(.footnote.weight(.bold))
+          .foregroundStyle(Theme.Palette.bananaText)
+          .accessibilityHidden(true)
+      }
+      .padding(.horizontal, Theme.Spacing.md)
+      .padding(.vertical, 10)
+      .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
+      .background(Theme.Palette.paperWell, in: RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous))
+      .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous))
+    }
+    .buttonStyle(.plain)
   }
 
   private func sectionCard(
@@ -471,8 +741,7 @@ struct GenerateView: View {
     @ViewBuilder trailing: () -> some View = { EmptyView() },
     @ViewBuilder content: () -> some View
   ) -> some View {
-    GlassPanel {
-      VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
         HStack(alignment: .firstTextBaseline) {
           SectionHeader(title: title)
           Spacer()
@@ -480,7 +749,107 @@ struct GenerateView: View {
         }
         content()
       }
+      .padding(Theme.Spacing.md)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .background(Theme.Palette.paperPanel, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+      .overlay {
+        RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+          .strokeBorder(Theme.Palette.paperBorder, lineWidth: 1)
+      }
+      .paperGlass(.panel)
+  }
+}
+
+private struct QuickStartMiniCard: View {
+  let example: QuickStartExample
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+      HStack(spacing: Theme.Spacing.xs) {
+        Label(example.label, systemImage: PaperBananaSamples.categorySymbol(idOrLabel: example.categoryID))
+          .font(.caption.weight(.semibold))
+          .foregroundStyle(Theme.Palette.warningText)
+          .lineLimit(1)
+          .padding(.horizontal, Theme.Spacing.xs)
+          .padding(.vertical, 2)
+          .background(Theme.Palette.paperAmber.opacity(0.22), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        Spacer(minLength: Theme.Spacing.xs)
+        Image(systemName: "wand.and.sparkles")
+          .font(.caption.weight(.semibold))
+          .foregroundStyle(.secondary)
+          .accessibilityHidden(true)
+      }
+      Text(example.title)
+        .font(.subheadline.weight(.semibold))
+        .foregroundStyle(.primary)
+        .lineLimit(2)
+        .fixedSize(horizontal: false, vertical: true)
+      Text(example.hint)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .lineLimit(3)
+        .fixedSize(horizontal: false, vertical: true)
     }
+    .padding(Theme.Spacing.md)
+    .frame(maxWidth: .infinity, minHeight: 128, alignment: .topLeading)
+    .fieldWell()
+    .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous))
+  }
+}
+
+private struct ModeChoiceButton: View {
+  let title: String
+  let subtitle: String
+  let systemImage: String
+  let isSelected: Bool
+  let action: () -> Void
+
+  var body: some View {
+    Button(action: action) {
+      VStack(spacing: 3) {
+        Label(title, systemImage: systemImage)
+          .font(.subheadline.weight(.semibold))
+          .lineLimit(1)
+          .minimumScaleFactor(0.82)
+        Text(subtitle)
+          .font(.caption.weight(.medium))
+          .opacity(0.78)
+          .lineLimit(1)
+      }
+      .frame(maxWidth: .infinity, minHeight: 62)
+      .foregroundStyle(isSelected ? .white : Theme.Palette.paperGreenText)
+      .background(
+        RoundedRectangle(cornerRadius: Theme.Radius.control - 2, style: .continuous)
+          .fill(isSelected ? Theme.Palette.paperGreen : Color.clear)
+      )
+      .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.control - 2, style: .continuous))
+    }
+    .buttonStyle(.plain)
+    .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+  }
+}
+
+private struct StepperTile<Controls: View>: View {
+  let title: String
+  let valueText: String
+  @ViewBuilder let controls: Controls
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+      Text(title)
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(.secondary)
+      HStack {
+        Text(valueText)
+          .font(.callout.weight(.semibold))
+          .foregroundStyle(.primary)
+        Spacer(minLength: Theme.Spacing.sm)
+        controls
+      }
+    }
+    .padding(Theme.Spacing.md)
+    .frame(maxWidth: .infinity, minHeight: 76, alignment: .leading)
+    .background(Theme.Palette.paperWell, in: RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous))
   }
 }
 

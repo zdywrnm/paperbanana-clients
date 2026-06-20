@@ -10,10 +10,15 @@ struct GuideResourceRow: View {
   var body: some View {
     if embeddedInPanel {
       linkContent
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.control))
+        .fieldWell()
         .accessibilityHint("在浏览器中打开")
     } else {
       linkContent
+        .background(Theme.Palette.paperPanel, in: RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous))
+        .overlay {
+          RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
+            .strokeBorder(Theme.Palette.paperBorder, lineWidth: 1)
+        }
         .paperGlass(.interactive)
         .accessibilityHint("在浏览器中打开")
     }
@@ -40,7 +45,7 @@ struct GuideResourceRow: View {
           .foregroundStyle(.secondary)
           .accessibilityHidden(true)
       }
-      .padding(embeddedInPanel ? Theme.Spacing.md : Theme.Spacing.lg)
+      .padding(embeddedInPanel ? 0 : Theme.Spacing.lg)
       .frame(maxWidth: .infinity, alignment: .leading)
       .contentShape(.rect)
     }

@@ -8,6 +8,7 @@ final class JobsStore {
   var currentJobID = ""
   var currentJob: Job?
   var userJobs: [Job] = []
+  var localJobs: [Job] = []
   var recordsError = ""
   var recordsLoading = false
   /// 轮询的结构化失败结果（连续失败 / 超时）转成的可展示文案；为空表示无异常。
@@ -34,6 +35,7 @@ final class JobsStore {
   private let auth: AuthStore
   private let poller: JobPoller
   private let recordsCache = RecordsDiskCache()
+  private let localRecordsCache = RecordsDiskCache(filename: "local-jobs.json")
 
   init(apiClient: PaperBananaAPIClient, settings: SettingsStore, auth: AuthStore, poller: JobPoller? = nil) {
     self.apiClient = apiClient
@@ -43,12 +45,15 @@ final class JobsStore {
   }
 
   /// 开始跟踪一个新建任务并启动轮询。
-  func track(jobID: String, status: String) {
+  func track(jobID: String, status: String, localDraft: Job? = nil) {
     currentJobID = jobID
-    currentJob = Job(id: jobID, status: status)
+    currentJob = localDraft ?? Job(id: jobID, status: status)
     pollingError = ""
     // 新任务还没拿到过数据：清掉上一个任务的刷新时间，避免"刷新于 X 前"显示旧任务的时刻。
     lastPolledAt = nil
+    if let currentJob {
+      storeLocalJob(currentJob)
+    }
     startPolling(jobID: jobID)
   }
 
@@ -78,6 +83,7 @@ final class JobsStore {
       // await 期间可能已 track 了新任务：旧任务的慢响应不得覆盖新任务的 currentJob。
       guard jobID == currentJobID else { return }
       currentJob = job
+      storeLocalJob(job)
       lastPolledAt = Date()
     } catch {
       // 一次性刷新失败不展示错误：常驻错误通道是 pollingError。
@@ -93,6 +99,9 @@ final class JobsStore {
     defer { recordsLoading = false }
     do {
       userJobs = try await apiClient.userJobs(apiBase: settings.apiBase)
+      if let currentJob {
+        mergeTrackedJobIntoUserJobs(currentJob)
+      }
       isShowingCachedData = false
       // 成功路径必须清掉历史错误：否则旧红卡会赖在新数据上。
       recordsError = ""
@@ -107,15 +116,24 @@ final class JobsStore {
 
   /// 启动时先加载本地缓存展示，等网络刷新成功后覆盖。
   func loadCachedRecords() {
-    guard userJobs.isEmpty, let cached = recordsCache.load(), !cached.isEmpty else { return }
-    userJobs = cached
-    isShowingCachedData = true
+    if userJobs.isEmpty, let cached = recordsCache.load(), !cached.isEmpty {
+      userJobs = cached
+      isShowingCachedData = true
+    }
+    if localJobs.isEmpty, let cached = localRecordsCache.load(), !cached.isEmpty {
+      localJobs = Array(cached.prefix(10))
+    }
   }
 
   func clearForSignOut() {
     userJobs = []
     isShowingCachedData = false
     recordsCache.clear()
+  }
+
+  func clearLocalJobs() {
+    localJobs = []
+    localRecordsCache.clear()
   }
 
   private func startPolling(jobID: String) {
@@ -125,6 +143,7 @@ final class JobsStore {
       fetch: { try await apiClient.getJob(apiBase: settings.apiBase, jobID: jobID) },
       onUpdate: { [weak self] job in
         self?.currentJob = job
+        self?.storeLocalJob(job)
         self?.lastPolledAt = Date()
       },
       onFinish: { [weak self] termination in
@@ -142,5 +161,21 @@ final class JobsStore {
     case .repeatedFailures(let message):
       pollingError = message
     }
+  }
+
+  private func storeLocalJob(_ job: Job) {
+    guard !job.id.isEmpty else { return }
+    let existing = localJobs.filter { $0.id != job.id }
+    localJobs = Array(([job] + existing).prefix(10))
+    localRecordsCache.save(localJobs)
+    mergeTrackedJobIntoUserJobs(job)
+  }
+
+  private func mergeTrackedJobIntoUserJobs(_ job: Job) {
+    guard auth.currentUser != nil, !job.id.isEmpty else { return }
+    let existing = userJobs.filter { $0.id != job.id }
+    userJobs = Array(([job] + existing).prefix(50))
+    isShowingCachedData = false
+    recordsCache.save(userJobs)
   }
 }
