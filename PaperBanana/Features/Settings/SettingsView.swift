@@ -9,6 +9,7 @@ struct SettingsView: View {
         VStack(spacing: Theme.Spacing.lg) {
           accountPanel
           feedbackPanel
+          contactPanel
           aboutPanel
         }
         .padding()
@@ -211,7 +212,47 @@ struct SettingsView: View {
     }
   }
 
-  // MARK: - ③ 关于
+  // MARK: - ③ 联系作者
+
+  private var contactPanel: some View {
+    GlassPanel {
+      VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+        SectionHeader(title: "联系作者", systemImage: "qrcode")
+        HStack(alignment: .center, spacing: Theme.Spacing.md) {
+          Image("AuthorQRCode")
+            .resizable()
+            .interpolation(.none)
+            .scaledToFit()
+            .frame(width: 168, height: 214)
+            .padding(Theme.Spacing.sm)
+            .background(.white, in: RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous))
+            .overlay {
+              RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
+                .strokeBorder(Theme.Palette.paperBorder, lineWidth: 1)
+            }
+            .accessibilityLabel("作者微信二维码")
+
+          VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            Text("赵")
+              .font(.callout.weight(.semibold))
+            Text("美国边远小岛")
+              .font(.footnote)
+              .foregroundStyle(.secondary)
+            Text("扫码添加微信")
+              .font(.caption.weight(.semibold))
+              .foregroundStyle(Theme.Palette.paperGreenText)
+              .padding(.horizontal, 9)
+              .padding(.vertical, 4)
+              .background(Theme.Palette.paperGreen.opacity(0.1), in: Capsule())
+          }
+          .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .accessibilityElement(children: .combine)
+      }
+    }
+  }
+
+  // MARK: - ④ 关于
 
   private var aboutPanel: some View {
     GlassPanel {

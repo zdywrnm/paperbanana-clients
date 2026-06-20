@@ -324,33 +324,16 @@ private extension ReferenceLibraryItem {
   }
 
   var chineseBriefIntro: String {
-    let generated = "可参考「\(referenceDisplayTitle)」的\(taskName.referenceFocus)，用于控制生成图的风格与表达密度。"
-    let trimmedSummary = summary.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard trimmedSummary.containsCJK else { return generated }
-    return "\(generated) \(trimmedSummary)"
+    switch taskName {
+    case .diagram:
+      return "结构参考：借鉴模块分组、流程方向、层级关系和标注密度。"
+    case .plot:
+      return "统计参考：借鉴坐标组织、图例分组、数据对比和关键标注。"
+    }
   }
 
   var looksLikeSVG: Bool {
     let haystack = "\(imageURL) \(imageObjectKey)".lowercased()
     return haystack.contains(".svg") || haystack.contains("image/svg")
-  }
-}
-
-private extension TaskName {
-  var referenceFocus: String {
-    switch self {
-    case .diagram:
-      return "结构层级、流程关系和视觉分组"
-    case .plot:
-      return "坐标组织、图例分组和数据标注"
-    }
-  }
-}
-
-private extension String {
-  var containsCJK: Bool {
-    unicodeScalars.contains { scalar in
-      (0x4E00...0x9FFF).contains(Int(scalar.value))
-    }
   }
 }

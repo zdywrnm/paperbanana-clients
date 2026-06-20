@@ -126,7 +126,43 @@ struct GenerateView: View {
   }
 
   private var heroAccountPill: some View {
-    StatusPill(text: model.auth.currentUser?.email ?? "未登录", systemImage: model.auth.currentUser == nil ? "person.crop.circle.badge.exclamationmark" : "person.crop.circle.fill")
+    StatusPill(
+      text: compactAccountLabel,
+      systemImage: model.auth.currentUser == nil ? "person.crop.circle.badge.exclamationmark" : "person.crop.circle.fill",
+      tint: model.auth.currentUser == nil ? Theme.Palette.warning : Theme.Palette.paperGreen,
+      textTint: model.auth.currentUser == nil ? Theme.Palette.warningText : Theme.Palette.paperGreenText,
+      accessibilityLabel: accountAccessibilityLabel
+    )
+  }
+
+  private var compactAccountLabel: String {
+    guard let user = model.auth.currentUser else { return "未登录" }
+    let displayName = preferredDisplayName(for: user)
+    guard displayName.count > 9 else { return displayName }
+    return "\(displayName.prefix(9))..."
+  }
+
+  private var accountAccessibilityLabel: String {
+    guard let user = model.auth.currentUser else { return "未登录" }
+    let name = user.name.trimmingCharacters(in: .whitespacesAndNewlines)
+    let email = user.email.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !name.isEmpty, name != email else { return email.isEmpty ? "已登录" : email }
+    return "\(name)，\(email)"
+  }
+
+  private func preferredDisplayName(for user: CurrentUser) -> String {
+    let name = user.name.trimmingCharacters(in: .whitespacesAndNewlines)
+    let email = user.email.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !name.isEmpty, name != email else {
+      return emailLocalPart(email)
+    }
+    return name
+  }
+
+  private func emailLocalPart(_ email: String) -> String {
+    guard !email.isEmpty else { return "已登录" }
+    let localPart = email.split(separator: "@").first.map(String.init) ?? email
+    return localPart.isEmpty ? email : localPart
   }
 
   // MARK: - ① 平台与密钥

@@ -20,7 +20,6 @@ struct GuideView: View {
           GuideTermSection(title: "检索与参考图", systemImage: "magnifyingglass", terms: PaperBananaGuide.referenceTerms)
           GuideTermSection(title: "结果区", systemImage: "photo.on.rectangle", terms: PaperBananaGuide.resultTerms)
           faqSection
-          contactSection
         }
         .padding(.horizontal, Theme.Spacing.md)
         .padding(.top, Theme.Spacing.md)
@@ -80,27 +79,6 @@ struct GuideView: View {
         ForEach(PaperBananaGuide.faq) { item in
           GuideFAQRow(item: item)
         }
-      }
-    }
-  }
-
-  private var contactSection: some View {
-    GlassPanel {
-      VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-        SectionHeader(title: "联系作者", systemImage: "message")
-        Text("使用中遇到生成失败、模型异常或体验问题，可以在设置页提交反馈，也可以留下联系方式方便后续沟通。")
-          .font(.footnote)
-          .foregroundStyle(.secondary)
-          .fixedSize(horizontal: false, vertical: true)
-
-        Button {
-          model.selectedTab = .settings
-        } label: {
-          Label("前往反馈", systemImage: "paperplane")
-            .frame(maxWidth: .infinity)
-        }
-        .paperGlassButton(prominent: true)
-        .accessibilityHint("切换到设置页的反馈表单")
       }
     }
   }
