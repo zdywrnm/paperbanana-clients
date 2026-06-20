@@ -34,6 +34,7 @@ final class GenerationStore {
   private let jobs: JobsStore
   private let keychain = KeychainService()
   private let referenceUploader: ReferenceUploader
+  private static let referenceLibraryLimit = 100
 
   init(apiClient: PaperBananaAPIClient, settings: SettingsStore, jobs: JobsStore) {
     self.apiClient = apiClient
@@ -244,7 +245,7 @@ final class GenerationStore {
     referenceLibraryLoading = true
     defer { referenceLibraryLoading = false }
     do {
-      referenceLibrary = try await apiClient.referenceLibrary(apiBase: settings.apiBase, taskName: draft.taskName)
+      referenceLibrary = try await apiClient.referenceLibrary(apiBase: settings.apiBase, taskName: draft.taskName, limit: Self.referenceLibraryLimit)
     } catch {
       referenceLibraryError = formatUserFacingError(error)
     }

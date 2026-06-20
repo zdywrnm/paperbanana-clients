@@ -40,36 +40,59 @@ extension View {
   /// 需要撑满宽度时把 `.frame(maxWidth: .infinity, …)` 放在 fieldWell 之前。
   func fieldWell() -> some View {
     padding(Theme.Spacing.md)
-      .background(.thinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.control))
+      .background(Theme.Palette.paperWell, in: RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous))
+      .overlay {
+        RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
+          .strokeBorder(Theme.Palette.paperBorder, lineWidth: 1)
+      }
+  }
+
+  /// 小程序风格字段井底：更接近 paper surface，适合 TextField / SecureField。
+  func paperFieldWell() -> some View {
+    padding(Theme.Spacing.md)
+      .background(Theme.Palette.paperPanel, in: RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous))
+      .overlay {
+        RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
+          .strokeBorder(Theme.Palette.paperBorder, lineWidth: 1)
+      }
   }
 
   @ViewBuilder
   func paperGlassButton(prominent: Bool = false) -> some View {
     if prominent {
-      self.buttonStyle(.glassProminent)
-        .modifier(ProminentGlassLabelColor())
+      self.buttonStyle(PaperPrimaryButtonStyle())
     } else {
       self.buttonStyle(.glass)
     }
   }
 }
 
-/// prominent 玻璃按钮的标签色：AccentColor 深色模式是亮香蕉黄，系统默认白字只有 ~1.5:1，
-/// 改黑字（黄底黑字，9.6:1）；浅色深金底保持白字（4.8:1）。disabled 不覆盖，保留系统变暗。
-private struct ProminentGlassLabelColor: ViewModifier {
+private struct PaperPrimaryButtonStyle: ButtonStyle {
   @Environment(\.isEnabled) private var isEnabled
 
-  private static let labelColor = Color(uiColor: UIColor { traits in
-    traits.userInterfaceStyle == .dark
-      ? UIColor.black.withAlphaComponent(0.85)
-      : UIColor.white
-  })
-
-  func body(content: Content) -> some View {
-    if isEnabled {
-      content.foregroundStyle(Self.labelColor)
-    } else {
-      content
-    }
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .fontWeight(.semibold)
+      .padding(.horizontal, Theme.Spacing.lg)
+      .padding(.vertical, Theme.Spacing.md)
+      .foregroundStyle(isEnabled ? .white : .white.opacity(0.72))
+      .background(
+        isEnabled
+          ? Theme.Palette.paperGreen.opacity(configuration.isPressed ? 0.78 : 0.94)
+          : Color(uiColor: UIColor { traits in
+            traits.userInterfaceStyle == .dark
+              ? UIColor(red: 0.30, green: 0.33, blue: 0.30, alpha: 0.72)
+              : UIColor(red: 0.79, green: 0.75, blue: 0.70, alpha: 0.82)
+          }),
+        in: RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
+      )
+      .overlay {
+        RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
+          .strokeBorder(isEnabled ? Theme.Palette.paperGreen.opacity(0.40) : Theme.Palette.paperBorder, lineWidth: 1)
+      }
+      .shadow(color: isEnabled ? Theme.Palette.paperGreen.opacity(0.22) : .clear, radius: 14, y: 7)
+      .paperGlass(isEnabled ? .tinted(Theme.Palette.paperGreen.opacity(0.52)) : .panel, in: RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous))
+      .scaleEffect(configuration.isPressed && isEnabled ? 0.985 : 1)
+      .animation(Theme.Motion.stateChange, value: configuration.isPressed)
   }
 }

@@ -75,6 +75,55 @@ enum Theme {
         : UIColor(red: 0.60, green: 0.29, blue: 0.00, alpha: 1) // ≈ #9A4A00 橙棕
     })
 
+    /// 小程序纸感 UI 的墨绿主色。用于主要操作、选中态、登录态、反馈 FAB。
+    static let paperGreen = Color(uiColor: UIColor { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.47, green: 0.72, blue: 0.63, alpha: 1) // ≈ #78B8A1
+        : UIColor(red: 0.19, green: 0.37, blue: 0.32, alpha: 1) // ≈ #315F51
+    })
+
+    /// 墨绿小字版本：浅色同主色，深色稍提亮以保证玻璃/深底对比。
+    static let paperGreenText = Color(uiColor: UIColor { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.65, green: 0.84, blue: 0.76, alpha: 1) // ≈ #A6D6C2
+        : UIColor(red: 0.16, green: 0.31, blue: 0.26, alpha: 1) // ≈ #284F43
+    })
+
+    /// 纸感卡片内的暖灰井底，用于替代小程序 field/picker-value。
+    static let paperWell = Color(uiColor: UIColor { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.13, green: 0.15, blue: 0.14, alpha: 0.72)
+        : UIColor(red: 0.96, green: 0.95, blue: 0.91, alpha: 0.82) // ≈ #F3F2EC
+    })
+
+    /// 小程序式纸面卡片底色：保留足够不透明度，让信息结构稳定，但仍允许 Liquid Glass 参与折射。
+    static let paperPanel = Color(uiColor: UIColor { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.08, green: 0.10, blue: 0.09, alpha: 0.84)
+        : UIColor(red: 1.00, green: 1.00, blue: 0.98, alpha: 0.94) // ≈ #FFFFFB
+    })
+
+    /// 小程序纸面细边框。
+    static let paperBorder = Color(uiColor: UIColor { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.35, green: 0.38, blue: 0.34, alpha: 0.44)
+        : UIColor(red: 0.85, green: 0.84, blue: 0.80, alpha: 1) // ≈ #D9D6CC
+    })
+
+    /// 轻量次级操作底色。
+    static let paperGreenWell = Color(uiColor: UIColor { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.15, green: 0.25, blue: 0.21, alpha: 0.78)
+        : UIColor(red: 0.93, green: 0.96, blue: 0.94, alpha: 1) // ≈ #EDF6EF
+    })
+
+    /// 小程序提示色，保留琥珀而不把品牌整体推成单一黄色。
+    static let paperAmber = Color(uiColor: UIColor { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(red: 0.72, green: 0.55, blue: 0.18, alpha: 1)
+        : UIColor(red: 0.93, green: 0.79, blue: 0.40, alpha: 1) // ≈ #EAD28D
+    })
+
     /// JobStatus → 语义 tint 映射。
     static func tint(for status: JobStatus) -> Color {
       switch status {
