@@ -8,14 +8,13 @@ struct SettingsView: View {
       ScrollView {
         VStack(spacing: Theme.Spacing.lg) {
           accountPanel
-          backendPanel
           feedbackPanel
           aboutPanel
         }
         .padding()
       }
       .background(AppBackground(isGenerating: model.jobs.isActivelyGenerating))
-      .navigationTitle("设置")
+      .toolbar(.hidden, for: .navigationBar)
     }
   }
 
@@ -25,6 +24,10 @@ struct SettingsView: View {
     GlassPanel {
       VStack(alignment: .leading, spacing: Theme.Spacing.md) {
         SectionHeader(title: "账号", systemImage: "person.crop.circle")
+        Text(model.auth.currentUser == nil ? "登录后可以在任务记录里查看自己提交过的结果。" : "当前账号用于同步任务记录与生成结果。")
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+          .fixedSize(horizontal: false, vertical: true)
         if let user = model.auth.currentUser {
           signedInContent(user: user)
         } else {
@@ -39,9 +42,9 @@ struct SettingsView: View {
     let showsDistinctName = !user.name.isEmpty && user.name != user.email
     return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
       HStack(spacing: Theme.Spacing.md) {
-        Image(systemName: "person.crop.circle.fill")
-          .font(.title2)
-          .foregroundStyle(Theme.Palette.banana)
+        Circle()
+          .fill(Theme.Palette.paperGreen)
+          .frame(width: 10, height: 10)
           .accessibilityHidden(true)
         VStack(alignment: .leading, spacing: 2) {
           if showsDistinctName {
@@ -52,49 +55,69 @@ struct SettingsView: View {
             .font(showsDistinctName ? .footnote : .callout.weight(.semibold))
             .foregroundStyle(showsDistinctName ? .secondary : .primary)
         }
+        Spacer(minLength: Theme.Spacing.md)
+        Button("退出", role: .destructive) {
+          Task { await model.auth.signOut() }
+        }
+        .font(.footnote.weight(.semibold))
+        .buttonStyle(.plain)
+        .foregroundStyle(Theme.Palette.warningText)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
-      .fieldWell()
-      .accessibilityElement(children: .combine)
-      .accessibilityLabel("已登录：\(user.email)")
-
-      Button("退出登录", role: .destructive) {
-        Task { await model.auth.signOut() }
+      .padding(Theme.Spacing.md)
+      .background(Theme.Palette.paperGreenWell, in: RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous))
+      .overlay {
+        RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
+          .strokeBorder(Theme.Palette.paperGreen.opacity(0.18), lineWidth: 1)
       }
-      .paperGlassButton()
     }
   }
 
   private var authForm: some View {
     VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-      Picker("登录模式", selection: $model.auth.authMode) {
-        Text("登录").tag("sign-in")
-        Text("注册").tag("sign-up")
-      }
-      .pickerStyle(.segmented)
+      Text(authIsSignUp ? "注册账号" : "登录账号")
+        .font(.callout.weight(.semibold))
+        .foregroundStyle(.primary)
 
-      TextField("邮箱", text: $model.auth.authEmail)
-        .textInputAutocapitalization(.never)
-        .autocorrectionDisabled()
-        .keyboardType(.emailAddress)
-        .textContentType(.emailAddress)
-        .fieldWell()
-      if model.auth.authMode == "sign-up" {
-        TextField("昵称", text: $model.auth.authName)
-          .fieldWell()
+      if authIsSignUp {
+        authField("昵称") {
+          TextField("可选", text: $model.auth.authName)
+            .textContentType(.name)
+            .paperFieldWell()
+        }
       }
-      SecureField("密码", text: $model.auth.authPassword)
-        .textContentType(.password)
-        .fieldWell()
+
+      authField("邮箱") {
+        TextField("you@example.com", text: $model.auth.authEmail)
+          .textInputAutocapitalization(.never)
+          .autocorrectionDisabled()
+          .keyboardType(.emailAddress)
+          .textContentType(.emailAddress)
+          .paperFieldWell()
+      }
+
+      authField("密码") {
+        SecureField("至少 8 位", text: $model.auth.authPassword)
+          .textContentType(authIsSignUp ? .newPassword : .password)
+          .paperFieldWell()
+      }
 
       Button {
         Task { await model.auth.signInOrSignUp() }
       } label: {
-        Text(model.auth.authSubmitting ? "提交中" : "登录 / 注册")
+        Text(authSubmitTitle)
           .frame(maxWidth: .infinity)
       }
       .paperGlassButton(prominent: true)
       .disabled(model.auth.authSubmitting)
+
+      Button(authToggleTitle) {
+        toggleAuthMode()
+      }
+      .buttonStyle(.plain)
+      .font(.footnote.weight(.semibold))
+      .foregroundStyle(Theme.Palette.paperGreenText)
+      .frame(maxWidth: .infinity, alignment: .center)
 
       if !model.auth.authError.isEmpty {
         Text(model.auth.authError)
@@ -114,78 +137,35 @@ struct SettingsView: View {
     }
   }
 
-  // MARK: - ② 后端连接
-
-  private var backendPanel: some View {
-    GlassPanel {
-      VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-        SectionHeader(title: "后端", systemImage: "antenna.radiowaves.left.and.right")
-
-        TextField("网关地址", text: $model.settings.apiBase)
-          .textInputAutocapitalization(.never)
-          .autocorrectionDisabled()
-          .keyboardType(.URL)
-          .fieldWell()
-          .accessibilityLabel("网关地址输入")
-        Text("请使用网关域名；直连 Laf 域名将被拒绝身份相关操作")
-          .font(.footnote)
-          .foregroundStyle(.secondary)
-          .fixedSize(horizontal: false, vertical: true)
-
-        healthStatusRow
-
-        ViewThatFits(in: .horizontal) {
-          HStack(spacing: Theme.Spacing.md) { backendButtons }
-          VStack(alignment: .leading, spacing: Theme.Spacing.sm) { backendButtons }
-        }
-      }
-    }
+  private var authIsSignUp: Bool {
+    model.auth.authMode == "sign-up"
   }
 
-  /// 连接健康状态：彩点 + 文案（已连接 / 检测失败 / 未检测）。
-  private var healthStatusRow: some View {
-    HStack(spacing: Theme.Spacing.sm) {
-      Circle()
-        .fill(healthDotColor)
-        .frame(width: 8, height: 8)
-        .accessibilityHidden(true)
-      Text(healthStatusText)
-        .font(.footnote.weight(.medium))
-        .foregroundStyle(model.settings.health == nil && model.settings.healthError.isEmpty ? .secondary : .primary)
-        .fixedSize(horizontal: false, vertical: true)
-    }
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .fieldWell()
-    .accessibilityElement(children: .combine)
-    .accessibilityLabel("后端连接状态：\(healthStatusText)")
+  private var authSubmitTitle: String {
+    if model.auth.authSubmitting { return "提交中" }
+    return authIsSignUp ? "注册" : "登录"
   }
 
-  private var healthDotColor: Color {
-    if model.settings.health != nil { return .green }
-    if !model.settings.healthError.isEmpty { return .red }
-    return .gray
-  }
-
-  private var healthStatusText: String {
-    if let health = model.settings.health {
-      return "已连接 · \(health.runtime) · \(health.backendMode.rawValue)"
-    }
-    if !model.settings.healthError.isEmpty {
-      return model.settings.healthError
-    }
-    return "尚未检测连接"
+  private var authToggleTitle: String {
+    authIsSignUp ? "已有账号？登录" : "没有账号？注册"
   }
 
   @ViewBuilder
-  private var backendButtons: some View {
-    Button("恢复默认") { model.settings.resetBackendBase() }
-      .paperGlassButton()
-    Button("检测连接") { Task { await model.settings.refreshHealth() } }
-      .paperGlassButton(prominent: true)
-      .accessibilityHint("立即检查网关连通性")
+  private func authField<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+      Text(title)
+        .font(.footnote.weight(.semibold))
+        .foregroundStyle(.secondary)
+      content()
+    }
   }
 
-  // MARK: - ③ 反馈
+  private func toggleAuthMode() {
+    model.auth.authMode = authIsSignUp ? "sign-in" : "sign-up"
+    model.auth.authError = ""
+  }
+
+  // MARK: - ② 反馈
 
   private var feedbackPanel: some View {
     GlassPanel {
@@ -231,7 +211,7 @@ struct SettingsView: View {
     }
   }
 
-  // MARK: - ④ 关于
+  // MARK: - ③ 关于
 
   private var aboutPanel: some View {
     GlassPanel {
@@ -264,7 +244,7 @@ struct SettingsView: View {
     return "\(version) (\(build))"
   }
 
-  /// 关于区只放最核心的两条外链；完整资源列表在"指南"页。
+  /// 关于区只放最核心的两条外链。
   private var aboutLinks: [GuideResource] {
     PaperBananaGuide.resources.filter { ["website", "github"].contains($0.id) }
   }
