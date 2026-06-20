@@ -17,7 +17,6 @@ final class GenerationStore {
   var referenceLibraryLoading = false
   var referenceUploadError = ""
 
-  var refineInstruction = ""
   var refineAspectRatio = "16:9"
   var refineImageSize: ImageSize = .twoK
   var refineSourceImage: ResultImage?
@@ -35,6 +34,7 @@ final class GenerationStore {
   private let keychain = KeychainService()
   private let referenceUploader: ReferenceUploader
   private static let referenceLibraryLimit = 100
+  private static let automaticRefineInstruction = "在保持原图语义、布局和内容不变的前提下，提升图像清晰度、线条锐度、文字可读性和论文发表质感。"
 
   init(apiClient: PaperBananaAPIClient, settings: SettingsStore, jobs: JobsStore) {
     self.apiClient = apiClient
@@ -313,14 +313,13 @@ final class GenerationStore {
   }
 
   func beginRefine(_ image: ResultImage) {
-    refineInstruction = ""
     refineAspectRatio = draft.configurationMode == .advanced ? draft.aspectRatio : "16:9"
     refineImageSize = refineSupportedImageSizes.contains(draft.imageSize) ? draft.imageSize : (refineSupportedImageSizes.first ?? .oneK)
+    refineJobID = ""
     refineSourceImage = image
   }
 
   func refine(image: ResultImage) async {
-    guard !refineInstruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
     do {
       let payload = RefineImagePayload(
         provider: draft.provider,
@@ -330,7 +329,7 @@ final class GenerationStore {
         referenceVisionModelName: activeVisionModelName,
         sourceImageURL: image.url,
         sourceImageObjectKey: image.objectKey,
-        editInstruction: refineInstruction.trimmingCharacters(in: .whitespacesAndNewlines),
+        editInstruction: Self.automaticRefineInstruction,
         aspectRatio: refineAspectRatio,
         imageSize: refineImageSize
       )

@@ -5,44 +5,23 @@ struct RefineSheet: View {
   let image: ResultImage
   @Environment(\.dismiss) private var dismiss
 
-  private var canSubmit: Bool {
-    !model.generation.refineInstruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-  }
-
   var body: some View {
     NavigationStack {
       ScrollView {
         VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
           GlassPanel {
-            LabeledTextEditor(title: "精修指令", text: $model.generation.refineInstruction, minHeight: 160)
-          }
-
-          GlassPanel {
-            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-              Text("比例与清晰度")
+            VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+              Text("沿用生成设置")
                 .font(.headline)
                 .accessibilityAddTraits(.isHeader)
-              HStack {
-                Text("目标比例")
-                  .font(.subheadline)
-                Spacer()
-                Picker("目标比例", selection: $model.generation.refineAspectRatio) {
-                  ForEach(["16:9", "21:9", "3:2", "1:1"], id: \.self) { ratio in
-                    Text(ratio).tag(ratio)
-                  }
-                }
-                .accessibilityLabel("目标比例")
-              }
-              HStack {
-                Text("清晰度")
-                  .font(.subheadline)
-                Spacer()
-                Picker("清晰度", selection: $model.generation.refineImageSize) {
-                  ForEach(model.generation.refineSupportedImageSizes) { size in
-                    Text(size.title).tag(size)
-                  }
-                }
-                .accessibilityLabel("清晰度")
+              Text("精修会按生成时选好的比例和清晰度继续处理，只提升清晰度、线条锐度和文字可读性，不再要求填写额外指令。")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+              HStack(spacing: Theme.Spacing.sm) {
+                refineSettingChip(title: "目标比例", value: model.generation.refineAspectRatio)
+                refineSettingChip(title: "清晰度", value: model.generation.refineImageSize.title)
               }
             }
           }
@@ -59,9 +38,8 @@ struct RefineSheet: View {
           }
           .controlSize(.large)
           .paperGlassButton(prominent: true)
-          .disabled(!canSubmit)
           .accessibilityLabel("提交精修")
-          .accessibilityHint("按精修指令对候选图重新生成")
+          .accessibilityHint("按生成时的比例与清晰度精修候选图")
         }
         .padding()
       }
@@ -77,6 +55,23 @@ struct RefineSheet: View {
     }
     .presentationDetents([.medium, .large])
     .presentationBackground(.thinMaterial)
+  }
+
+  private func refineSettingChip(title: String, value: String) -> some View {
+    VStack(alignment: .leading, spacing: 4) {
+      Text(title)
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(.secondary)
+      Text(value)
+        .font(.body.weight(.semibold))
+        .foregroundStyle(.primary)
+        .lineLimit(1)
+        .minimumScaleFactor(0.86)
+    }
+    .padding(.horizontal, Theme.Spacing.md)
+    .padding(.vertical, Theme.Spacing.sm)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(Theme.Palette.paperWell, in: RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous))
   }
 }
 

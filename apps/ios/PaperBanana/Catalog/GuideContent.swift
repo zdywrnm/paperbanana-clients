@@ -59,7 +59,7 @@ enum PaperBananaGuide {
     GuideStep(id: "render", title: "初次渲染", detail: "图像模型按规划生成第一版候选图。"),
     GuideStep(id: "critic", title: "图像评审", detail: "评审模型检查排版、文字和逻辑问题，并给出修改建议。"),
     GuideStep(id: "rerender", title: "重渲染", detail: "按评审意见继续改进，直到用完设置的评审轮数。"),
-    GuideStep(id: "refine", title: "精修放大", detail: "可对任一结果图再次提交精修，并独立选择目标比例和清晰度。")
+    GuideStep(id: "refine", title: "精修放大", detail: "可对任一结果图再次提交精修，沿用生成时选择的比例和清晰度，无需额外输入。")
   ]
 
   static let modelTerms: [GuideTerm] = [

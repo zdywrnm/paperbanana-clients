@@ -65,12 +65,11 @@ final class AppModelSubmissionTests: XCTestCase {
     XCTAssertEqual(model.generation.draft.referenceImageMode, .visionModel)
   }
 
-  func testBeginRefineInitializesIndependentTargetSettings() throws {
+  func testBeginRefineUsesGenerationTargetSettings() throws {
     let model = AppModel()
     model.generation.draft.configurationMode = .advanced
     model.generation.draft.aspectRatio = "3:2"
     model.generation.draft.imageSize = .twoK
-    model.generation.refineInstruction = "old instruction"
     let image = try JSONDecoder().decode(ResultImage.self, from: Data("""
     {
       "filename": "candidate.png",
@@ -83,15 +82,8 @@ final class AppModelSubmissionTests: XCTestCase {
     model.generation.beginRefine(image)
 
     XCTAssertEqual(model.generation.refineSourceImage, image)
-    XCTAssertEqual(model.generation.refineInstruction, "")
     XCTAssertEqual(model.generation.refineAspectRatio, "3:2")
     XCTAssertEqual(model.generation.refineImageSize, .twoK)
-
-    model.generation.refineAspectRatio = "1:1"
-    model.generation.refineImageSize = .oneK
-
-    XCTAssertEqual(model.generation.draft.aspectRatio, "3:2")
-    XCTAssertEqual(model.generation.draft.imageSize, .twoK)
   }
 
   func testRefineImageSizeFollowsSelectedProviderSupport() {

@@ -101,7 +101,7 @@ struct ResultImageView: View {
       .paperGlassButton()
       .controlSize(.small)
       .accessibilityLabel("精修候选图 \(image.candidateID + 1)")
-      .accessibilityHint("打开精修指令面板")
+      .accessibilityHint("打开图片精修面板")
     }
   }
 }
