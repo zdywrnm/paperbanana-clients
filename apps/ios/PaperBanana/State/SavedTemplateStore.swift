@@ -124,6 +124,12 @@ final class SavedTemplateStore {
     persist()
   }
 
+  /// 删除账号时清空所有本机保存的模板（含 UserDefaults 持久化）。
+  func clearAll() {
+    templates = []
+    defaults.removeObject(forKey: storageKey)
+  }
+
   private func load() {
     guard let data = defaults.data(forKey: storageKey) else {
       templates = []

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
   @Bindable var model: AppModel
+  @State private var showsDeleteAccount = false
 
   var body: some View {
     NavigationStack {
@@ -17,6 +18,17 @@ struct SettingsView: View {
       .background(AppBackground(isGenerating: model.jobs.isActivelyGenerating))
       .toolbar(.hidden, for: .navigationBar)
     }
+    .sheet(isPresented: $showsDeleteAccount) {
+      DeleteAccountSheet(model: model)
+    }
+    #if DEBUG
+    // 截图 / QA 走查用：`-pb-open-delete-account YES` 启动后自动弹出删除账号 sheet。
+    .onAppear {
+      if UserDefaults.standard.bool(forKey: "pb-open-delete-account") {
+        showsDeleteAccount = true
+      }
+    }
+    #endif
   }
 
   // MARK: - ① 账号
@@ -71,6 +83,15 @@ struct SettingsView: View {
         RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
           .strokeBorder(Theme.Palette.paperGreen.opacity(0.18), lineWidth: 1)
       }
+
+      Button("删除账号", role: .destructive) {
+        showsDeleteAccount = true
+      }
+      .font(.footnote.weight(.semibold))
+      .buttonStyle(.plain)
+      .foregroundStyle(Theme.Palette.warningText)
+      .frame(maxWidth: .infinity, alignment: .center)
+      .accessibilityHint("将永久删除账号及所有本机数据，需要重新输入密码确认")
     }
   }
 

@@ -135,6 +135,58 @@ final class APIClientTests: XCTestCase {
     XCTAssertEqual(jobs.last?.resultImages.count, 0)
   }
 
+  func testDeleteAccountPostsEmailAndPasswordToAccountDeleteEndpoint() async throws {
+    let client = PaperBananaAPIClient(session: URLSession.stubbedSession())
+    URLProtocolStub.requestHandler = { request in
+      XCTAssertEqual(request.url?.path, "/api/account/delete")
+      XCTAssertEqual(request.httpMethod, "POST")
+      let json = try XCTUnwrap(
+        JSONSerialization.jsonObject(with: try request.bodyData()) as? [String: Any]
+      )
+      XCTAssertEqual(json["email"] as? String, "founder@paperbanana.asia")
+      XCTAssertEqual(json["password"] as? String, "secret-pass")
+      return HTTPURLResponse.stub(url: request.url, statusCode: 200, body: #"{"code":0,"ok":true,"deletedJobCount":3}"#)
+    }
+
+    try await client.deleteAccount(
+      apiBase: "https://gateway.example",
+      email: "founder@paperbanana.asia",
+      password: "secret-pass"
+    )
+  }
+
+  func testDeleteAccountInvalidPasswordThrowsMappableError() async throws {
+    let client = PaperBananaAPIClient(session: URLSession.stubbedSession())
+    URLProtocolStub.requestHandler = { request in
+      HTTPURLResponse.stub(
+        url: request.url,
+        statusCode: 401,
+        body: #"{"code":401,"error":"INVALID_PASSWORD"}"#
+      )
+    }
+
+    do {
+      try await client.deleteAccount(apiBase: "https://gateway.example", email: "a@b.com", password: "wrong")
+      XCTFail("Expected delete to throw on invalid password")
+    } catch {
+      XCTAssertEqual(formatUserFacingError(error), "密码不正确，请重新输入。")
+    }
+  }
+
+  func testDeleteAccountNetworkFailureThrows() async throws {
+    let client = PaperBananaAPIClient(session: URLSession.stubbedSession())
+    URLProtocolStub.requestHandler = { _ in
+      throw URLError(.notConnectedToInternet)
+    }
+
+    do {
+      try await client.deleteAccount(apiBase: "https://gateway.example", email: "a@b.com", password: "pw")
+      XCTFail("Expected delete to throw on network failure")
+    } catch {
+      XCTAssertEqual(formatUserFacingError(error), "网络未连接，请检查网络后重试。")
+    }
+  }
+
   func testPreparedReferenceUploadDecodesGatewayKeyVariants() throws {
     let json = Data("""
       {

@@ -37,6 +37,7 @@ final class AppModel {
     settings.currentJobIDProvider = { [weak jobs] in jobs?.currentJob?.id }
     auth.onAuthenticated = { [weak jobs] in await jobs?.loadUserJobs(silent: true) }
     auth.onSignedOut = { [weak jobs] in jobs?.clearForSignOut() }
+    auth.onAccountDeleted = { [weak self] in self?.clearAllForAccountDeletion() }
     generation.presentAlert = { [weak self] message in self?.presentAlert(message) }
     exports.presentAlert = { [weak self] message in self?.presentAlert(message) }
 
@@ -47,12 +48,24 @@ final class AppModel {
        let tab = AppTab(rawValue: raw) {
       selectedTab = tab
     }
+    // 截图 / QA 走查用：`-pb-preview-signed-in YES` 注入一个假登录态，
+    // 让设置页展示已登录内容（含删除账号入口）。仅 DEBUG。
+    if UserDefaults.standard.bool(forKey: "pb-preview-signed-in") {
+      auth.currentUser = try? JSONDecoder().decode(
+        CurrentUser.self,
+        from: Data(#"{"id":"u-preview","email":"founder@paperbanana.app","name":"Founder"}"#.utf8)
+      )
+    }
     #endif
   }
 
   func bootstrap() async {
     jobs.loadCachedRecords()
     await settings.refreshHealth()
+    #if DEBUG
+    // 截图 / QA 走查注入的假登录态不走 refreshSession（否则无后端会被覆盖为未登录）。
+    if UserDefaults.standard.bool(forKey: "pb-preview-signed-in") { return }
+    #endif
     await auth.refreshSession()
     if auth.currentUser != nil {
       await jobs.loadUserJobs(silent: true)
@@ -84,5 +97,15 @@ final class AppModel {
   func presentAlert(_ message: String) {
     alertMessage = message
     isAlertPresented = true
+  }
+
+  /// 删除账号后的完整本地清理门面。比退出登录（仅清任务记录缓存）更彻底：
+  /// 任务记录 + 本地任务缓存 + 所有 provider 的 Keychain API key + 保存的模板 + 生成草稿。
+  /// 由 auth.onAccountDeleted 注入触发；signOut 路径不调用此方法（API key 需保留）。
+  private func clearAllForAccountDeletion() {
+    jobs.clearForSignOut()
+    jobs.clearLocalJobs()
+    templates.clearAll()
+    generation.clearAllForAccountDeletion()
   }
 }

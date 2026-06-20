@@ -18,7 +18,11 @@ final class AuthStore {
   /// 登录/注册成功后的跨 store 协调（由 AppModel 注入，如刷新任务记录）。
   @ObservationIgnored var onAuthenticated: () async -> Void = {}
   /// 退出登录后的跨 store 协调（由 AppModel 注入，如清空任务记录）。
+  /// 仅清登录相关缓存——不动 API key，用户重新登录还要用。
   @ObservationIgnored var onSignedOut: () -> Void = {}
+  /// 删除账号后的跨 store 协调（由 AppModel 注入）。
+  /// 比 onSignedOut 更彻底：除任务缓存外还清 API key、模板、草稿等所有本机数据。
+  @ObservationIgnored var onAccountDeleted: () -> Void = {}
 
   private let apiClient: PaperBananaAPIClient
   private let settings: SettingsStore
@@ -62,5 +66,17 @@ final class AuthStore {
     await apiClient.signOut(apiBase: settings.apiBase)
     currentUser = nil
     onSignedOut()
+  }
+
+  /// 永久删除账号：重新输入密码二次确认。成功后服务端已清 session 并真删账号；
+  /// 客户端置空 currentUser 并触发完整本地清理（含 API key / 模板 / 草稿 / 任务缓存）。
+  /// 失败（密码错 / 未登录 / 服务器错）抛出，由调用方用 formatUserFacingError 展示。
+  func deleteAccount(password: String) async throws {
+    guard let email = currentUser?.email, !email.isEmpty else {
+      throw PaperBananaAPIError.server("当前未登录，无法删除账号。")
+    }
+    try await apiClient.deleteAccount(apiBase: settings.apiBase, email: email, password: password)
+    currentUser = nil
+    onAccountDeleted()
   }
 }

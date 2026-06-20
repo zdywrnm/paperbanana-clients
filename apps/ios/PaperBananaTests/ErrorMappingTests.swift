@@ -52,6 +52,34 @@ final class ErrorMappingTests: XCTestCase {
     XCTAssertEqual(formatUserFacingError(error), "这个邮箱已经注册，请直接登录。")
   }
 
+  func testInvalidPasswordCodeMapsToReenterPasswordMessage() {
+    let error = PaperBananaAPIError.http(
+      ServerErrorDetails(statusCode: 401, code: "INVALID_PASSWORD", message: "Invalid password")
+    )
+    XCTAssertEqual(formatUserFacingError(error), "密码不正确，请重新输入。")
+  }
+
+  /// 网关删除账号端点返回扁平 shape `{"code":401,"error":"INVALID_PASSWORD"}`，
+  /// 解析后 code=nil、message="INVALID_PASSWORD"——验证 message 也会按已知 code 映射。
+  func testFlatErrorStringIsMappedAsKnownCode() {
+    let invalidPassword = PaperBananaAPIError.http(
+      ServerErrorDetails(statusCode: 401, code: nil, message: "INVALID_PASSWORD")
+    )
+    XCTAssertEqual(formatUserFacingError(invalidPassword), "密码不正确，请重新输入。")
+
+    let emailMismatch = PaperBananaAPIError.http(
+      ServerErrorDetails(statusCode: 403, code: nil, message: "EMAIL_MISMATCH")
+    )
+    XCTAssertEqual(formatUserFacingError(emailMismatch), "账号信息不匹配，请重新登录。")
+  }
+
+  func testEmailMismatchCodeMapsToReLoginMessage() {
+    let error = PaperBananaAPIError.http(
+      ServerErrorDetails(statusCode: 403, code: "EMAIL_MISMATCH", message: "Email mismatch")
+    )
+    XCTAssertEqual(formatUserFacingError(error), "账号信息不匹配，请重新登录。")
+  }
+
   func testSessionExpiredCodeMapsToReLoginPrompt() {
     let error = PaperBananaAPIError.http(
       ServerErrorDetails(statusCode: 401, code: "SESSION_EXPIRED", message: nil)

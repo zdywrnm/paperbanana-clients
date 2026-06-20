@@ -312,6 +312,21 @@ final class GenerationStore {
     }
   }
 
+  /// 删除账号时的本机清理：抹掉草稿、当前选中 API key，并清空所有 provider 的 Keychain key。
+  /// 退出登录（signOut）不走这里——API key 要保留给重新登录的用户。
+  func clearAllForAccountDeletion() {
+    for provider in ProviderCatalog.order {
+      try? keychain.delete(account: ProviderCatalog.config(for: provider).keyName)
+    }
+    draft = GenerationDraft()
+    selectedAPIKey = ""
+    mainModelCapability = nil
+    submitError = ""
+    referenceUploadError = ""
+    referenceLibrary = []
+    referenceLibraryError = ""
+  }
+
   // MARK: - 私有
 
   private func alignReferenceImageModeWithActiveMainModel() {

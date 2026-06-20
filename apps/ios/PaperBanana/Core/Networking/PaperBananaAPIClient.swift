@@ -165,6 +165,16 @@ final class PaperBananaAPIClient {
     )
   }
 
+  /// 永久删除账号（App Store 5.1.1(v)）。带 session cookie，body 含当前邮箱与重新输入的密码。
+  /// 与 signIn 一样必抛——失败要让调用方拿到错误展示给用户，不能像 signOut 那样吞掉。
+  func deleteAccount(apiBase: String, email: String, password: String) async throws {
+    let _: EmptyEnvelope = try await requestJSON(
+      try endpoint(apiBase: apiBase, path: "api/account/delete"),
+      method: "POST",
+      body: ["email": email, "password": password]
+    )
+  }
+
   func resolvedImageURL(apiBase: String, url: String) -> URL? {
     guard !url.isEmpty else { return nil }
     if url.hasPrefix("http://") || url.hasPrefix("https://") || url.hasPrefix("data:") {

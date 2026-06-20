@@ -28,7 +28,13 @@ func formatUserFacingError(_ message: String) -> String {
 private func userFacingMessage(for details: ServerErrorDetails) -> String {
   if let code = details.code, let mapped = mappedErrorCode(code) { return mapped }
   let message = details.message?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-  if !message.isEmpty, let mapped = mappedKnownMessage(message) { return mapped }
+  if !message.isEmpty {
+    // 网关把错误码直接放在扁平的 error 字符串字段（如 "INVALID_PASSWORD"），
+    // 此时 message 本身就是 code，先按 code 映射，再按已知英文消息映射。
+    // mappedErrorCode 只认大写下划线 code，人类可读消息不会误命中。
+    if let mapped = mappedErrorCode(message) { return mapped }
+    if let mapped = mappedKnownMessage(message) { return mapped }
+  }
   if let mapped = mappedStatusCode(details.statusCode, hasSpecificMessage: !message.isEmpty) { return mapped }
   return message.isEmpty ? "操作失败" : message
 }
@@ -36,8 +42,12 @@ private func userFacingMessage(for details: ServerErrorDetails) -> String {
 /// Better Auth 等后端的已知错误 code。
 private func mappedErrorCode(_ code: String) -> String? {
   switch code.uppercased() {
-  case "INVALID_EMAIL_OR_PASSWORD", "INVALID_PASSWORD", "USER_NOT_FOUND":
+  case "INVALID_EMAIL_OR_PASSWORD", "USER_NOT_FOUND":
     "邮箱或密码不正确。"
+  case "INVALID_PASSWORD":
+    "密码不正确，请重新输入。"
+  case "EMAIL_MISMATCH":
+    "账号信息不匹配，请重新登录。"
   case "USER_ALREADY_EXISTS", "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL":
     "这个邮箱已经注册，请直接登录。"
   case "INVALID_EMAIL":
