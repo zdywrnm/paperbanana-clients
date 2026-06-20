@@ -8,10 +8,10 @@
 
 # 服务条款 / Terms of Service
 
-**生效日期 / Effective Date:** `[填写日期 / YYYY-MM-DD]`
-**最近更新 / Last Updated:** `[填写日期 / YYYY-MM-DD]`
-**运营方 / Operator:** `[运营方名称 / Operator Name]`
-**联系邮箱 / Contact Email:** `[联系邮箱 / contact@example.com]`
+**生效日期 / Effective Date:** `2026-06-20`
+**最近更新 / Last Updated:** `2026-06-20`
+**运营方 / Operator:** `赵鼎熠 / Zhao Dingyi`
+**联系邮箱 / Contact Email:** `yrjmdqmmx@gmail.com`
 **官方网站 / Website:** https://www.paperbanana.asia/
 
 ---
@@ -20,7 +20,7 @@
 
 ### 1. 接受条款
 
-欢迎使用 PaperBanana（以下简称"本应用"或"服务"）。本服务条款（以下简称"本条款"）是您与 `[运营方名称]`（以下简称"我们"）之间就您使用本应用所达成的协议。**注册、登录或使用本应用即表示您已阅读、理解并同意接受本条款的约束。** 若您不同意本条款，请勿使用本应用。
+欢迎使用 PaperBanana（以下简称"本应用"或"服务"）。本服务条款（以下简称"本条款"）是您与 `赵鼎熠`（以下简称"我们"）之间就您使用本应用所达成的协议。**注册、登录或使用本应用即表示您已阅读、理解并同意接受本条款的约束。** 若您不同意本条款，请勿使用本应用。
 
 ### 2. 服务说明
 
@@ -93,7 +93,7 @@
 
 ### 13. 适用法律与争议解决
 
-本条款的订立、效力、解释与争议解决，适用 `[填写适用法律 / 例如：中华人民共和国法律（不含冲突法规则）]`。因本条款产生的争议，双方应友好协商解决；协商不成的，提交 `[填写管辖法院或仲裁机构]` 解决。
+本条款的订立、效力、解释与争议解决，适用 `中华人民共和国法律（不含冲突法规则）`。因本条款产生的争议，双方应友好协商解决；协商不成的，提交 `运营方住所地有管辖权的人民法院` 解决。
 
 ### 14. 其他
 
@@ -102,8 +102,8 @@
 
 ### 15. 联系我们
 
-- 运营方：`[运营方名称]`
-- 邮箱：`[联系邮箱]`
+- 运营方：`赵鼎熠`
+- 邮箱：`yrjmdqmmx@gmail.com`
 - 网站：https://www.paperbanana.asia/
 
 ---
@@ -112,7 +112,7 @@
 
 ### 1. Acceptance of Terms
 
-Welcome to PaperBanana (the "App" or "Service"). These Terms of Service (the "Terms") form an agreement between you and `[Operator Name]` ("we", "us", or "our") regarding your use of the App. **By registering, signing in, or using the App, you confirm that you have read, understood, and agree to be bound by these Terms.** If you do not agree, do not use the App.
+Welcome to PaperBanana (the "App" or "Service"). These Terms of Service (the "Terms") form an agreement between you and `Zhao Dingyi` ("we", "us", or "our") regarding your use of the App. **By registering, signing in, or using the App, you confirm that you have read, understood, and agree to be bound by these Terms.** If you do not agree, do not use the App.
 
 ### 2. Description of the Service
 
@@ -194,6 +194,6 @@ The formation, validity, interpretation, and disputes arising from these Terms a
 
 ### 15. Contact Us
 
-- Operator: `[Operator Name]`
-- Email: `[contact@example.com]`
+- Operator: `Zhao Dingyi`
+- Email: `yrjmdqmmx@gmail.com`
 - Website: https://www.paperbanana.asia/
