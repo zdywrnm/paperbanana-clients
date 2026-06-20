@@ -324,12 +324,7 @@ private extension ReferenceLibraryItem {
   }
 
   var chineseBriefIntro: String {
-    switch taskName {
-    case .diagram:
-      return "结构参考：借鉴模块分组、流程方向、层级关系和标注密度。"
-    case .plot:
-      return "统计参考：借鉴坐标组织、图例分组、数据对比和关键标注。"
-    }
+    ReferenceInsightText.briefIntro(for: self)
   }
 
   var looksLikeSVG: Bool {
