@@ -117,6 +117,14 @@ final class GenerationStore {
       || !draft.manualReferenceIds.isEmpty
   }
 
+  var referenceUploadBlockedByRetrieval: Bool {
+    draft.configurationMode == .advanced && draft.retrievalSetting != .none
+  }
+
+  var referenceUploadBlockedMessage: String {
+    "已启用检索参考。若要上传自己的参考图，请先把检索设置改为“不使用检索”。"
+  }
+
   var referenceCapabilityNote: String {
     guard !draft.referenceImages.isEmpty else { return "" }
     if let capability = mainModelCapability {
@@ -172,8 +180,20 @@ final class GenerationStore {
     saveSelectedProviderKey()
   }
 
+  func selectRetrievalSetting(_ setting: RetrievalSetting) {
+    draft.retrievalSetting = setting
+    if setting != .manual {
+      draft.manualReferenceIds = []
+    }
+    referenceUploadError = ""
+  }
+
   func addReferenceFile(filename: String, mimeType: String?, data: Data) {
     referenceUploadError = ""
+    guard !referenceUploadBlockedByRetrieval else {
+      referenceUploadError = referenceUploadBlockedMessage
+      return
+    }
     guard draft.referenceImages.count < ReferenceImageLimits.maxCount else {
       referenceUploadError = "最多只能上传 \(ReferenceImageLimits.maxCount) 张参考图。"
       return

@@ -356,7 +356,13 @@ struct GenerateView: View {
       .accessibilityLabel("生成流程")
     }
     labeledPickerRow("检索设置") {
-      Picker("检索设置", selection: $model.generation.draft.retrievalSetting) {
+      Picker(
+        "检索设置",
+        selection: Binding(
+          get: { model.generation.draft.retrievalSetting },
+          set: { model.generation.selectRetrievalSetting($0) }
+        )
+      ) {
         ForEach(RetrievalSetting.allCases) { setting in
           Text(setting.title).tag(setting)
         }
@@ -365,7 +371,7 @@ struct GenerateView: View {
       .disabled(!model.generation.draft.referenceImages.isEmpty)
     }
     if !model.generation.draft.referenceImages.isEmpty {
-      Text("已上传参考图，检索自动关闭。")
+      Text("已上传参考图，当前不使用检索（以本地参考图作为唯一视觉风格来源）。")
         .font(.footnote)
         .foregroundStyle(.secondary)
       Picker("参考图处理方式", selection: $model.generation.draft.referenceImageMode) {
@@ -377,6 +383,10 @@ struct GenerateView: View {
       Text(model.generation.referenceCapabilityNote)
         .font(.footnote)
         .foregroundStyle(model.generation.mainModelDirectUnsupported ? .red : .secondary)
+    } else if model.generation.referenceUploadBlockedByRetrieval {
+      Text("已启用检索参考，此时不能上传本地参考图；如需自传，请选择“不使用检索”。")
+        .font(.footnote)
+        .foregroundStyle(Theme.Palette.warningText)
     }
     Stepper("候选图数量 \(model.generation.draft.numCandidates)", value: $model.generation.draft.numCandidates, in: 1...3)
     Stepper("评审轮数 \(model.generation.draft.maxCriticRounds)", value: $model.generation.draft.maxCriticRounds, in: 0...3)

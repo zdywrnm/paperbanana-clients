@@ -10,6 +10,10 @@ struct ReferenceUploadStrip: View {
     max(0, ReferenceImageLimits.maxCount - model.generation.draft.referenceImages.count)
   }
 
+  private var isUploadDisabled: Bool {
+    remainingSlots == 0 || model.generation.referenceUploadBlockedByRetrieval
+  }
+
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
       HStack {
@@ -23,16 +27,20 @@ struct ReferenceUploadStrip: View {
         ) {
           Label("照片", systemImage: "photo.badge.plus")
         }
-        .disabled(remainingSlots == 0)
+        .disabled(isUploadDisabled)
         Button(action: showImporter) {
           Label("文件", systemImage: "folder.badge.plus")
         }
-        .disabled(remainingSlots == 0)
+        .disabled(isUploadDisabled)
       }
       if model.generation.draft.referenceImages.isEmpty {
-        Text("支持 PNG、JPG、WebP、SVG，最多 3 张。")
+        Text(
+          model.generation.referenceUploadBlockedByRetrieval
+            ? model.generation.referenceUploadBlockedMessage
+            : "支持 PNG、JPG、WebP、SVG，最多 3 张。"
+        )
           .font(.footnote)
-          .foregroundStyle(.secondary)
+          .foregroundStyle(model.generation.referenceUploadBlockedByRetrieval ? Theme.Palette.warningText : .secondary)
       } else {
         ForEach(model.generation.draft.referenceImages) { image in
           HStack {

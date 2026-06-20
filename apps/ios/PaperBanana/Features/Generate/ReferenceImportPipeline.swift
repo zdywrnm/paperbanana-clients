@@ -20,6 +20,10 @@ struct ReferenceImportPipeline {
 
   /// 文件导入入口：超过剩余槽位时与照片路径同样给用户提示，不再静默丢弃多余文件。
   func addFileReferences(_ urls: [URL]) {
+    guard !generation.referenceUploadBlockedByRetrieval else {
+      generation.referenceUploadError = generation.referenceUploadBlockedMessage
+      return
+    }
     let remainingSlots = ReferenceImageLimits.maxCount - generation.draft.referenceImages.count
     guard remainingSlots > 0 else {
       generation.referenceUploadError = "最多只能上传 \(ReferenceImageLimits.maxCount) 张参考图。"
@@ -49,6 +53,10 @@ struct ReferenceImportPipeline {
   }
 
   func addPhotoReferences(_ items: [PhotosPickerItem]) async {
+    guard !generation.referenceUploadBlockedByRetrieval else {
+      generation.referenceUploadError = generation.referenceUploadBlockedMessage
+      return
+    }
     let remainingSlots = ReferenceImageLimits.maxCount - generation.draft.referenceImages.count
     guard remainingSlots > 0 else {
       generation.referenceUploadError = "最多只能上传 \(ReferenceImageLimits.maxCount) 张参考图。"

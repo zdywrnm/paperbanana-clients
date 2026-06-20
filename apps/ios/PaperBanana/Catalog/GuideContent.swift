@@ -84,7 +84,7 @@ enum PaperBananaGuide {
     GuideTerm(id: "retrieval-auto", name: "检索设置 · 自动检索", detail: "从内置 PaperBanana 论文配图库中挑出相关范例作为风格与排版灵感。"),
     GuideTerm(id: "retrieval-random", name: "检索设置 · 随机参考", detail: "从参考库随机取图做风格灵感，不强调语义相关性。"),
     GuideTerm(id: "retrieval-manual", name: "检索设置 · 手动参考", detail: "你从参考库中手动选择最多 10 张范例。"),
-    GuideTerm(id: "uploaded-reference", name: "上传参考图", detail: "一旦上传参考图，检索会自动关闭，以你的上传图作为唯一视觉风格来源。"),
+    GuideTerm(id: "uploaded-reference", name: "上传参考图", detail: "上传本地参考图前需先把检索设置改为“不使用检索”，以你的上传图作为唯一视觉风格来源。"),
     GuideTerm(id: "reference-mode", name: "参考图处理方式", detail: "主模型直读适合能读图的主模型；独立识别模型适合主模型不能读图的情况。")
   ]
 

@@ -16,13 +16,25 @@ final class ContractAlignmentTests: XCTestCase {
     super.tearDown()
   }
 
-  // SYNC 2026-06-09：上传参考图后自动关闭检索并清空手动参考。
-  func testAddingReferenceImageDisablesRetrievalAndClearsManualReferences() {
+  // SYNC 2026-06-20：上传参考图与检索互斥，只有“不使用检索”时才能上传本地参考图。
+  func testReferenceUploadRequiresRetrievalNoneInAdvancedMode() {
     let model = AppModel()
     model.generation.draft.configurationMode = .advanced
     model.generation.draft.retrievalSetting = .manual
     model.generation.draft.manualReferenceIds = ["ref-1", "ref-2"]
 
+    model.generation.addReferenceFile(
+      filename: "style.png",
+      mimeType: "image/png",
+      data: Data([0x89, 0x50, 0x4E, 0x47])
+    )
+
+    XCTAssertTrue(model.generation.referenceUploadError.contains("不使用检索"))
+    XCTAssertEqual(model.generation.draft.referenceImages.count, 0)
+    XCTAssertEqual(model.generation.draft.retrievalSetting, RetrievalSetting.manual)
+    XCTAssertEqual(model.generation.draft.manualReferenceIds, ["ref-1", "ref-2"])
+
+    model.generation.selectRetrievalSetting(.none)
     model.generation.addReferenceFile(
       filename: "style.png",
       mimeType: "image/png",
