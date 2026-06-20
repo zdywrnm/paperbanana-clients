@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// 生成任务的草稿编辑、能力检查、提交与精修。
+/// 生成任务的草稿编辑、能力检查与提交。
 @Observable
 @MainActor
 final class GenerationStore {
@@ -17,11 +17,6 @@ final class GenerationStore {
   var referenceLibraryLoading = false
   var referenceUploadError = ""
 
-  var refineAspectRatio = "16:9"
-  var refineImageSize: ImageSize = .twoK
-  var refineSourceImage: ResultImage?
-  var refineJobID = ""
-
   /// 错误弹窗（由 AppModel 注入的跨域门面）。
   /// 默认实现 debug 下断言提醒忘记接线（release 下仍是 no-op），避免错误静默丢失。
   @ObservationIgnored var presentAlert: (String) -> Void = { message in
@@ -34,7 +29,6 @@ final class GenerationStore {
   private let keychain = KeychainService()
   private let referenceUploader: ReferenceUploader
   private static let referenceLibraryLimit = 100
-  private static let automaticRefineInstruction = "在保持原图语义、布局和内容不变的前提下，提升图像清晰度、线条锐度、文字可读性和论文发表质感。"
 
   init(apiClient: PaperBananaAPIClient, settings: SettingsStore, jobs: JobsStore) {
     self.apiClient = apiClient
@@ -70,10 +64,6 @@ final class GenerationStore {
 
   var activeVisionModelName: String {
     draft.configurationMode == .advanced ? draft.referenceVisionModelName : selectedProviderConfig.visionModel
-  }
-
-  var refineSupportedImageSizes: [ImageSize] {
-    ProviderCatalog.supportedResolutions(provider: draft.provider, imageModel: activeImageModelName)
   }
 
   var activeReferenceImageMode: ReferenceImageMode? {
@@ -159,7 +149,6 @@ final class GenerationStore {
     mainModelCapability = nil
     alignReferenceImageModeWithActiveMainModel()
     ensureSupportedImageSize()
-    ensureSupportedRefineImageSize()
     loadSelectedProviderKey()
   }
 
@@ -172,7 +161,6 @@ final class GenerationStore {
   func selectImageModel(_ modelName: String) {
     draft.imageModelName = modelName
     ensureSupportedImageSize()
-    ensureSupportedRefineImageSize()
   }
 
   func updateSelectedAPIKey(_ value: String) {
@@ -312,35 +300,6 @@ final class GenerationStore {
     }
   }
 
-  func beginRefine(_ image: ResultImage) {
-    refineAspectRatio = draft.configurationMode == .advanced ? draft.aspectRatio : "16:9"
-    refineImageSize = refineSupportedImageSizes.contains(draft.imageSize) ? draft.imageSize : (refineSupportedImageSizes.first ?? .oneK)
-    refineJobID = ""
-    refineSourceImage = image
-  }
-
-  func refine(image: ResultImage) async {
-    do {
-      let payload = RefineImagePayload(
-        provider: draft.provider,
-        apiKeys: [draft.provider: selectedAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)],
-        mainModelName: activeMainModelName,
-        imageModelName: activeImageModelName,
-        referenceVisionModelName: activeVisionModelName,
-        sourceImageURL: image.url,
-        sourceImageObjectKey: image.objectKey,
-        editInstruction: Self.automaticRefineInstruction,
-        aspectRatio: refineAspectRatio,
-        imageSize: refineImageSize
-      )
-      let created = try await apiClient.refineImage(apiBase: settings.apiBase, payload: payload)
-      refineJobID = created.id
-      jobs.track(jobID: created.id, status: created.status)
-    } catch {
-      presentAlert(formatUserFacingError(error))
-    }
-  }
-
   // MARK: - 私有
 
   private func alignReferenceImageModeWithActiveMainModel() {
@@ -351,13 +310,6 @@ final class GenerationStore {
     let supported = ProviderCatalog.supportedResolutions(provider: draft.provider, imageModel: activeImageModelName)
     if !supported.contains(draft.imageSize) {
       draft.imageSize = supported.first ?? .oneK
-    }
-  }
-
-  private func ensureSupportedRefineImageSize() {
-    let supported = refineSupportedImageSizes
-    if !supported.contains(refineImageSize) {
-      refineImageSize = supported.first ?? .oneK
     }
   }
 

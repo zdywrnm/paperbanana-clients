@@ -28,9 +28,6 @@ struct RootView: View {
         GenerationStatusAccessory(model: model)
       }
     }
-    .sheet(item: $model.generation.refineSourceImage) { image in
-      RefineSheet(model: model, image: image)
-    }
     .sheet(item: $model.exports.exportedResultFile) { file in
       ShareSheet(items: [file.url])
         .presentationDetents([.medium, .large])

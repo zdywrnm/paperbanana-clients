@@ -93,15 +93,6 @@ struct ResultImageView: View {
       .controlSize(.small)
       .disabled(model.exports.exportingResultImageID == image.id || image.url.isEmpty)
       .accessibilityLabel("保存或分享候选图 \(image.candidateID + 1)")
-      Button {
-        model.generation.beginRefine(image)
-      } label: {
-        Image(systemName: "wand.and.stars")
-      }
-      .paperGlassButton()
-      .controlSize(.small)
-      .accessibilityLabel("精修候选图 \(image.candidateID + 1)")
-      .accessibilityHint("打开图片精修面板")
     }
   }
 }

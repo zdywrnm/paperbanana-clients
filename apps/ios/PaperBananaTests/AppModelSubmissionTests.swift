@@ -65,42 +65,6 @@ final class AppModelSubmissionTests: XCTestCase {
     XCTAssertEqual(model.generation.draft.referenceImageMode, .visionModel)
   }
 
-  func testBeginRefineUsesGenerationTargetSettings() throws {
-    let model = AppModel()
-    model.generation.draft.configurationMode = .advanced
-    model.generation.draft.aspectRatio = "3:2"
-    model.generation.draft.imageSize = .twoK
-    let image = try JSONDecoder().decode(ResultImage.self, from: Data("""
-    {
-      "filename": "candidate.png",
-      "url": "data:image/png;base64,iVBORw0KGgo=",
-      "mime_type": "image/png",
-      "candidate_id": 0
-    }
-    """.utf8))
-
-    model.generation.beginRefine(image)
-
-    XCTAssertEqual(model.generation.refineSourceImage, image)
-    XCTAssertEqual(model.generation.refineAspectRatio, "3:2")
-    XCTAssertEqual(model.generation.refineImageSize, .twoK)
-  }
-
-  func testRefineImageSizeFollowsSelectedProviderSupport() {
-    let model = AppModel()
-    model.generation.refineImageSize = .fourK
-
-    model.generation.selectProvider(.bailian)
-
-    XCTAssertEqual(model.generation.refineImageSize, .oneK)
-
-    model.generation.selectProvider(.openai)
-    model.generation.refineImageSize = .fourK
-    model.generation.selectProvider(.gemini)
-
-    XCTAssertEqual(model.generation.refineImageSize, .oneK)
-  }
-
   func testFeedbackCategoriesMatchWebContract() {
     XCTAssertEqual(
       FeedbackCategory.allCases.map(\.rawValue),
